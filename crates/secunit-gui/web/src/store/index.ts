@@ -130,8 +130,17 @@ class Store {
 
 export const store = new Store();
 
-export function useStore<T>(selector: (s: StoreState) => T): T {
-  return useSyncExternalStore(store.subscribe, () => selector(store.getSnapshot()));
+/**
+ * Returns the whole `StoreState` snapshot. Stable across renders unless
+ * the store mutated — `useSyncExternalStore` requires a referentially
+ * stable getter, so we only swap the snapshot inside Store.notify().
+ *
+ * Consumers shape with `useMemo` (or a derived hook). Avoid passing a
+ * selector here that returns a freshly computed array/object on every
+ * call; that will spin React into an infinite render loop.
+ */
+export function useStore(): StoreState {
+  return useSyncExternalStore(store.subscribe, store.getSnapshot);
 }
 
 /**
