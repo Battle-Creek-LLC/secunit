@@ -423,3 +423,48 @@ fn git_init_and_commit_amend(root: &Path) {
     run(&["add", "-A"]);
     run(&["commit", "-q", "-m", "amend"]);
 }
+
+#[test]
+fn unreadable_artifact_does_not_abort_chain_walk() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_tmp, root) = staged_fixture();
+    let d1 = NaiveDate::from_ymd_opt(2026, 5, 4).unwrap();
+    let d2 = NaiveDate::from_ymd_opt(2026, 5, 11).unwrap();
+    let (ctx1, _) = run_one(&root, d1);
+    let (ctx2, _) = run_one(&root, d2);
+
+    // chmod 000 one artifact in run 1.
+    let target = ctx1
+        .run_dir
+        .join("by-system")
+        .join(&ctx1.resolved_scope[0].name)
+        .join("raw")
+        .join("scan.json");
+    let mut perm = fs::metadata(&target).unwrap().permissions();
+    perm.set_mode(0o000);
+    fs::set_permissions(&target, perm).unwrap();
+
+    let report = verifier::verify(&root, Some(CONTROL)).expect("verify");
+
+    // Run 1 should be flagged Unreadable, run 2 should still be verified.
+    let unreadable = report
+        .failures
+        .iter()
+        .find(|f| f.run_id == ctx1.run_id && f.kind == FailureKind::Unreadable);
+    assert!(
+        unreadable.is_some(),
+        "expected Unreadable failure for run 1; got {:?}",
+        report.failures
+    );
+    assert!(
+        report.verified.iter().any(|v| v.run_id == ctx2.run_id),
+        "run 2 must still be verified despite run 1's I/O error; verified: {:?}",
+        report.verified
+    );
+
+    // Restore so the tempdir can be torn down cleanly.
+    let mut perm = fs::metadata(&target).unwrap().permissions();
+    perm.set_mode(0o644);
+    fs::set_permissions(&target, perm).unwrap();
+}

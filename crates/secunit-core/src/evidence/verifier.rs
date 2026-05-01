@@ -50,6 +50,11 @@ pub enum FailureKind {
     BadManifest,
     /// One or more artifact hashes did not match the manifest.
     ArtifactMismatch,
+    /// An artifact under the run dir, or the manifest file itself, could
+    /// not be read (broken symlink, permission denied, vanished mid-walk,
+    /// disk error). Distinct from ArtifactMismatch so an operator chases
+    /// the I/O problem, not a tampering false alarm.
+    Unreadable,
     /// `prior_run.manifest_sha256` did not match the recomputed sha of
     /// the immediately-preceding sealed manifest for that control.
     BrokenChain,
@@ -140,18 +145,31 @@ pub fn verify(root: &Path, control_id: Option<&str>) -> Result<VerifyReport> {
                 }
             };
 
-            // Check artifact hashes match the on-disk files.
-            let mismatches = recompute_and_compare(&run_dir, &manifest)?;
-            if !mismatches.is_empty() {
-                report.failures.push(VerifyFailure {
-                    control_id: cid.clone(),
-                    run_id: run_id.clone(),
-                    run_dir: run_dir.clone(),
-                    kind: FailureKind::ArtifactMismatch,
-                    detail: mismatches.join("; "),
-                });
-                // Don't abandon the chain just because one run had a tampered
-                // artifact — we still report subsequent runs.
+            // Check artifact hashes match the on-disk files. An I/O error
+            // walking the run dir (one chmod-000'd file is enough to
+            // trigger this) becomes a per-run Unreadable failure rather
+            // than aborting the entire verify pass — otherwise a single
+            // unreadable file in run N silently masks every run after it.
+            match recompute_and_compare(&run_dir, &manifest) {
+                Ok(mismatches) if !mismatches.is_empty() => {
+                    report.failures.push(VerifyFailure {
+                        control_id: cid.clone(),
+                        run_id: run_id.clone(),
+                        run_dir: run_dir.clone(),
+                        kind: FailureKind::ArtifactMismatch,
+                        detail: mismatches.join("; "),
+                    });
+                }
+                Ok(_) => {}
+                Err(io_detail) => {
+                    report.failures.push(VerifyFailure {
+                        control_id: cid.clone(),
+                        run_id: run_id.clone(),
+                        run_dir: run_dir.clone(),
+                        kind: FailureKind::Unreadable,
+                        detail: io_detail,
+                    });
+                }
             }
 
             // Check chain link.
@@ -197,19 +215,40 @@ pub fn verify(root: &Path, control_id: Option<&str>) -> Result<VerifyReport> {
                 _ => {}
             }
 
-            prior_sha = Some(sha256_file(manifest_path)?);
-            prior_run_id = Some(run_id.clone());
-            report.verified.push(VerifiedRun {
-                control_id: cid.clone(),
-                run_id: run_id.clone(),
-                run_dir,
-            });
+            // Also tolerate the manifest file itself becoming unreadable
+            // between the directory walk and now (race or transient I/O).
+            match sha256_file(manifest_path) {
+                Ok(sha) => {
+                    prior_sha = Some(sha);
+                    prior_run_id = Some(run_id.clone());
+                    report.verified.push(VerifiedRun {
+                        control_id: cid.clone(),
+                        run_id: run_id.clone(),
+                        run_dir,
+                    });
+                }
+                Err(e) => {
+                    report.failures.push(VerifyFailure {
+                        control_id: cid.clone(),
+                        run_id: run_id.clone(),
+                        run_dir: run_dir.clone(),
+                        kind: FailureKind::Unreadable,
+                        detail: format!("hash manifest: {e}"),
+                    });
+                    // Don't advance prior_sha — keep checking subsequent
+                    // runs against the last-known-good chain anchor.
+                }
+            }
         }
     }
     Ok(report)
 }
 
-fn recompute_and_compare(run_dir: &Path, manifest: &Manifest) -> Result<Vec<String>> {
+/// Returns `Ok(mismatches)` on a successful tree walk (empty Vec means
+/// hashes all matched). Returns `Err(io_detail)` when the walk itself
+/// failed — caller turns that into a `FailureKind::Unreadable` for this
+/// run rather than aborting the whole verify pass.
+fn recompute_and_compare(run_dir: &Path, manifest: &Manifest) -> Result<Vec<String>, String> {
     let exclude = [
         PREPARE_FILE,
         RESULT_FILE,
@@ -217,7 +256,7 @@ fn recompute_and_compare(run_dir: &Path, manifest: &Manifest) -> Result<Vec<Stri
         ABORT_FILE,
         PENDING_SENTINEL,
     ];
-    let on_disk = hash_tree(run_dir, &exclude)?;
+    let on_disk = hash_tree(run_dir, &exclude).map_err(|e| format!("hash_tree: {e}"))?;
     let mut by_path: BTreeMap<&str, &super::hasher::HashedArtifact> = BTreeMap::new();
     for h in &on_disk {
         by_path.insert(h.path.as_str(), h);
