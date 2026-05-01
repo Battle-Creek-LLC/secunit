@@ -163,7 +163,7 @@ mod deps_fixtures {
 mod github_fixtures {
     use super::*;
     use secunit_capture::github::GhClient;
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{method, path, query_param, query_param_is_missing};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     async fn empty_page_2(server: &MockServer, route: &str) {
@@ -181,13 +181,29 @@ mod github_fixtures {
         let fx = fixture_root().join("github/dependabot-alerts/page-1.json");
         let body = read_json(&fx);
         let server = MockServer::start().await;
+        // Dependabot alerts uses cursor pagination via the `Link` header,
+        // not `?page=N`. The first response carries `rel="next"` pointing
+        // at an empty follow-up page.
+        let next_url = format!(
+            "{}/repos/o/r/dependabot/alerts?per_page=100&after=CUR1",
+            server.uri()
+        );
         Mock::given(method("GET"))
             .and(path("/repos/o/r/dependabot/alerts"))
-            .and(query_param("page", "1"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .and(query_param_is_missing("after"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Link", format!(r#"<{next_url}>; rel="next""#))
+                    .set_body_json(body),
+            )
             .mount(&server)
             .await;
-        empty_page_2(&server, "/repos/o/r/dependabot/alerts").await;
+        Mock::given(method("GET"))
+            .and(path("/repos/o/r/dependabot/alerts"))
+            .and(query_param("after", "CUR1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&server)
+            .await;
 
         let c = GhClient::with_base_uri(&server.uri(), Some("ghp_x")).unwrap();
         let a = secunit_capture::github::dependabot_alerts::capture(&c, "o", "r", None)

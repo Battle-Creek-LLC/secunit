@@ -8,7 +8,7 @@ use crate::canonical::{
     canonicalize_value, sort_array_by_key, strip_keys, strip_keys_matching, Envelope,
 };
 
-use super::{is_url_key, paginate_array, GhClient, EPHEMERAL_KEYS};
+use super::{is_url_key, paginate_array_cursor, GhClient, EPHEMERAL_KEYS};
 
 pub const CAPTURER: &str = "github.dependabot-alerts";
 pub const VERSION: &str = "1";
@@ -23,7 +23,7 @@ pub async fn capture(
         Some(s) => format!("/repos/{owner}/{repo}/dependabot/alerts?state={s}"),
         None => format!("/repos/{owner}/{repo}/dependabot/alerts"),
     };
-    let mut alerts = paginate_array(client, &route).await?;
+    let mut alerts = paginate_array_cursor(client, &route).await?;
     let result = canonicalize(&mut alerts);
 
     Ok(Envelope::new(
@@ -51,38 +51,50 @@ fn canonicalize(alerts: &mut Vec<Value>) -> Value {
 mod tests {
     use super::*;
     use serde_json::json;
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{method, path, query_param, query_param_is_missing};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
+    /// Mock GitHub's cursor-paginated dependabot alerts endpoint:
+    /// the first response returns two alerts plus a `Link` header
+    /// pointing at a follow-up URL with `after=CUR1`; that follow-up
+    /// returns an empty array with no `Link`, terminating pagination.
     async fn server() -> MockServer {
         let s = MockServer::start().await;
+        let next_url = format!(
+            "{}/repos/o/r/dependabot/alerts?per_page=100&after=CUR1",
+            s.uri()
+        );
         Mock::given(method("GET"))
             .and(path("/repos/o/r/dependabot/alerts"))
-            .and(query_param("page", "1"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!([
-                {
-                    "number": 7,
-                    "state": "open",
-                    "url": "https://api.example/x",
-                    "html_url": "https://example/x",
-                    "node_id": "MDx",
-                    "security_advisory": {"ghsa_id": "GHSA-x", "summary": "Z"},
-                    "dependency": {"package": {"name": "lodash"}}
-                },
-                {
-                    "number": 2,
-                    "state": "open",
-                    "url": "https://api.example/y",
-                    "node_id": "MDy",
-                    "security_advisory": {"ghsa_id": "GHSA-y", "summary": "A"},
-                    "dependency": {"package": {"name": "axios"}}
-                }
-            ])))
+            .and(query_param_is_missing("after"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Link", format!(r#"<{next_url}>; rel="next""#))
+                    .set_body_json(json!([
+                        {
+                            "number": 7,
+                            "state": "open",
+                            "url": "https://api.example/x",
+                            "html_url": "https://example/x",
+                            "node_id": "MDx",
+                            "security_advisory": {"ghsa_id": "GHSA-x", "summary": "Z"},
+                            "dependency": {"package": {"name": "lodash"}}
+                        },
+                        {
+                            "number": 2,
+                            "state": "open",
+                            "url": "https://api.example/y",
+                            "node_id": "MDy",
+                            "security_advisory": {"ghsa_id": "GHSA-y", "summary": "A"},
+                            "dependency": {"package": {"name": "axios"}}
+                        }
+                    ])),
+            )
             .mount(&s)
             .await;
         Mock::given(method("GET"))
             .and(path("/repos/o/r/dependabot/alerts"))
-            .and(query_param("page", "2"))
+            .and(query_param("after", "CUR1"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
             .mount(&s)
             .await;
