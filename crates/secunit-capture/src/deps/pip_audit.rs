@@ -274,7 +274,10 @@ mod tests {
         let d = scratch_with(&["requirements.txt", "pyproject.toml"]);
         let env = capture_with(d.path(), &runner_for(AuditTarget::Requirements)).unwrap();
         // The captured args record which manifest was audited.
-        assert_eq!(env.args.get("target").and_then(|v| v.as_str()), Some("requirements.txt"));
+        assert_eq!(
+            env.args.get("target").and_then(|v| v.as_str()),
+            Some("requirements.txt")
+        );
     }
 
     #[test]
@@ -282,7 +285,10 @@ mod tests {
         let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
         let d = scratch_with(&["pyproject.toml"]);
         let env = capture_with(d.path(), &runner_for(AuditTarget::Pyproject)).unwrap();
-        assert_eq!(env.args.get("target").and_then(|v| v.as_str()), Some("pyproject.toml"));
+        assert_eq!(
+            env.args.get("target").and_then(|v| v.as_str()),
+            Some("pyproject.toml")
+        );
     }
 
     #[test]
@@ -311,7 +317,10 @@ mod tests {
         );
         let err = capture_with(d.path(), &r).expect_err("expected error from failed subprocess");
         let msg = format!("{err}");
-        assert!(msg.contains("exited 1"), "error should record exit code: {msg}");
+        assert!(
+            msg.contains("exited 1"),
+            "error should record exit code: {msg}"
+        );
         assert!(
             msg.contains("ResolutionImpossible"),
             "error should surface stderr: {msg}"
