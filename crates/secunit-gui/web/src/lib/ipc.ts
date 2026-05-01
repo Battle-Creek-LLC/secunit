@@ -238,3 +238,26 @@ export interface ArtifactView {
 
 export const readArtifact = (path: string) =>
   invoke<ArtifactView>("read_artifact", { path });
+
+export interface SearchHit {
+  kind: string;
+  id: string;
+  title: string;
+  path: string;
+  status: string | null;
+  score: number;
+}
+
+export interface IndexStatus {
+  ready: boolean;
+  doc_count: number;
+  last_updated: string;
+}
+
+export const searchPalette = (
+  query: string,
+  limit: number = 30,
+  kinds: string[] = [],
+) => invoke<SearchHit[]>("search_palette", { query, limit, kinds });
+
+export const indexStatus = () => invoke<IndexStatus>("index_status");

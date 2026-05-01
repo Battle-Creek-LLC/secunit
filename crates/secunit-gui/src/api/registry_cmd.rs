@@ -12,6 +12,7 @@ use tauri::{AppHandle, State};
 
 use crate::api::types::*;
 use crate::projects;
+use crate::search::{IndexStatus, SearchHit, SearchIndex};
 use crate::state::{AppState, Diagnostic, LoadedProject};
 use crate::watcher::{self, TauriSink};
 
@@ -99,6 +100,12 @@ pub fn load_project(
         }))
         .collect();
 
+    // Build the ⌘K search index before stashing the registry — there is
+    // no window where load_project returns and the index is stale.
+    let mut idx = SearchIndex::new().map_err(|e| format!("create index: {e}"))?;
+    idx.rebuild(&registry, &root)
+        .map_err(|e| format!("build index: {e}"))?;
+
     {
         let mut slot = state.project.lock().expect("AppState.project poisoned");
         *slot = Some(LoadedProject {
@@ -107,6 +114,10 @@ pub fn load_project(
             registry,
             diagnostics,
         });
+    }
+    {
+        let mut slot = state.search.lock().expect("AppState.search poisoned");
+        *slot = Some(idx);
     }
 
     // Swap the watcher: drop the previous one (which stops the thread)
@@ -283,6 +294,36 @@ pub fn due_rows(
             overdue: r.overdue,
         })
         .collect())
+}
+
+#[tauri::command]
+pub fn search_palette(
+    query: String,
+    limit: Option<usize>,
+    kinds: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<Vec<SearchHit>, String> {
+    let limit = limit.unwrap_or(20).min(100);
+    let kinds = kinds.unwrap_or_default();
+    let slot = state.search.lock().expect("AppState.search poisoned");
+    let idx = slot
+        .as_ref()
+        .ok_or_else(|| "search index not built — load a project first".to_string())?;
+    idx.search(&query, limit, &kinds)
+        .map_err(|e| format!("search: {e}"))
+}
+
+#[tauri::command]
+pub fn index_status(state: State<'_, AppState>) -> Result<IndexStatus, String> {
+    let slot = state.search.lock().expect("AppState.search poisoned");
+    Ok(slot
+        .as_ref()
+        .map(SearchIndex::status)
+        .unwrap_or(IndexStatus {
+            ready: false,
+            doc_count: 0,
+            last_updated: chrono::Utc::now(),
+        }))
 }
 
 #[tauri::command]
@@ -988,13 +1029,12 @@ mod tests {
     }
 
     #[test]
-    fn read_artifact_kind_classification_is_total() {
-        // The internal classifier function is private to the command body
-        // but its decision is what we care about. Spot-check the table by
-        // way of file extension behaviours. We rely on read_artifact's own
-        // tests via the integration smoke; here we just sanity-check that
-        // the cap constant is reasonable.
-        assert!(ARTIFACT_PREVIEW_CAP >= 1024 * 1024);
+    fn artifact_preview_cap_is_at_least_one_mib() {
+        // Sanity guardrail: a too-small cap would silently strand any
+        // operator-pasted screenshot or capture log inside the "too
+        // large" branch. 1 MiB is the floor the spec implies; the
+        // current value is 2 MiB.
+        const _: () = assert!(ARTIFACT_PREVIEW_CAP >= 1024 * 1024);
     }
 
     #[test]

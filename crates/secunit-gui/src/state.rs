@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 use secunit_core::model::LoadedRegistry;
 
+use crate::search::SearchIndex;
 use crate::watcher::WatcherHandle;
 
 pub struct LoadedProject {
@@ -28,4 +29,6 @@ pub struct AppState {
     /// Active watcher; replaced when the project changes, dropped when
     /// the app shuts down.
     pub watcher: Mutex<Option<WatcherHandle>>,
+    /// In-memory ⌘K search index. Built/rebuilt on `load_project`.
+    pub search: Mutex<Option<SearchIndex>>,
 }

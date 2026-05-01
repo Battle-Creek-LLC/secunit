@@ -43,6 +43,7 @@ notify-debouncer-full = { workspace = true }
 pulldown-cmark = { workspace = true }
 ammonia = { workspace = true }
 walkdir = { workspace = true }
+tantivy = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

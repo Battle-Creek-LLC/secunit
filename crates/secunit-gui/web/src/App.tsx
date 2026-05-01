@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import {
   listProjects,
@@ -7,6 +7,7 @@ import {
   type ProjectsView,
 } from "@/lib/ipc";
 import { AppShell } from "@/components/AppShell";
+import { CommandPalette } from "@/components/CommandPalette";
 import { EmptyConfig } from "@/components/EmptyConfig";
 import { ErrorCard } from "@/components/ErrorCard";
 import { store } from "@/store";
@@ -109,17 +110,56 @@ export function App() {
 
   return (
     <HashRouter>
-      <AppShell
+      <AppWithPalette
         view={load.view}
         selected={load.selected}
         onSelect={onSelect}
+        registryError={load.registryError}
+      />
+    </HashRouter>
+  );
+}
+
+function AppWithPalette({
+  view,
+  selected,
+  onSelect,
+  registryError,
+}: {
+  view: ProjectsView;
+  selected: string | null;
+  onSelect: (name: string) => void | Promise<void>;
+  registryError: string | null;
+}) {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const onTrigger = useCallback(() => setPaletteOpen(true), []);
+
+  // Global ⌘K / Ctrl+K to open the palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  return (
+    <>
+      <AppShell
+        view={view}
+        selected={selected}
+        onSelect={onSelect}
         appVersion={__APP_VERSION__}
+        onCommandTrigger={onTrigger}
       >
-        {load.registryError && (
+        {registryError && (
           <div className="p-4">
             <ErrorCard
               title="Failed to load project"
-              message={load.registryError}
+              message={registryError}
             />
           </div>
         )}
@@ -134,6 +174,7 @@ export function App() {
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>
       </AppShell>
-    </HashRouter>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+    </>
   );
 }
