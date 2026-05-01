@@ -218,3 +218,23 @@ export const readFindings = (control_id: string, run_id: string) =>
     controlId: control_id,
     runId: run_id,
   });
+
+export type ArtifactKind =
+  | "markdown"
+  | "json"
+  | "yaml"
+  | "text"
+  | "binary"
+  | "too-large"
+  | "image";
+
+export interface ArtifactView {
+  path: string;
+  bytes: number;
+  kind: ArtifactKind;
+  text: string | null;
+  html: string | null;
+}
+
+export const readArtifact = (path: string) =>
+  invoke<ArtifactView>("read_artifact", { path });

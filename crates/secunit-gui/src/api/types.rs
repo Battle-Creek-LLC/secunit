@@ -194,3 +194,27 @@ pub struct FindingsHtml {
     pub path: String,
     pub html: String,
 }
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ArtifactKind {
+    Markdown,
+    Json,
+    Yaml,
+    Text,
+    Binary,
+    TooLarge,
+    Image,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ArtifactView {
+    pub path: String,
+    pub bytes: u64,
+    pub kind: ArtifactKind,
+    /// `Some` for text-shaped kinds; `None` for `Binary`, `TooLarge`, `Image`.
+    pub text: Option<String>,
+    /// `Some(html)` if `kind == Markdown`, sanitised through the same
+    /// path as `read_findings`.
+    pub html: Option<String>,
+}
