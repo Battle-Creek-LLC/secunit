@@ -68,3 +68,36 @@ core development do not pull in WebKitGTK / Tauri native deps.
 ```
 libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libssl-dev pkg-config
 ```
+
+## Read-only contract
+
+The GUI never writes inside a project tree. The CLI (`secunit run …`,
+`secunit registry import …`) and direct git edits are the only paths
+that mutate state, so the hash-chained audit trail is unaffected.
+
+Three guardrails enforce this:
+
+1. **Allow-listed IPC surface.** Every `#[tauri::command]` in `src/api/`
+   must appear in `tests/readonly.rs#ALLOWLIST`. The test fails if a
+   new command is added without listing it (or if the list goes stale).
+   Adding a command requires reviewing it against this contract in the
+   PR.
+
+2. **No write-shaped name.** A second test rejects names starting with
+   `write_`, `create_`, `delete_`, `remove_`, `edit_`, `save_`, `set_`,
+   `update_`, `patch_`, `mutate_`, `commit_`, `push_`. Catches slips
+   during review.
+
+3. **Capabilities deny fs writes.** `capabilities/default.json` is
+   asserted to contain none of `fs:write`, `fs:create`, `fs:remove`,
+   `fs:rename`, `fs:write-text-file`, `fs:write-binary-file`,
+   `fs:allow-write`. The plugin set is `core:default`, `shell:default`,
+   `dialog:default`, `opener:default` — none of which grants writes
+   inside a project tree.
+
+Path-typed commands (`get_run`, `read_findings`, `read_artifact`)
+canonicalise the requested path and reject anything that lands outside
+the project root.
+
+Mutations to controls, schedule, inventory, evidence, or state always
+go through `secunit` CLI invocations or direct git edits.
