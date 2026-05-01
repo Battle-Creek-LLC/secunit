@@ -64,8 +64,46 @@ enum Command {
         #[arg(long)]
         strict: bool,
     },
+    /// Allocate / finalize / abort runs.
+    Run {
+        #[command(subcommand)]
+        sub: RunCmd,
+    },
+    /// Verify manifest hash chains.
+    Verify { control_id: Option<String> },
     /// Show which integrations are compiled in.
     Features,
+}
+
+#[derive(Debug, Subcommand)]
+enum RunCmd {
+    /// Allocate a run dir and emit the prepare context.
+    Prepare {
+        control_id: String,
+        #[arg(long)]
+        note: Option<String>,
+        /// Print human-readable summary instead of JSON.
+        #[arg(long)]
+        human: bool,
+        /// Allow flat scope_layout when scope resolves to one entry.
+        #[arg(long)]
+        flat_when_singleton: bool,
+    },
+    /// Hash artifacts, link the chain, and seal the run.
+    Finalize { run_dir: PathBuf },
+    /// Discard a pending run; keep the directory for audit.
+    Abort {
+        run_dir: PathBuf,
+        #[arg(long)]
+        reason: String,
+    },
+    /// Re-emit the prepare context for a pending run.
+    Resume { run_dir: PathBuf },
+    /// List all `.run-pending` runs under the root.
+    List {
+        #[arg(long)]
+        pending: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -88,6 +126,25 @@ fn main() -> ExitCode {
         Command::Scope { control_id, at } => cmd::scope::run(&ctx, &control_id, at),
         Command::Status { control_id } => cmd::status::run(&ctx, control_id.as_deref()),
         Command::Validate { strict } => cmd::validate::run(&ctx, strict),
+        Command::Run { sub } => match sub {
+            RunCmd::Prepare {
+                control_id,
+                note,
+                human,
+                flat_when_singleton,
+            } => cmd::run::prepare(
+                &ctx,
+                &control_id,
+                note.as_deref(),
+                human,
+                flat_when_singleton,
+            ),
+            RunCmd::Finalize { run_dir } => cmd::run::finalize(&ctx, &run_dir),
+            RunCmd::Abort { run_dir, reason } => cmd::run::abort(&ctx, &run_dir, &reason),
+            RunCmd::Resume { run_dir } => cmd::run::resume(&ctx, &run_dir),
+            RunCmd::List { pending } => cmd::run::list(&ctx, pending),
+        },
+        Command::Verify { control_id } => cmd::verify::run(&ctx, control_id.as_deref()),
         Command::Features => cmd::features::run(&ctx),
     };
 

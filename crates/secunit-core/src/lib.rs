@@ -2,6 +2,7 @@
 //! hashing, and manifest verification. Library-shaped so tests and the CLI
 //! can drive it without going through `clap`.
 
+pub mod evidence;
 pub mod model;
 pub mod registry;
 pub mod schemas;

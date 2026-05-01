@@ -11,10 +11,12 @@ use secunit_core::registry::loader::{self, LoadReport};
 
 pub mod due;
 pub mod features;
+pub mod run;
 pub mod scope;
 pub mod show;
 pub mod status;
 pub mod validate;
+pub mod verify;
 
 /// Per-invocation context shared across subcommands.
 pub struct Ctx {
