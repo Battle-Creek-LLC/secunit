@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/inventory.schema.json",
+  "title": "Inventory",
+  "description": "Flat dictionary keyed by inventory kind. Each kind contains a list of entries.",
+  "type": "object",
+  "additionalProperties": {
+    "type": "array",
+    "items": { "$ref": "#/$defs/entry" }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+        "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "in_scope_since": { "type": "string", "format": "date" },
+        "retired_on": { "type": "string", "format": "date" },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "excludes": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    }
+  }
+}

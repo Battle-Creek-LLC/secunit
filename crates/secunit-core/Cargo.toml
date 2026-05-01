@@ -25,3 +25,5 @@ insta.workspace = true
 proptest.workspace = true
 tempfile.workspace = true
 pretty_assertions.workspace = true
+walkdir.workspace = true
+serde_yaml.workspace = true

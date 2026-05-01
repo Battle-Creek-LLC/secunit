@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/prepare.schema.json",
+  "title": "PrepareContext",
+  "description": "Written by `secunit run prepare` and emitted to stdout. Frozen until finalize.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "control_id",
+    "run_id",
+    "run_dir",
+    "started_at",
+    "scope_layout",
+    "resolved_scope",
+    "registry_git_sha"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "control_id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "run_id": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-run-[0-9]{3}$" },
+    "run_dir": { "type": "string" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "operator": { "type": "string" },
+    "note": { "type": "string" },
+    "scope_layout": { "type": "string", "enum": ["by-system", "flat"] },
+    "resolved_scope": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "kind"],
+        "properties": {
+          "name": { "type": "string" },
+          "kind": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "registry_git_sha": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" },
+    "inventory_git_sha": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" }
+  }
+}

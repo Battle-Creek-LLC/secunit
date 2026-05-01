@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/result.schema.json",
+  "title": "RunResult",
+  "description": "Written by the agent's skill before `secunit run finalize`. Records status and any drafted risks/issues per system.",
+  "type": "object",
+  "required": ["schema_version", "control_id", "run_id", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "control_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "status": { "type": "string", "enum": ["complete", "partial", "failed"] },
+    "by_system": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["complete", "skipped", "failed"] },
+          "note": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "draft_risks": { "type": "array" },
+    "draft_issues": { "type": "array" },
+    "external_links": { "type": "array" }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/schedule.schema.json",
+  "title": "Schedule",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "overrides": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/override" }
+    }
+  },
+  "$defs": {
+    "override": {
+      "type": "object",
+      "required": ["control_id"],
+      "properties": {
+        "control_id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+        "due": { "type": "string", "format": "date" },
+        "weekday": {
+          "type": "string",
+          "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        },
+        "note": { "type": "string" },
+        "reason": { "type": "string" },
+        "skip": {
+          "type": "object",
+          "properties": {
+            "quarter": { "type": "string", "pattern": "^[0-9]{4}-q[1-4]$" },
+            "year": { "type": "integer" },
+            "reason": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "insert": {
+          "type": "object",
+          "required": ["run_at"],
+          "properties": {
+            "run_at": { "type": "string", "format": "date" },
+            "reason": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

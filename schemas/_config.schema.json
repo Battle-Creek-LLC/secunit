@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/_config.schema.json",
+  "title": "Config",
+  "description": "Org-level config: owners, thresholds, terminology, integration URLs.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "org": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "wisp_repo": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "owners": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "weekly_default_weekday": {
+      "type": "string",
+      "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "integrations": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

@@ -8,62 +8,120 @@
   "agent": {
     "model": "claude-opus-4-7",
     "skill": "sca-weekly-dependency-scan",
-    "skill_sha256": "9f1e2c4a8b7d...truncated...",
-    "control_sha256": "4b7a3c9e1f5d...truncated..."
+    "skill_sha256": "9f1e2c4a8b7df71a26a2033bb3d6e26ecff77f92ae2a8bb33b5e6ae6477ff71a",
+    "control_sha256": "4b7a3c9e1f5dcbbe96deff5b877a529abb1743361e5677d30ff2da12339fcbbe"
   },
   "registry_git_sha": "f71c2a4e9d8b6e2c5a1f8d7c3b4a5e6f1c2d3e4a",
-  "inventory_git_sha": "e8d6b3a1c2f4...truncated...",
+  "inventory_git_sha": "e8d6b3a1c2f435612652d3cbf12de21e9f87bde9",
   "scope_layout": "by-system",
   "resolved_scope": [
     {
       "name": "app-api",
       "kind": "source_repo",
       "stack": "python-django",
-      "tags": ["production", "customer-data", "has-sca", "has-sast"]
+      "tags": [
+        "production",
+        "customer-data",
+        "has-sca",
+        "has-sast"
+      ]
     },
     {
       "name": "app-ui",
       "kind": "source_repo",
       "stack": "typescript-react",
-      "tags": ["production", "customer-data", "has-sca", "has-sast"]
+      "tags": [
+        "production",
+        "customer-data",
+        "has-sca",
+        "has-sast"
+      ]
     }
   ],
   "prior_run": {
     "run_id": "2026-04-27-run-001",
-    "manifest_sha256": "1c2d3e4f5a6b...truncated..."
+    "manifest_sha256": "1c2d3e4f5a6b728394a5bccd3e4f50617889fa0b1c2d3445b6c7d8e9f0017283"
   },
   "artifacts": [
-    { "path": "findings.md", "sha256": "a7b8c9d0e1f2...truncated...", "bytes": 3812 }
+    {
+      "path": "findings.md",
+      "sha256": "a7b8c9d0e1f27e8f90abbccd3a4b5c677889f60718233445b2c3d4eff0017e8f",
+      "bytes": 3812
+    }
   ],
   "by_system": [
     {
       "name": "app-api",
       "status": "complete",
-      "summary": { "critical": 0, "high": 1, "medium": 4, "low": 11 },
+      "summary": {
+        "critical": 0,
+        "high": 1,
+        "medium": 4,
+        "low": 11
+      },
       "artifacts": [
-        { "path": "by-system/app-api/raw/pip-audit.json", "sha256": "b8c9d0e1f2a3...truncated...", "bytes": 8412 },
-        { "path": "by-system/app-api/raw/dependabot-config.yml", "sha256": "c9d0e1f2a3b4...truncated...", "bytes": 412 },
-        { "path": "by-system/app-api/raw/dependabot-alerts.json", "sha256": "d0e1f2a3b4c5...truncated...", "bytes": 1843 },
-        { "path": "by-system/app-api/raw/diff-pip-audit.txt", "sha256": "e1f2a3b4c5d6...truncated...", "bytes": 318 }
+        {
+          "path": "by-system/app-api/raw/pip-audit.json",
+          "sha256": "b8c9d0e1f2a3e5f601122394a1b2cddeef506d7e899aab1c293a455667d8e5f6",
+          "bytes": 8412
+        },
+        {
+          "path": "by-system/app-api/raw/dependabot-config.yml",
+          "sha256": "c9d0e1f2a3b45c677889fa0b18233445b6c7d4eff001728390abbccd3e4f5c67",
+          "bytes": 412
+        },
+        {
+          "path": "by-system/app-api/raw/dependabot-alerts.json",
+          "sha256": "d0e1f2a3b4c5cddeef506172899aab1c2d3e455667d8e9fa01122394a5b6cdde",
+          "bytes": 1843
+        },
+        {
+          "path": "by-system/app-api/raw/diff-pip-audit.txt",
+          "sha256": "e1f2a3b4c5d63445b6c7d8e9f001728394a5bccd3e4f50617889fa0b1c2d3445",
+          "bytes": 318
+        }
       ]
     },
     {
       "name": "app-ui",
       "status": "complete",
-      "summary": { "critical": 0, "high": 0, "medium": 2, "low": 7 },
+      "summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 2,
+        "low": 7
+      },
       "artifacts": [
-        { "path": "by-system/app-ui/raw/pnpm-audit.json", "sha256": "f2a3b4c5d6e7...truncated...", "bytes": 6391 },
-        { "path": "by-system/app-ui/raw/dependabot-config.yml", "sha256": "a3b4c5d6e7f8...truncated...", "bytes": 387 },
-        { "path": "by-system/app-ui/raw/dependabot-alerts.json", "sha256": "b4c5d6e7f8a9...truncated...", "bytes": 1102 },
-        { "path": "by-system/app-ui/raw/diff-pnpm-audit.txt", "sha256": "c5d6e7f8a9b0...truncated...", "bytes": 204 }
+        {
+          "path": "by-system/app-ui/raw/pnpm-audit.json",
+          "sha256": "f2a3b4c5d6e7ab1c2d3e4f5067d8e9fa0b1c2394a5b6c7d8ef5061728394ab1c",
+          "bytes": 6391
+        },
+        {
+          "path": "by-system/app-ui/raw/dependabot-config.yml",
+          "sha256": "a3b4c5d6e7f8728394a5b6c73e4f50617283fa0b1c2d3e4fb6c7d8e9fa0b7283",
+          "bytes": 387
+        },
+        {
+          "path": "by-system/app-ui/raw/dependabot-alerts.json",
+          "sha256": "b4c5d6e7f8a9e9fa0b1c2d9ea5b6c7d8e95a61728394a5162d3e4f5061d2e9fa",
+          "bytes": 1102
+        },
+        {
+          "path": "by-system/app-ui/raw/diff-pnpm-audit.txt",
+          "sha256": "c5d6e7f8a9b050617283f40f1c2d3e4fb0cbd8e9fa0b7c8794a5b6c738435061",
+          "bytes": 204
+        }
       ]
     }
   ],
   "status": "complete",
   "draft_risks": [
     {
-      "title": "Werkzeug 2.x — CVE-2024-XXXXX (request smuggling)",
-      "affected_systems": ["app-api"],
+      "title": "Werkzeug 2.x \u2014 CVE-2024-XXXXX (request smuggling)",
+      "affected_systems": [
+        "app-api"
+      ],
       "impact": 3,
       "likelihood": 3,
       "body_path": "findings.md#risk-1"

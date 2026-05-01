@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/state.schema.json",
+  "title": "State",
+  "type": "object",
+  "required": ["schema_version", "controls"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "controls": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z0-9]+(-[a-z0-9]+)*$": { "$ref": "#/$defs/entry" }
+      },
+      "additionalProperties": false
+    },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": ["last_run_id", "last_run_path", "last_run_at", "last_status", "next_due"],
+      "properties": {
+        "last_run_id": { "type": ["string", "null"] },
+        "last_run_path": { "type": ["string", "null"] },
+        "last_run_at": { "type": ["string", "null"], "format": "date-time" },
+        "last_status": {
+          "type": "string",
+          "enum": ["complete", "in-progress", "aborted", "failed", "never-run"]
+        },
+        "next_due": { "type": ["string", "null"], "format": "date" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

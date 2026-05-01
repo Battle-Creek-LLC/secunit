@@ -8,52 +8,55 @@
   "agent": {
     "model": "claude-opus-4-7",
     "skill": "aa-weekly-audit-review",
-    "skill_sha256": "b6d4e3c9f1a8...truncated...",
-    "control_sha256": "29ab74f0c5e2...truncated..."
+    "skill_sha256": "b6d4e3c9f1a8e763763a2c97a32f32f6e8536febfeb2a41f2ba7ba7e60dbe763",
+    "control_sha256": "29ab74f0c5e2ec155d8bd85da8d119479419649dd50350d5205991cf1c91ec15"
   },
   "registry_git_sha": "f71c2a4e9d8b6e2c5a1f8d7c3b4a5e6f1c2d3e4a",
-  "inventory_git_sha": "e8d6b3a1c2f4...truncated...",
+  "inventory_git_sha": "e8d6b3a1c2f435612652d3cbf12de21e9f87bde9",
   "scope_layout": "flat",
   "resolved_scope": [
     {
       "name": "prod",
       "kind": "cloud_account",
-      "tags": ["production", "customer-data"]
+      "tags": [
+        "production",
+        "customer-data"
+      ]
     }
   ],
   "prior_run": {
     "run_id": "2026-04-26-run-013",
-    "manifest_sha256": "0a1b2c3d4e5f...truncated..."
+    "manifest_sha256": "0a1b2c3d4e5f041526374859c0d1e2f304158c9daebfc0d148596a7b8c9d0415"
   },
   "artifacts": [
     {
       "path": "findings.md",
-      "sha256": "c2d3e4f5a6b7...truncated...",
+      "sha256": "c2d3e4f5a6b75b6c7d8eff001728394abbccd3e4f50677889fa0b1c233445b6c",
       "bytes": 2147
     },
     {
       "path": "raw/access-analyzer-findings.json",
-      "sha256": "d3e4f5a6b7c8...truncated...",
+      "sha256": "d3e4f5a6b7c8c2d3e45566778e9fa01122334a5b6cddeeff06172899aabbc2d3",
       "bytes": 4863
     },
     {
       "path": "raw/network-firewall-alerts.json",
-      "sha256": "e4f5a6b7c8d9...truncated...",
+      "sha256": "e4f5a6b7c8d9394abbccddeef506778899aab1c2334455667d8eff001122394a",
       "bytes": 12871
     },
     {
       "path": "raw/config-compliance.json",
-      "sha256": "f5a6b7c8d9e0...truncated...",
+      "sha256": "f5a6b7c8d9e0a0112233445f6cddeeff001b2899aabbccd7e45566778893a011",
       "bytes": 3402
     },
     {
       "path": "raw/object-store-access-sample.txt",
-      "sha256": "a6b7c8d9e0f1...truncated...",
+      "sha256": "a6b7c8d9e0f1778899aab5c6334455667182ff0011223d4ebbccddeef90a7788",
       "bytes": 18992
     },
     {
       "path": "raw/diff-access-analyzer-findings.txt",
-      "sha256": "b7c8d9e0f1a2...truncated...",
+      "sha256": "b7c8d9e0f1a2eeff001b2c9daabbccd7e85966778893a4152233445f60d1eeff",
       "bytes": 412
     }
   ],
