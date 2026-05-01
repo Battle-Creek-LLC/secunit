@@ -1,0 +1,38 @@
+[package]
+name = "secunit-gui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Read-only Tauri viewer for secunit projects."
+
+[lib]
+name = "secunit_gui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "secunit-gui"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+secunit-core = { workspace = true }
+
+tauri = { workspace = true }
+tauri-plugin-shell = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+tauri-plugin-opener = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+chrono = { workspace = true }
+shellexpand = { workspace = true }
+dirs = { workspace = true }
