@@ -1,0 +1,35 @@
+id: sca-weekly-dependency-scan
+title: Weekly software composition analysis (dependency vulnerability scan)
+policy: security/system-and-information-integrity-policy.md
+nist: [SI-2, RA-5]
+owner: cto
+cadence: weekly
+weekday: monday
+skill: sca-weekly-dependency-scan
+
+scope:
+  kind: source_repo
+  has_tags: [has-sca]
+
+evidence_required:
+  - kind: scan-output
+    description: Dependency audit output for each in-scope repo
+  - kind: dependabot-state
+    description: Dependabot configuration and open alerts per repo
+  - kind: summary
+    prompt: New, resolved, and persisting findings vs prior run, per repo and across repos
+
+remediation_thresholds:
+  critical: 30
+  high: 90
+
+outputs:
+  findings: required
+  draft_risks: per-finding-above-threshold
+  draft_issues: when-repo-lacks-required-config
+
+references:
+  - title: System and Information Integrity Policy — Flaw Remediation
+    path: security/system-and-information-integrity-policy.md
+  - title: Risk Assessment Procedure — Software Composition Analysis
+    path: security/risk-assessment-procedure.md

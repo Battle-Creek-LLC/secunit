@@ -1,0 +1,22 @@
+overrides:
+  - control_id: ra-2026-03-vuln-audit
+    due: 2026-03-15
+    note: "Pinned to mid-March per the engagement's risk-assessment-procedure schedule."
+
+  - control_id: ra-2026-12-pentest
+    due: 2026-12-01
+    note: "Vendor engagement booked; window opens Dec 1."
+
+  - control_id: ca-quarterly-vuln-scan
+    skip:
+      quarter: 2026-q4
+      reason: "Subsumed into the annual pentest engagement scheduled for the same quarter."
+
+  - control_id: cp-annual-bcp-test
+    insert:
+      run_at: 2026-08-01
+      reason: "Mid-year tabletop exercise added in addition to the year-end test."
+
+  - control_id: aa-weekly-audit-review
+    weekday: tuesday
+    reason: "Engagement preference; default Monday conflicts with standing meetings."

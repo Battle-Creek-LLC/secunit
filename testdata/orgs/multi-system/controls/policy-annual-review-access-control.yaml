@@ -1,0 +1,28 @@
+id: policy-annual-review-access-control
+title: Annual review of the Access Control Policy
+policy: security/access-control-policy.md
+nist: [AC-1]
+owner: cto
+cadence: annual
+due_by: december-31
+skill: policy-annual-review
+
+skill_args:
+  policy_path: security/access-control-policy.md
+  procedure_path: security/access-control-procedure.md
+
+evidence_required:
+  - kind: diff
+    description: Changes made to the policy in this review cycle
+  - kind: attestation
+    description: Operator attestation that the policy was read end-to-end
+  - kind: summary
+    prompt: Material changes vs prior version, environmental changes that motivated them
+
+outputs:
+  findings: required
+  draft_issues: when-procedure-out-of-sync
+
+references:
+  - title: Access Control Policy
+    path: security/access-control-policy.md
