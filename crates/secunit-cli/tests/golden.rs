@@ -92,6 +92,50 @@ fn validate_clean_fixture() {
 }
 
 #[test]
+fn status_evidence_found_human() {
+    let args = args_for(
+        "multi-system",
+        "2026-05-01",
+        &["status", "aa-weekly-audit-review", "--evidence"],
+    );
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    insta::assert_snapshot!("status_evidence_found_human", run_cli(&argv));
+}
+
+#[test]
+fn status_evidence_missing_file_human() {
+    let args = args_for(
+        "multi-system",
+        "2026-05-01",
+        &["status", "ca-quarterly-vuln-scan", "-e"],
+    );
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    insta::assert_snapshot!("status_evidence_missing_file_human", run_cli(&argv));
+}
+
+#[test]
+fn status_evidence_never_run_human() {
+    let args = args_for(
+        "multi-system",
+        "2026-05-01",
+        &["status", "cp-annual-bcp-test", "-e"],
+    );
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    insta::assert_snapshot!("status_evidence_never_run_human", run_cli(&argv));
+}
+
+#[test]
+fn status_evidence_found_json() {
+    let args = args_for(
+        "multi-system",
+        "2026-05-01",
+        &["--json", "status", "aa-weekly-audit-review", "--evidence"],
+    );
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    insta::assert_snapshot!("status_evidence_found_json", run_cli(&argv));
+}
+
+#[test]
 fn show_sca_human() {
     let args = args_for(
         "multi-system",

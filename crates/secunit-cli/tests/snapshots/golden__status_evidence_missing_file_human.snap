@@ -1,0 +1,8 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+ca-quarterly-vuln-scan (Quarterly)
+  next due: 2026-05-01
+  last run: 2026-04-01-run-001 (Complete)
+  evidence: findings.md not found at evidence/2026/q2/ca-quarterly-vuln-scan/2026-04-01-run-001/findings.md

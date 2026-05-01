@@ -1,0 +1,20 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+{
+  "cadence": "weekly",
+  "control_id": "aa-weekly-audit-review",
+  "evidence": {
+    "content": "# Weekly audit log review — 2026-04-26\n\n## Summary\n\nReviewed GitHub org audit log for 2026-04-19 → 2026-04-26. Nothing\nanomalous: 14 repo events, 3 team membership changes, all matched to\nknown JIRA tickets.\n\n## Recommended actions\n\nNone.\n",
+    "path": "evidence/2026/q2/aa-weekly-audit-review/2026-04-26-run-013/findings.md"
+  },
+  "next_due": "2026-05-04",
+  "state": {
+    "last_run_at": "2026-04-26T15:08:00Z",
+    "last_run_id": "2026-04-26-run-013",
+    "last_run_path": "evidence/2026/q2/aa-weekly-audit-review/2026-04-26-run-013/",
+    "last_status": "complete",
+    "next_due": "2026-05-04"
+  }
+}

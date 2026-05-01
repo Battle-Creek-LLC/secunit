@@ -1,0 +1,20 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+aa-weekly-audit-review (Weekly)
+  next due: 2026-05-04
+  last run: 2026-04-26-run-013 (Complete)
+
+── evidence: evidence/2026/q2/aa-weekly-audit-review/2026-04-26-run-013/findings.md ──
+# Weekly audit log review — 2026-04-26
+
+## Summary
+
+Reviewed GitHub org audit log for 2026-04-19 → 2026-04-26. Nothing
+anomalous: 14 repo events, 3 team membership changes, all matched to
+known JIRA tickets.
+
+## Recommended actions
+
+None.
