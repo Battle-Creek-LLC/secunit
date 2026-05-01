@@ -55,7 +55,7 @@ operator: <operator handle>
 resolved_scope:
   - { name: app-api, kind: source_repo, tags: [production, customer-data, has-sca], url: ..., stack: python-django }
   - { name: app-ui, kind: source_repo, tags: [production, customer-data, has-sca], url: ..., stack: typescript-react }
-inventory_git_sha: <hex>
+registry_git_sha: <hex>
 ```
 
 The skill returns:

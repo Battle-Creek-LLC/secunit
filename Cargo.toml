@@ -29,6 +29,7 @@ hex = "0.4"
 jsonschema = { version = "0.18", default-features = false, features = ["draft202012"] }
 walkdir = "2"
 fs2 = "0.4"
+gix = { version = "0.66", default-features = false, features = ["max-performance-safe"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

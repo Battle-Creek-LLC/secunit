@@ -219,7 +219,6 @@ The agent rebuilds `state.json` from manifests when `next_due` is missing or whe
     "control_sha256": "<hex>"
   },
   "registry_git_sha": "<git sha of secunit repo at run time>",
-  "inventory_git_sha": "<git sha of inventory.yaml at run time>",
   "scope_layout": "by-system",
   "resolved_scope": [
     { "name": "app-api", "kind": "source_repo", "tags": ["production", "customer-data", "has-sca"] },
@@ -258,7 +257,7 @@ The agent rebuilds `state.json` from manifests when `next_due` is missing or whe
 Notes:
 
 - `scope_layout` is `by-system` or `flat`. `flat` means the skill chose to write directly under `raw/` (only legal when scope is empty or resolves to one entry).
-- `inventory_git_sha` plus per-entry `in_scope_since`/`retired_on` lets an assessor reconstruct exactly which systems were in scope on the run date, even after the inventory has changed.
+- `registry_git_sha` plus per-entry `in_scope_since`/`retired_on` lets an assessor reconstruct exactly which systems were in scope on the run date, even after the inventory has changed: `git checkout <sha>` and the inventory is what it was at run time.
 - `prior_run.manifest_sha256` chains the manifests, so any retroactive edit of an earlier run breaks verification of every later run for that control.
 - `by_system` mirrors the run's evidence layout. For `flat` runs, `artifacts` lives at the top level only.
 

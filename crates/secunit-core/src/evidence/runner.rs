@@ -7,7 +7,6 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
@@ -86,7 +85,6 @@ pub fn prepare(
     }
 
     let registry_git_sha = git_head(&reg.root).unwrap_or_else(|| "0".repeat(40));
-    let inventory_git_sha = git_head_for(&reg.root, "inventory.yaml");
 
     let ctx = PrepareContext {
         schema_version: SCHEMA_VERSION,
@@ -99,7 +97,6 @@ pub fn prepare(
         scope_layout,
         resolved_scope: resolved,
         registry_git_sha,
-        inventory_git_sha,
     };
 
     let json = serde_json::to_vec_pretty(&ctx)?;
@@ -233,7 +230,6 @@ pub fn finalize(reg: &LoadedRegistry, run_dir: &Path) -> Result<Manifest> {
             control_sha256,
         },
         registry_git_sha: prepare.registry_git_sha.clone(),
-        inventory_git_sha: prepare.inventory_git_sha.clone(),
         scope_layout: prepare.scope_layout,
         resolved_scope: prepare.resolved_scope.clone(),
         prior_run,
@@ -401,35 +397,14 @@ fn sha256_for_skill(root: &Path, skill: &str) -> String {
     sha256_file(&path).unwrap_or_else(|_| "0".repeat(64))
 }
 
+/// Resolve the registry repo's HEAD commit hex via gix. Returns `None`
+/// when `root` isn't a git repo or HEAD can't be peeled (no commits yet,
+/// detached weirdness, etc).
 fn git_head(root: &Path) -> Option<String> {
-    let out = Command::new("git")
-        .args(["-C"])
-        .arg(root)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
-}
-
-fn git_head_for(root: &Path, rel: &str) -> Option<String> {
-    let out = Command::new("git")
-        .args(["-C"])
-        .arg(root)
-        .args(["log", "-n", "1", "--pretty=%H", "--", rel])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
+    let repo = gix::open(root).ok()?;
+    let head = repo.head().ok()?;
+    let id = head.into_peeled_id().ok()?;
+    Some(id.to_hex().to_string())
 }
 
 fn update_state(root: &Path, manifest: &Manifest) -> Result<()> {

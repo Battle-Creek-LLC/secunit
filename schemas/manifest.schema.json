@@ -35,7 +35,6 @@
       "additionalProperties": false
     },
     "registry_git_sha": { "$ref": "#/$defs/gitSha" },
-    "inventory_git_sha": { "$ref": "#/$defs/gitSha" },
     "scope_layout": { "type": "string", "enum": ["by-system", "flat"] },
     "resolved_scope": {
       "type": "array",

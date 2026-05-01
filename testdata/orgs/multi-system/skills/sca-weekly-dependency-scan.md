@@ -14,7 +14,7 @@ This skill executes the weekly dependency-vulnerability sweep across every sourc
 - `prior_run_dir` — absolute path to the previous run, or empty for the first run.
 - `control` — parsed YAML for `sca-weekly-dependency-scan`.
 - `resolved_scope` — list of source-repo entries from `inventory.yaml` matching `kind: source_repo, has_tags: [has-sca]`. Each carries `name`, `url`, `stack`, `tags`.
-- `inventory_git_sha` — recorded by the agent into `manifest.json`.
+- `registry_git_sha` — recorded by the agent into `manifest.json` (pins inventory.yaml too, since it lives in the same repo).
 
 ## Procedure
 

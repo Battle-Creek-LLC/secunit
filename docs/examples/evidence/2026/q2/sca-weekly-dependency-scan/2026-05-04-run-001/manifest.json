@@ -12,7 +12,6 @@
     "control_sha256": "4b7a3c9e1f5dcbbe96deff5b877a529abb1743361e5677d30ff2da12339fcbbe"
   },
   "registry_git_sha": "f71c2a4e9d8b6e2c5a1f8d7c3b4a5e6f1c2d3e4a",
-  "inventory_git_sha": "e8d6b3a1c2f435612652d3cbf12de21e9f87bde9",
   "scope_layout": "by-system",
   "resolved_scope": [
     {

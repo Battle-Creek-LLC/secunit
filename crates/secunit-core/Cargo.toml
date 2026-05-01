@@ -19,6 +19,7 @@ hex.workspace = true
 jsonschema.workspace = true
 walkdir.workspace = true
 fs2.workspace = true
+gix.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

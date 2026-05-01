@@ -68,7 +68,7 @@ secunit run list --pending
 - Loads and validates the control YAML.
 - Resolves `scope` against `inventory.yaml`, filtered by run date against `in_scope_since` / `retired_on`.
 - Allocates `evidence/<y>/<q>/<id>/<run-id>/`, creates `by-system/<name>/raw/` per resolved entry, drops a `.run-pending` sentinel.
-- Captures `registry_git_sha` and `inventory_git_sha`.
+- Captures `registry_git_sha` (the repo's HEAD; pins inventory.yaml too since it lives in the same repo).
 - Writes `prepare.json` into the run dir.
 - Prints the prepare context to stdout (JSON by default; `--human` for tables).
 

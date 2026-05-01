@@ -48,8 +48,6 @@ pub struct PrepareContext {
     pub scope_layout: ScopeLayout,
     pub resolved_scope: Vec<ResolvedSystem>,
     pub registry_git_sha: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inventory_git_sha: Option<String>,
 }
 
 // ---------- result (skill output) ------------------------------------------
@@ -121,8 +119,6 @@ pub struct Manifest {
     pub operator: Option<String>,
     pub agent: AgentInfo,
     pub registry_git_sha: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub inventory_git_sha: Option<String>,
     pub scope_layout: ScopeLayout,
     pub resolved_scope: Vec<ResolvedSystem>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

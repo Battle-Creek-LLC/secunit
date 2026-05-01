@@ -285,7 +285,7 @@ CI runs the first four on every push. Live smokes run weekly on a schedule, gate
 | AWS-SDK clean compile is slow | CI cold builds get unpleasant; local dev loop suffers | sccache from Phase 0; pin SDK minor versions to avoid spurious rebuilds |
 | Capture canonicalization gaps | Phantom diffs across runs; assessor confusion | Property test: same fixture twice → byte-identical output. Failing this fails CI. |
 | Hash chain semantics under retries / aborts | Retroactive edits go undetected, or false positives on legitimate retries | Phase 2 atomicity tests; aborts write `abort.json` not silently delete |
-| Inventory drift mid-run | A system added/removed during a run leaves ambiguous evidence | `prepare` snapshots `inventory_git_sha`; `finalize` does not re-resolve scope |
+| Inventory drift mid-run | A system added/removed during a run leaves ambiguous evidence | `prepare` snapshots `registry_git_sha` (which pins inventory.yaml since it lives in the same repo); `finalize` does not re-resolve scope |
 | Skill / binary version drift | Skills written against old capture flags break silently | Manifest records `skill_sha256` and `secunit_version`; `verify` flags mismatches |
 | Credential leakage in logs | SDK debug output can include headers / signed URLs | `tracing` redaction filter; SDK loggers default to `info`; security review before each release |
 | Concurrent runs of the same control | State.json corruption | File lock at root; `prepare` refuses if a `.run-pending` exists for the same control |
