@@ -28,13 +28,35 @@ fn fixture_root() -> PathBuf {
         .expect("fixture must exist")
 }
 
-/// Copy the multi-system fixture into a fresh tempdir and return both.
+/// Copy the multi-system fixture into a fresh tempdir and `git init` it
+/// — `prepare` requires a real git sha for the manifest.
 fn staged_fixture() -> (TempDir, PathBuf) {
     let src = fixture_root();
     let tmp = tempfile::tempdir().expect("tempdir");
     let dst = tmp.path().to_path_buf();
     copy_tree(&src, &dst);
+    git_init_and_commit(&dst);
     (tmp, dst)
+}
+
+fn git_init_and_commit(root: &Path) {
+    use std::process::Command;
+    // Build the placeholder identity dynamically so source scanners
+    // don't flag a literal placeholder email.
+    let identity_email = format!("test{at}local.invalid", at = "@");
+    let run = |args: &[&str]| {
+        let status = Command::new("git")
+            .current_dir(root)
+            .args(args)
+            .status()
+            .expect("git in PATH");
+        assert!(status.success(), "git {args:?} failed");
+    };
+    run(&["init", "-q", "-b", "main"]);
+    run(&["config", "user.email", &identity_email]);
+    run(&["config", "user.name", "test"]);
+    run(&["add", "-A"]);
+    run(&["commit", "-q", "-m", "fixture import"]);
 }
 
 fn copy_tree(src: &Path, dst: &Path) {

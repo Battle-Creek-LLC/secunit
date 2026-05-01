@@ -84,7 +84,12 @@ pub fn prepare(
         fs::create_dir_all(run_dir.join("raw"))?;
     }
 
-    let registry_git_sha = git_head(&reg.root).unwrap_or_else(|| "0".repeat(40));
+    let registry_git_sha = git_head(&reg.root).with_context(|| {
+        format!(
+            "{} is not a git repository — `cd` into a checked-out registry, or `git init && git commit` if starting fresh",
+            reg.root.display()
+        )
+    })?;
 
     let ctx = PrepareContext {
         schema_version: SCHEMA_VERSION,
@@ -213,8 +218,8 @@ pub fn finalize(reg: &LoadedRegistry, run_dir: &Path) -> Result<Manifest> {
     // Find the prior run for this control and link via its manifest sha.
     let prior_run = prior_run_link(&reg.root, &prepare.control_id, &prepare.run_id)?;
 
-    let control_sha256 = sha256_for_control(&reg.root, &prepare.control_id);
-    let skill_sha256 = sha256_for_skill(&reg.root, &reg.controls[&prepare.control_id].skill);
+    let control_sha256 = sha256_for_control(&reg.root, &prepare.control_id)?;
+    let skill_sha256 = sha256_for_skill(&reg.root, &reg.controls[&prepare.control_id].skill)?;
 
     let manifest = Manifest {
         schema_version: SCHEMA_VERSION,
@@ -387,24 +392,25 @@ fn prior_run_link(root: &Path, control_id: &str, current_run_id: &str) -> Result
     }
 }
 
-fn sha256_for_control(root: &Path, control_id: &str) -> String {
+fn sha256_for_control(root: &Path, control_id: &str) -> Result<String> {
     let path = root.join("controls").join(format!("{control_id}.yaml"));
-    sha256_file(&path).unwrap_or_else(|_| "0".repeat(64))
+    sha256_file(&path).with_context(|| format!("hash control {}", path.display()))
 }
 
-fn sha256_for_skill(root: &Path, skill: &str) -> String {
+fn sha256_for_skill(root: &Path, skill: &str) -> Result<String> {
     let path = root.join("skills").join(format!("{skill}.md"));
-    sha256_file(&path).unwrap_or_else(|_| "0".repeat(64))
+    sha256_file(&path).with_context(|| format!("hash skill {}", path.display()))
 }
 
-/// Resolve the registry repo's HEAD commit hex via gix. Returns `None`
-/// when `root` isn't a git repo or HEAD can't be peeled (no commits yet,
-/// detached weirdness, etc).
-fn git_head(root: &Path) -> Option<String> {
-    let repo = gix::open(root).ok()?;
-    let head = repo.head().ok()?;
-    let id = head.into_peeled_id().ok()?;
-    Some(id.to_hex().to_string())
+/// Resolve the registry repo's HEAD commit hex via gix. Errors when
+/// `root` isn't a git repo or HEAD can't be peeled (no commits yet,
+/// detached weirdness, etc) — `prepare` requires a real git sha to
+/// pin what the registry said at run time.
+fn git_head(root: &Path) -> Result<String> {
+    let repo = gix::open(root).context("open repo")?;
+    let head = repo.head().context("read HEAD")?;
+    let id = head.into_peeled_id().context("peel HEAD to a commit")?;
+    Ok(id.to_hex().to_string())
 }
 
 fn update_state(root: &Path, manifest: &Manifest) -> Result<()> {
