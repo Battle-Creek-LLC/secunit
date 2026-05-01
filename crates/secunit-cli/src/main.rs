@@ -73,6 +73,61 @@ enum Command {
     Verify { control_id: Option<String> },
     /// Show which integrations are compiled in.
     Features,
+    /// Manage controls and the schedule.
+    Registry {
+        #[command(subcommand)]
+        sub: RegistryCmd,
+    },
+    /// Manage the inventory.
+    Inventory {
+        #[command(subcommand)]
+        sub: InventoryCmd,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum RegistryCmd {
+    /// Promote drafts emitted by a `bootstrap` or `inventory-seed` run
+    /// directory into the live registry.
+    Import {
+        /// The bootstrap/inventory-seed run dir, or any directory with
+        /// drafts laid out under `raw/` (or at the top level).
+        bootstrap_dir: PathBuf,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum InventoryCmd {
+    /// List inventory entries.
+    List {
+        /// Restrict to one kind (singular or plural section name).
+        #[arg(long)]
+        kind: Option<String>,
+    },
+    /// Append a new entry. `in_scope_since` is set to today.
+    Add {
+        #[arg(long)]
+        kind: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long, num_args = 0..)]
+        tags: Vec<String>,
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// Mark an entry retired. History is preserved.
+    Retire {
+        #[arg(long)]
+        kind: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        on: chrono::NaiveDate,
+        #[arg(long)]
+        reason: String,
+    },
+    /// Sanity-check inventory.yaml (schema, duplicates, lifecycle dates).
+    Check,
 }
 
 #[derive(Debug, Subcommand)]
@@ -136,6 +191,25 @@ fn main() -> ExitCode {
         },
         Command::Verify { control_id } => cmd::verify::run(&ctx, control_id.as_deref()),
         Command::Features => cmd::features::run(&ctx),
+        Command::Registry { sub } => match sub {
+            RegistryCmd::Import { bootstrap_dir } => cmd::registry::import(&ctx, &bootstrap_dir),
+        },
+        Command::Inventory { sub } => match sub {
+            InventoryCmd::List { kind } => cmd::inventory::list(&ctx, kind.as_deref()),
+            InventoryCmd::Add {
+                kind,
+                name,
+                tags,
+                url,
+            } => cmd::inventory::add(&ctx, &kind, &name, &tags, url.as_deref()),
+            InventoryCmd::Retire {
+                kind,
+                name,
+                on,
+                reason,
+            } => cmd::inventory::retire(&ctx, &kind, &name, on, &reason),
+            InventoryCmd::Check => cmd::inventory::check(&ctx),
+        },
     };
 
     match result {

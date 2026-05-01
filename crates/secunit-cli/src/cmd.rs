@@ -11,6 +11,8 @@ use secunit_core::registry::loader::{self, LoadReport};
 
 pub mod due;
 pub mod features;
+pub mod inventory;
+pub mod registry;
 pub mod run;
 pub mod scope;
 pub mod show;
