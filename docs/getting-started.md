@@ -2,7 +2,7 @@
 
 How to take an organization with an existing Written Information Security Program (WISP) and stand up a `secunit` registry against it. The whole journey, end to end, from "I have policy docs in a repo" to "`secunit due` tells me what to do this week."
 
-> **Status.** The bootstrap flow described here is the **design** target (Phase 3 of `PLAN.md`). Today's CLI implements registry math (Phase 1) and run lifecycle (Phase 2). The `bootstrap` and `inventory-seed` skills, plus `secunit registry import` and the `inventory` subcommands, are not yet wired in. Read this as the walkthrough you will hand to a new operator once Phase 3 lands; the conceptual contract is stable.
+> **Status.** Phases 0–3 of `PLAN.md` are landed: registry math, run lifecycle, the `bootstrap` and `inventory-seed` skills, `secunit registry import`, and the `inventory` subcommands. Native captures (Phase 4+) are next; until they ship, the capture step in any control's skill is the operator running `gh`/`aws` by hand and writing the canonical JSON output into the run dir.
 
 ## What you need before starting
 
@@ -21,16 +21,22 @@ Create the directory tree:
 
 ```
 <org>-secunit/
-  controls/                 # empty for now
-  skills/                   # empty for now
+  controls/
+    bootstrap.yaml          # copy from docs/examples/controls/bootstrap.yaml
+    inventory-seed.yaml     # copy from docs/examples/controls/inventory-seed.yaml
+  skills/
+    bootstrap.md            # copy from docs/examples/skills/bootstrap.md
+    inventory-seed.md       # copy from docs/examples/skills/inventory-seed.md
   inventory.yaml            # empty doc: `{}` or kind keys with empty lists
   _config.yaml              # see below
   .gitignore                # ignore target/, .DS_Store, etc.
 ```
 
-`_config.yaml` declares integration handles — what your GitHub org is called, which AWS profiles back which cloud accounts, where the WISP source lives. The schema is `schemas/_config.schema.json`. Treat this file as the only place you hand-author secrets-adjacent identifiers; everything downstream resolves through it.
+The `bootstrap` and `inventory-seed` controls have `cadence: continuous`, so they never fire on schedule — they're invoked on demand to prepare runs. The skills are what the agent reads to actually walk the WISP and the upstream sources.
 
-`git init`, commit the stub. The git history of this repo *is* the audit trail — the manifest format pins the registry's git sha into every run.
+`_config.yaml` declares integration handles — what your GitHub org is called, which AWS profiles back which cloud accounts, where the WISP source lives. The schema is `schemas/_config.schema.json`. Treat this file as the only place you hand-author secrets-adjacent identifiers; everything downstream resolves through it. The `bootstrap` skill needs `org.wisp_repo` set.
+
+`git init`, commit the stub. The git history of this repo *is* the audit trail — the manifest format pins the registry's git sha into every run, and `run prepare` refuses to allocate a run dir outside a real repo.
 
 ## Step 2 — Prepare the bootstrap run
 
@@ -42,9 +48,9 @@ This allocates `evidence/<year>/<quarter>/bootstrap/<YYYY-MM-DD>-run-001/`, writ
 
 ## Step 3 — Run the `bootstrap` skill
 
-The agent loads `skills/bootstrap.md` and walks your WISP repo. For every cadence-bearing obligation it finds — weekly log review, quarterly vuln scan, annual policy reviews, fixed-date procedures — it writes one **draft control YAML** under `<run-dir>/drafts/controls/`. Fixed-date obligations land in `<run-dir>/drafts/schedule.yaml`.
+The agent loads `skills/bootstrap.md` and walks your WISP repo. For every cadence-bearing obligation it finds — weekly log review, quarterly vuln scan, annual policy reviews, fixed-date procedures — it writes one **draft control YAML** under `<run-dir>/raw/controls/`. Fixed-date obligations land in `<run-dir>/raw/schedule.yaml`. (The skill is org-wide, so the run uses `raw/` rather than `by-system/<n>/raw/` — see `storage.md` on scope layouts.)
 
-The skill also writes a `bootstrap-report.md` summarizing:
+The skill also writes `<run-dir>/raw/bootstrap-report.md` summarizing:
 
 - Obligations found and their proposed `id`, `cadence`, `owner`, `skill`.
 - Ambiguities the operator must resolve (cadence unclear, owner unclear, scope unclear).
@@ -61,11 +67,11 @@ In the same run dir (or a paired bootstrap run), the agent loads `skills/invento
 - **SaaS providers** from `_config.yaml` integration data and the WISP's own access dictionaries.
 - **Sites, endpoints** — typically operator-attested; the skill prompts.
 
-It writes `<run-dir>/drafts/inventory.yaml` grouped by `kind`, with `name`, `tags`, and `in_scope_since` set per entry. The schema is `schemas/inventory.schema.json`.
+It writes `<run-dir>/raw/inventory.yaml` grouped by `kind`, with `name`, `tags`, and `in_scope_since` set per entry, plus `<run-dir>/raw/inventory-diff.md` for human review. The schema is `schemas/inventory.schema.json`.
 
 ## Step 5 — Review
 
-Open `<run-dir>/bootstrap-report.md`. Walk every flagged ambiguity. Edit drafts in place — the bootstrap run dir is just files. This is the only human-in-the-loop step in the bootstrap, and it is non-optional: a bootstrapped registry the operator hasn't read is not a registry.
+Open `<run-dir>/raw/bootstrap-report.md` and `<run-dir>/raw/inventory-diff.md`. Walk every flagged ambiguity. Edit drafts in place under `<run-dir>/raw/` — the run dir is just files. This is the only human-in-the-loop step in the bootstrap, and it is non-optional: a bootstrapped registry the operator hasn't read is not a registry.
 
 Tag conventions to settle here, since every later `scope:` filter resolves through them:
 
@@ -90,7 +96,14 @@ secunit run finalize <run-dir>
 secunit registry import <run-dir>
 ```
 
-This validates each draft against its schema, cross-checks `control.skill` resolves to a `skills/` file, checks `control.policy` paths exist, checks `scope.kind` matches an inventory section, and refuses to promote anything that fails. Successful drafts are moved into `controls/` and `inventory.yaml` is moved into place. Failed drafts stay in the run dir with per-file diagnostics for you to fix.
+This validates each draft against its schema and **copies** what passes into the live registry. Drafts stay in the run dir for audit; the run's manifest (and its hash) cover them too. Specifically:
+
+- New control YAMLs are written into `controls/`. Controls that already exist by the same id are left untouched (`= aa-weekly-audit-review`).
+- `inventory.yaml` is **merged**: missing kinds are added wholesale, and within an existing kind, entries are appended by `name` — the operator's existing tags, aliases, and excludes are preserved.
+- `schedule.yaml` and `_config.yaml` are copied **only if absent** in the live registry (operator edits trump drafts).
+- Drafts that fail schema validation are listed under `Drafts rejected (...)` with per-file diagnostics; nothing is promoted for those.
+
+`secunit registry import --json <run-dir>` emits the same summary as structured JSON, useful for piping into reviews.
 
 Commit the new `controls/`, `inventory.yaml`, and any `schedule.yaml` to the secunit repo. The first registry checkpoint.
 
@@ -98,8 +111,8 @@ Commit the new `controls/`, `inventory.yaml`, and any `schedule.yaml` to the sec
 
 ```bash
 secunit validate              # schema + cross-ref check, clean exit
-secunit due --within 7d       # what's due in the next week
-secunit calendar --quarter $(date +%Y)-q$((($(date +%-m)-1)/3+1))
+secunit inventory check       # duplicate names, lifecycle-date sanity
+secunit due --within 7        # what's due in the next 7 days
 secunit scope <some-control>  # preview which inventory entries iterate
 ```
 
@@ -109,9 +122,11 @@ If `due` shows the right things on the right dates, bootstrap is done. You are r
 
 Bootstrap is **re-runnable** by design. As the WISP evolves:
 
-- New obligations show up as new drafts on the next bootstrap run.
-- Existing obligations are matched by `id`; if the YAML diverges, the bootstrap report flags it and the operator decides whether to accept the change.
-- Obligations no longer appearing in the WISP are marked orphaned. `secunit registry rm <id> --reason ...` writes a tombstone but preserves the prior evidence — historical runs remain discoverable.
+- New obligations show up as drafts under `<run-dir>/raw/controls/` and `registry import` promotes them.
+- Existing obligations whose live control already covers them are reported as **kept** — no draft is emitted, so an operator's hand edits to that control survive the next bootstrap untouched.
+- Obligations no longer appearing in the WISP are reported as **orphaned** in `bootstrap-report.md`. The skill never deletes; the operator decides whether to retire (a future `secunit registry rm` will write a tombstone — until then, hand-edit the control or remove the YAML).
+
+The same pattern holds for inventory-seed: new entries are added with `in_scope_since: today`; entries that disappeared upstream are flagged in `inventory-diff.md` with a proposed `secunit inventory retire` command. Retirement is always an operator step, never automatic.
 
 This is what keeps the registry in sync with the WISP without a separate "migration" tool.
 

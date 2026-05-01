@@ -1,0 +1,33 @@
+id: bootstrap
+title: Bootstrap registry from WISP
+policy: docs/spec.md
+owner: owner
+cadence: continuous
+skill: bootstrap
+
+evidence_required:
+  - kind: report
+    path: raw/bootstrap-report.md
+    description: Human-readable summary of obligations found in the WISP and the kept/added/orphaned diff against the live registry.
+  - kind: directory
+    path: raw/controls/
+    description: Draft control YAMLs, one per cadence-bearing obligation extracted from the WISP. Promoted via `secunit registry import`.
+  - kind: file
+    path: raw/inventory.yaml
+    description: Inventory skeleton when the live registry has none.
+  - kind: file
+    path: raw/schedule.yaml
+    description: Schedule stub when the live registry has none.
+  - kind: file
+    path: raw/_config.yaml
+    description: Config skeleton when the live registry has none.
+
+outputs:
+  drafts: required
+  bootstrap_report: required
+
+references:
+  - title: secunit specification — Bootstrap
+    path: docs/spec.md
+  - title: Bootstrap skill
+    path: skills/bootstrap.md

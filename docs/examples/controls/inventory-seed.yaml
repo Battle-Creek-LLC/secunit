@@ -1,0 +1,29 @@
+id: inventory-seed
+title: Seed and refresh the inventory
+policy: docs/spec.md
+owner: owner
+cadence: continuous
+skill: inventory-seed
+
+evidence_required:
+  - kind: file
+    path: raw/inventory.yaml
+    description: Draft merged inventory. Promoted via `secunit registry import` (entries are appended; existing entries are preserved).
+  - kind: report
+    path: raw/inventory-diff.md
+    description: Per-kind kept / added / missing-upstream diff against the live inventory.
+  - kind: directory
+    path: raw/sources/
+    description: Per-source captures (GitHub repo lists, WISP excerpts) that fed the proposal — kept for audit.
+
+outputs:
+  drafts: required
+  inventory_diff: required
+
+references:
+  - title: secunit specification — Inventory
+    path: docs/spec.md
+  - title: Inventory-seed skill
+    path: skills/inventory-seed.md
+  - title: Inventory schema and conventions
+    path: docs/storage.md
