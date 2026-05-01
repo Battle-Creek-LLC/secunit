@@ -1,0 +1,4 @@
+[
+  {"number": 5, "state": "open", "rule": {"id": "rust/unsafe", "severity": "warning"}, "url": "https://x"},
+  {"number": 3, "state": "dismissed", "rule": {"id": "py/eval", "severity": "error"}}
+]

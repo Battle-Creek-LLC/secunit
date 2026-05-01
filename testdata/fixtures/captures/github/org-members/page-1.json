@@ -1,0 +1,5 @@
+[
+  {"login": "zach", "id": 3, "node_id": "MDx_z", "avatar_url": "https://x", "type": "User"},
+  {"login": "alice", "id": 1, "node_id": "MDx_a", "avatar_url": "https://y", "type": "User"},
+  {"login": "marvin", "id": 2, "node_id": "MDx_m", "avatar_url": "https://m", "type": "User"}
+]

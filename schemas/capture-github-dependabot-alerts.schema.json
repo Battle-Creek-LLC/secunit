@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/capture-github-dependabot-alerts.schema.json",
+  "title": "CaptureGithubDependabotAlerts",
+  "type": "object",
+  "required": ["capturer", "version", "captured_at", "args", "result"],
+  "additionalProperties": false,
+  "properties": {
+    "capturer": { "const": "github.dependabot-alerts" },
+    "version": { "type": "string" },
+    "captured_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "args": {
+      "type": "object",
+      "required": ["repo", "state"],
+      "properties": {
+        "repo": { "type": "string" },
+        "state": { "type": "string" }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": ["alerts"],
+      "properties": {
+        "alerts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["number"],
+            "properties": {
+              "number": { "type": "integer" },
+              "state": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

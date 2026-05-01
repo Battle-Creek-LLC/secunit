@@ -1,0 +1,7 @@
+{
+  "advisories": {
+    "1234": {"id": 1234, "module_name": "lodash", "severity": "high", "findings": [{"version": "4.17.20", "paths": ["b", "a"]}]},
+    "5": {"id": 5, "module_name": "axios", "severity": "low", "findings": []}
+  },
+  "metadata": {"vulnerabilities": {"high": 1, "low": 1}, "totalDependencies": 999}
+}

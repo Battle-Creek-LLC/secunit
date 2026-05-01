@@ -83,6 +83,11 @@ enum Command {
         #[command(subcommand)]
         sub: InventoryCmd,
     },
+    /// Capture evidence via native integrations.
+    Capture {
+        #[command(subcommand)]
+        sub: cmd::capture::CaptureCmd,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -210,6 +215,7 @@ fn main() -> ExitCode {
             } => cmd::inventory::retire(&ctx, &kind, &name, on, &reason),
             InventoryCmd::Check => cmd::inventory::check(&ctx),
         },
+        Command::Capture { sub } => cmd::capture::run(sub),
     };
 
     match result {

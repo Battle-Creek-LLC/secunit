@@ -22,6 +22,17 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[features]
+default = ["deps", "github", "aws"]
+deps = ["secunit-capture/deps"]
+github = ["secunit-capture/github"]
+# `aws` is a placeholder until Phase 5 — expose the feature flag so
+# skills declaring `requires_features: [aws]` validate cleanly, but no
+# AWS capturers are compiled in yet.
+aws = ["secunit-capture/aws"]
+http = ["secunit-capture/http"]
 
 [dev-dependencies]
 assert_cmd = "2"

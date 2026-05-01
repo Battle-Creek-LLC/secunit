@@ -1,0 +1,25 @@
+[
+  {
+    "number": 7,
+    "state": "open",
+    "url": "https://api.github.com/repos/o/r/dependabot/alerts/7",
+    "html_url": "https://github.com/o/r/security/dependabot/7",
+    "node_id": "MDx_dabt_7",
+    "security_advisory": {
+      "ghsa_id": "GHSA-xxxx-yyyy-zzzz",
+      "summary": "RCE in transitive dep"
+    },
+    "dependency": {"package": {"name": "lodash", "ecosystem": "npm"}, "manifest_path": "package.json"}
+  },
+  {
+    "number": 2,
+    "state": "open",
+    "url": "https://api.github.com/repos/o/r/dependabot/alerts/2",
+    "node_id": "MDx_dabt_2",
+    "security_advisory": {
+      "ghsa_id": "GHSA-aaaa-bbbb-cccc",
+      "summary": "Path traversal"
+    },
+    "dependency": {"package": {"name": "axios", "ecosystem": "npm"}}
+  }
+]

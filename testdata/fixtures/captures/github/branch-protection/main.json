@@ -1,0 +1,14 @@
+{
+  "url": "https://api.github.com/repos/o/r/branches/main/protection",
+  "required_pull_request_reviews": {
+    "url": "https://x",
+    "dismiss_stale_reviews": true,
+    "required_approving_review_count": 2
+  },
+  "required_status_checks": {
+    "url": "https://y",
+    "strict": true,
+    "contexts": ["lint", "build", "test"]
+  },
+  "enforce_admins": {"url": "https://z", "enabled": true}
+}

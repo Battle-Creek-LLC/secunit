@@ -1,0 +1,17 @@
+{
+  "vulns": [
+    {
+      "id": "GHSA-9wx4-h78v-vm56",
+      "summary": "Z thing",
+      "aliases": ["CVE-2024-35195", "PYSEC-2024-1"],
+      "references": [
+        {"type": "WEB", "url": "https://b.example"},
+        {"type": "WEB", "url": "https://a.example"}
+      ],
+      "affected": [{"package": {"ecosystem": "PyPI", "name": "requests"}, "versions": ["2.30.0", "2.29.0"]}],
+      "database_specific": {"source_url": "https://x"}
+    },
+    {"id": "GHSA-1111-0000-aaaa", "summary": "A thing", "aliases": []}
+  ],
+  "next_page_token": "eyJfaWQ"
+}

@@ -1,0 +1,13 @@
+{
+  "pip_audit_version": "2.7.3",
+  "dependencies": [
+    {
+      "name": "requests",
+      "version": "2.30.0",
+      "vulns": [
+        {"id": "GHSA-9wx4-h78v-vm56", "fix_versions": ["2.32.0", "2.31.0"], "aliases": ["CVE-2024-35195"], "description": "x"}
+      ]
+    },
+    {"name": "Django", "version": "4.2.0", "vulns": []}
+  ]
+}

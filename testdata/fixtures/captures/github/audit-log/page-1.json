@@ -1,0 +1,4 @@
+[
+  {"@timestamp": 1714521600, "_document_id": "doc-2", "action": "repo.create", "actor": "bob"},
+  {"@timestamp": 1714435200, "_document_id": "doc-1", "action": "team.add_member", "actor": "alice"}
+]
