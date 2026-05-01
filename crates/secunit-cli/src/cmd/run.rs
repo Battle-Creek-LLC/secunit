@@ -6,13 +6,7 @@ use secunit_core::evidence::runner::{self, PrepareOpts};
 
 use super::Ctx;
 
-pub fn prepare(
-    ctx: &Ctx,
-    control_id: &str,
-    note: Option<&str>,
-    human: bool,
-    flat_when_singleton: bool,
-) -> Result<ExitCode> {
+pub fn prepare(ctx: &Ctx, control_id: &str, note: Option<&str>, human: bool) -> Result<ExitCode> {
     let (reg, report) = ctx.load()?;
     if !report.is_clean() {
         for e in &report.errors {
@@ -25,7 +19,6 @@ pub fn prepare(
         operator: std::env::var("SECUNIT_OPERATOR").ok(),
         note: note.map(str::to_string),
         now: None,
-        allow_flat_when_singleton: flat_when_singleton,
     };
     let result = runner::prepare(&reg, control_id, &opts);
     let prepare_ctx = match result {

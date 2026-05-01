@@ -85,9 +85,6 @@ enum RunCmd {
         /// Print human-readable summary instead of JSON.
         #[arg(long)]
         human: bool,
-        /// Allow flat scope_layout when scope resolves to one entry.
-        #[arg(long)]
-        flat_when_singleton: bool,
     },
     /// Hash artifacts, link the chain, and seal the run.
     Finalize { run_dir: PathBuf },
@@ -131,14 +128,7 @@ fn main() -> ExitCode {
                 control_id,
                 note,
                 human,
-                flat_when_singleton,
-            } => cmd::run::prepare(
-                &ctx,
-                &control_id,
-                note.as_deref(),
-                human,
-                flat_when_singleton,
-            ),
+            } => cmd::run::prepare(&ctx, &control_id, note.as_deref(), human),
             RunCmd::Finalize { run_dir } => cmd::run::finalize(&ctx, &run_dir),
             RunCmd::Abort { run_dir, reason } => cmd::run::abort(&ctx, &run_dir, &reason),
             RunCmd::Resume { run_dir } => cmd::run::resume(&ctx, &run_dir),

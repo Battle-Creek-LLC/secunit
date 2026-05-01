@@ -355,3 +355,71 @@ fn finalize_populates_next_due_in_state() {
     // Next Monday after a Monday-weekly run is the following Monday.
     assert_eq!(next.as_str(), Some("2026-05-11"));
 }
+
+#[test]
+fn singleton_scope_defaults_to_flat_layout() {
+    use secunit_core::evidence::manifest::ScopeLayout;
+
+    let (_tmp, root) = staged_fixture();
+    // aa-weekly-audit-review's scope is `kind: cloud_account, has_tags:
+    // [production]` — the multi-system fixture has exactly one matching
+    // entry (`prod`). Singleton → flat.
+    let (reg, _) = loader::load(&root);
+    let opts = PrepareOpts {
+        today: Some(NaiveDate::from_ymd_opt(2026, 5, 4).unwrap()),
+        ..Default::default()
+    };
+    let ctx = runner::prepare(&reg, "aa-weekly-audit-review", &opts).expect("prepare");
+    assert_eq!(ctx.scope_layout, ScopeLayout::Flat);
+    assert!(ctx.run_dir.join("raw").exists());
+    assert!(!ctx.run_dir.join("by-system").exists());
+}
+
+#[test]
+fn empty_scope_fails_early_no_run_dir_created() {
+    let (_tmp, root) = staged_fixture();
+    // Wipe source_repos so sca-weekly's scope (kind: source_repo,
+    // has_tags: [has-sca]) resolves to zero entries.
+    let inv_path = root.join("inventory.yaml");
+    fs::write(
+        &inv_path,
+        "source_repos: []\ncloud_accounts: []\nsaas: []\n",
+    )
+    .unwrap();
+    git_init_and_commit_amend(&root);
+
+    let (reg, _) = loader::load(&root);
+    let opts = PrepareOpts {
+        today: Some(NaiveDate::from_ymd_opt(2026, 5, 4).unwrap()),
+        ..Default::default()
+    };
+    let err = runner::prepare(&reg, "sca-weekly-dependency-scan", &opts)
+        .expect_err("prepare must reject empty scope");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("no inventory entries match"),
+        "expected helpful error, got: {msg}"
+    );
+    // Critical: no evidence dir was allocated.
+    let evidence_dir = root.join("evidence/2026/q2/sca-weekly-dependency-scan");
+    assert!(
+        !evidence_dir.exists(),
+        "no run dir should be allocated when prepare fails early"
+    );
+}
+
+fn git_init_and_commit_amend(root: &Path) {
+    use std::process::Command;
+    let identity_email = format!("test{at}local.invalid", at = "@");
+    let run = |args: &[&str]| {
+        Command::new("git")
+            .current_dir(root)
+            .args(args)
+            .status()
+            .expect("git in PATH");
+    };
+    run(&["config", "user.email", &identity_email]);
+    run(&["config", "user.name", "test"]);
+    run(&["add", "-A"]);
+    run(&["commit", "-q", "-m", "amend"]);
+}

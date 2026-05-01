@@ -36,8 +36,6 @@ pub struct PrepareOpts {
     pub operator: Option<String>,
     pub note: Option<String>,
     pub now: Option<DateTime<Utc>>,
-    /// If `true`, allow `flat` layout when scope resolves to one entry.
-    pub allow_flat_when_singleton: bool,
 }
 
 /// Allocate a run directory, snapshot scope, write `prepare.json`, drop
@@ -68,12 +66,33 @@ pub fn prepare(
     }
 
     let resolved = resolver::resolve_scope(ctrl, &reg.inventory, today);
-    let scope_layout =
-        if ctrl.scope.is_none() || (resolved.len() <= 1 && opts.allow_flat_when_singleton) {
-            ScopeLayout::Flat
-        } else {
-            ScopeLayout::BySystem
+
+    // Empty scope against a non-org-wide control is the silent-failure
+    // case: allocating a run dir would seal a "successful" manifest with
+    // zero artifacts, advancing the chain as if work happened. Fail
+    // early instead — operator either updates inventory.yaml or retires
+    // the control.
+    if ctrl.scope.is_some() && resolved.is_empty() {
+        let scope_desc = match &ctrl.scope {
+            Some(crate::model::Scope::Inventory(s)) => {
+                format!("kind: {}, has_tags: {:?}", s.kind, s.has_tags)
+            }
+            Some(crate::model::Scope::Inline(_)) => "inline".to_string(),
+            None => unreachable!(),
         };
+        bail!(
+            "control `{control_id}` has scope ({scope_desc}) but no inventory entries match on {today}. Either update inventory.yaml or retire the control."
+        );
+    }
+
+    // Per storage.md: flat is legal when scope is empty (org-wide) or
+    // resolves to exactly one entry. Default to flat in both cases —
+    // by-system would just nest a lone system under an extra dir.
+    let scope_layout = if ctrl.scope.is_none() || resolved.len() == 1 {
+        ScopeLayout::Flat
+    } else {
+        ScopeLayout::BySystem
+    };
 
     let run_dir = allocate_run_dir(&reg.root, control_id, today)?;
     if matches!(scope_layout, ScopeLayout::BySystem) {
