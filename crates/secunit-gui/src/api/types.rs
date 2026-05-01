@@ -174,3 +174,23 @@ pub enum RunTreeKind {
     Dir,
     File,
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FindingsRow {
+    pub control_id: String,
+    pub run_id: String,
+    pub path: String,
+    pub year: i32,
+    pub quarter: u32,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub run_state: RunState,
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FindingsHtml {
+    pub control_id: String,
+    pub run_id: String,
+    pub path: String,
+    pub html: String,
+}

@@ -40,6 +40,9 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 notify = { workspace = true }
 notify-debouncer-full = { workspace = true }
+pulldown-cmark = { workspace = true }
+ammonia = { workspace = true }
+walkdir = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

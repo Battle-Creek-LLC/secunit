@@ -185,3 +185,36 @@ export const recentRuns = (limit: number) =>
 
 export const getRun = (control_id: string, run_id: string) =>
   invoke<RunDetail>("get_run", { controlId: control_id, runId: run_id });
+
+export interface FindingsRow {
+  control_id: string;
+  run_id: string;
+  path: string;
+  year: number;
+  quarter: number;
+  completed_at: string | null;
+  run_state: RunState;
+  bytes: number;
+}
+
+export interface FindingsHtml {
+  control_id: string;
+  run_id: string;
+  path: string;
+  html: string;
+}
+
+export const listFindings = (
+  control_id?: string | null,
+  quarter?: string | null,
+) =>
+  invoke<FindingsRow[]>("list_findings", {
+    controlId: control_id ?? null,
+    quarter: quarter ?? null,
+  });
+
+export const readFindings = (control_id: string, run_id: string) =>
+  invoke<FindingsHtml>("read_findings", {
+    controlId: control_id,
+    runId: run_id,
+  });

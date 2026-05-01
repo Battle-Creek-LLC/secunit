@@ -5,6 +5,7 @@
 
 pub mod api;
 pub mod projects;
+pub mod sanitiser;
 pub mod state;
 pub mod watcher;
 
@@ -34,6 +35,8 @@ pub fn run() {
             api::list_runs,
             api::recent_runs,
             api::get_run,
+            api::list_findings,
+            api::read_findings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running secunit-gui");

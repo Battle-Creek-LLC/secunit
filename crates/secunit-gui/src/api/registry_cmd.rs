@@ -438,6 +438,168 @@ pub fn recent_runs(
 }
 
 #[tauri::command]
+pub fn list_findings(
+    control_id: Option<String>,
+    quarter: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<FindingsRow>, String> {
+    let project_root = {
+        let project = state.project.lock().expect("AppState.project poisoned");
+        let project = require_loaded(&project)?;
+        project
+            .root
+            .canonicalize()
+            .map_err(|e| format!("canonicalise {}: {e}", project.root.display()))?
+    };
+
+    let mut out: Vec<FindingsRow> = Vec::new();
+    let evidence = project_root.join("evidence");
+    if !evidence.exists() {
+        return Ok(out);
+    }
+
+    for year_entry in std::fs::read_dir(&evidence).into_iter().flatten().flatten() {
+        let year_path = year_entry.path();
+        if !year_path.is_dir() {
+            continue;
+        }
+        let year: i32 = match year_entry.file_name().to_string_lossy().parse() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        for q_entry in std::fs::read_dir(&year_path).into_iter().flatten().flatten() {
+            let q_path = q_entry.path();
+            if !q_path.is_dir() {
+                continue;
+            }
+            let q_name = q_entry.file_name().to_string_lossy().into_owned();
+            let qnum: u32 = match q_name.strip_prefix('q').and_then(|s| s.parse().ok()) {
+                Some(n) => n,
+                None => continue,
+            };
+            if let Some(filter_q) = quarter.as_deref() {
+                if format!("{:04}-q{}", year, qnum) != filter_q {
+                    continue;
+                }
+            }
+            for ctrl_entry in std::fs::read_dir(&q_path).into_iter().flatten().flatten() {
+                let cid = ctrl_entry.file_name().to_string_lossy().into_owned();
+                if let Some(filter_c) = control_id.as_deref() {
+                    if cid != filter_c {
+                        continue;
+                    }
+                }
+                let ctrl_path = ctrl_entry.path();
+                if !ctrl_path.is_dir() {
+                    continue;
+                }
+                for run_entry in std::fs::read_dir(&ctrl_path).into_iter().flatten().flatten() {
+                    let run_path = run_entry.path();
+                    if !run_path.is_dir() {
+                        continue;
+                    }
+                    let rid = run_entry.file_name().to_string_lossy().into_owned();
+
+                    // Look for findings.md anywhere under the run dir.
+                    for f in walkdir::WalkDir::new(&run_path)
+                        .max_depth(4)
+                        .into_iter()
+                        .flatten()
+                    {
+                        if f.file_type().is_file() && f.file_name() == "findings.md" {
+                            let metadata = f.metadata().ok();
+                            let bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
+                            let manifest_path = run_path.join("manifest.json");
+                            let abort_path = run_path.join("abort.json");
+                            let completed_at = read_manifest(&manifest_path)
+                                .map(|m| m.completed_at);
+                            let run_state = if manifest_path.exists() {
+                                RunState::Sealed
+                            } else if abort_path.exists() {
+                                RunState::Aborted
+                            } else {
+                                RunState::Pending
+                            };
+                            out.push(FindingsRow {
+                                control_id: cid.clone(),
+                                run_id: rid.clone(),
+                                path: f.path().display().to_string(),
+                                year,
+                                quarter: qnum,
+                                completed_at,
+                                run_state,
+                                bytes,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    out.sort_by(|a, b| match (a.completed_at, b.completed_at) {
+        (Some(x), Some(y)) => y.cmp(&x),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => b.run_id.cmp(&a.run_id),
+    });
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn read_findings(
+    control_id: String,
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<FindingsHtml, String> {
+    let project = state.project.lock().expect("AppState.project poisoned");
+    let project = require_loaded(&project)?;
+    let project_canonical = project
+        .root
+        .canonicalize()
+        .map_err(|e| format!("canonicalise {}: {e}", project.root.display()))?;
+    let evidence = project_canonical.join("evidence");
+    if !evidence.exists() {
+        return Err("no evidence/ in project root".into());
+    }
+
+    let mut found: Option<PathBuf> = None;
+    for entry in walkdir::WalkDir::new(&evidence).into_iter().flatten() {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.file_name() != "findings.md" {
+            continue;
+        }
+        let s = entry.path().to_string_lossy();
+        if s.contains(&format!("/{}/", control_id)) && s.contains(&format!("/{}/", run_id)) {
+            found = Some(entry.path().to_path_buf());
+            break;
+        }
+    }
+    let path = found.ok_or_else(|| {
+        format!("findings.md not found for {control_id}/{run_id}")
+    })?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("canonicalise {}: {e}", path.display()))?;
+    if !canonical.starts_with(&project_canonical) {
+        return Err("findings path escapes project root".into());
+    }
+
+    let body = std::fs::read_to_string(&canonical)
+        .map_err(|e| format!("read {}: {e}", canonical.display()))?;
+    let html = crate::sanitiser::render_findings(&body);
+
+    Ok(FindingsHtml {
+        control_id,
+        run_id,
+        path: canonical.display().to_string(),
+        html,
+    })
+}
+
+#[tauri::command]
 pub fn get_run(
     control_id: String,
     run_id: String,
