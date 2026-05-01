@@ -1,0 +1,23 @@
+[package]
+name = "secunit-capture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Native upstream capturers for secunit (gated behind cargo features)."
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+
+[features]
+default = []
+aws = []
+github = []
+deps = []
+http = []
+gcp = []

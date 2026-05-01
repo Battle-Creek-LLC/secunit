@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/secunit-core",
+    "crates/secunit-cli",
+    "crates/secunit-capture",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Battle-Creek-LLC/secunit"
+
+[workspace.dependencies]
+secunit-core = { path = "crates/secunit-core" }
+secunit-capture = { path = "crates/secunit-capture" }
+
+anyhow = "1"
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+clap = { version = "4", features = ["derive"] }
+sha2 = "0.10"
+hex = "0.4"
+jsonschema = { version = "0.18", default-features = false }
+walkdir = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# dev / test
+insta = { version = "1", features = ["yaml", "json"] }
+proptest = "1"
+tempfile = "3"
+pretty_assertions = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
