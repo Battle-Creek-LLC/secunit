@@ -3,6 +3,10 @@
 //! inside a project tree; the only state-changing paths remain the CLI
 //! and direct git edits.
 
+pub mod api;
+pub mod projects;
+pub mod state;
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -15,7 +19,12 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![])
+        .manage(state::AppState::default())
+        .invoke_handler(tauri::generate_handler![
+            api::list_projects,
+            api::select_project,
+            api::current_project,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running secunit-gui");
 }

@@ -5543,6 +5543,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-shell",
+ "tempfile",
  "thiserror 1.0.69",
  "tracing",
  "tracing-subscriber",

@@ -36,3 +36,6 @@ tracing-subscriber = { workspace = true }
 chrono = { workspace = true }
 shellexpand = { workspace = true }
 dirs = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
