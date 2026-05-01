@@ -6,6 +6,7 @@
 pub mod api;
 pub mod projects;
 pub mod state;
+pub mod watcher;
 
 pub fn run() {
     tracing_subscriber::fmt()

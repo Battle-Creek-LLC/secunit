@@ -8,11 +8,12 @@ use chrono::{Local, NaiveDate};
 use secunit_core::evidence::manifest::{AbortRecord, Manifest, PrepareContext};
 use secunit_core::model::{Cadence, Control, RunStatus};
 use secunit_core::registry::{self, loader, resolver};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::api::types::*;
 use crate::projects;
 use crate::state::{AppState, Diagnostic, LoadedProject};
+use crate::watcher::{self, TauriSink};
 
 fn cadence_str(c: Cadence) -> String {
     match c {
@@ -50,6 +51,7 @@ fn project_root_for(name: &str) -> Result<(String, PathBuf), String> {
 pub fn load_project(
     name: String,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<LoadSummary, String> {
     let (project_name, root) = project_root_for(&name)?;
     if !root.exists() {
@@ -97,13 +99,29 @@ pub fn load_project(
         }))
         .collect();
 
-    let mut slot = state.project.lock().expect("AppState.project poisoned");
-    *slot = Some(LoadedProject {
-        name: project_name,
-        root,
-        registry,
-        diagnostics,
-    });
+    {
+        let mut slot = state.project.lock().expect("AppState.project poisoned");
+        *slot = Some(LoadedProject {
+            name: project_name,
+            root: root.clone(),
+            registry,
+            diagnostics,
+        });
+    }
+
+    // Swap the watcher: drop the previous one (which stops the thread)
+    // before starting a new one against the new root. Single-instance
+    // contract preserved.
+    let debounce = std::env::var("SECUNIT_GUI_WATCH_DEBOUNCE_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    let new_handle = watcher::start(&root, TauriSink { handle: app }, debounce)
+        .map_err(|e| format!("start watcher: {e}"))?;
+    {
+        let mut slot = state.watcher.lock().expect("AppState.watcher poisoned");
+        *slot = Some(new_handle);
+    }
 
     Ok(summary)
 }
