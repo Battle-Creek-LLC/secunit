@@ -152,6 +152,25 @@ export const getControl = (id: string, today?: string | null) =>
 export const dueRows = (today?: string | null) =>
   invoke<DueRowView[]>("due_rows", { today: today ?? null });
 
+export type ScheduleReason =
+  | "cadence"
+  | "override-due"
+  | "override-insert"
+  | "override-weekday"
+  | "override-skip";
+
+export interface ScheduleEntryView {
+  control_id: string;
+  cadence: string;
+  date: string;
+  reason: ScheduleReason;
+  note: string | null;
+  overdue: boolean;
+}
+
+export const scheduleView = (today?: string | null) =>
+  invoke<ScheduleEntryView[]>("schedule_view", { today: today ?? null });
+
 export const getInventory = (today?: string | null) =>
   invoke<InventoryView>("get_inventory", { today: today ?? null });
 

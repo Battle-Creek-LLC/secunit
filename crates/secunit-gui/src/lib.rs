@@ -29,6 +29,7 @@ pub fn run() {
             api::list_controls,
             api::get_control,
             api::due_rows,
+            api::schedule_view,
             api::get_inventory,
             api::list_runs,
             api::recent_runs,

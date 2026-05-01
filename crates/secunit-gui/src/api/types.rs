@@ -108,6 +108,26 @@ pub struct DueRowView {
     pub overdue: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ScheduleReason {
+    Cadence,
+    OverrideDue,
+    OverrideInsert,
+    OverrideWeekday,
+    OverrideSkip,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ScheduleEntryView {
+    pub control_id: String,
+    pub cadence: String,
+    pub date: NaiveDate,
+    pub reason: ScheduleReason,
+    pub note: Option<String>,
+    pub overdue: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct InventoryView {
     pub kinds: Vec<InventoryKindView>,

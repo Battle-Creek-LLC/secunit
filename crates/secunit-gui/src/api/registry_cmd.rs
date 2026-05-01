@@ -286,6 +286,98 @@ pub fn due_rows(
 }
 
 #[tauri::command]
+pub fn schedule_view(
+    today: Option<NaiveDate>,
+    state: State<'_, AppState>,
+) -> Result<Vec<ScheduleEntryView>, String> {
+    let project = state.project.lock().expect("AppState.project poisoned");
+    let project = require_loaded(&project)?;
+    let today = today_or(today);
+    let mut out: Vec<ScheduleEntryView> = Vec::new();
+
+    // Cadence-derived next-due (one entry per control).
+    for c in project.registry.controls.values() {
+        let entry = project.registry.state.controls.get(&c.id);
+        let next = resolver::next_due(
+            c,
+            &project.registry.schedule,
+            entry,
+            today,
+            project.registry.config.weekly_default_weekday,
+        );
+        if let Some(d) = next {
+            let overdue = resolver::is_overdue(c, d, today);
+            // Reason: derive by scanning overrides for this control.
+            let mut reason = ScheduleReason::Cadence;
+            let mut note: Option<String> = None;
+            for ov in project
+                .registry
+                .schedule
+                .overrides
+                .iter()
+                .filter(|o| o.control_id == c.id)
+            {
+                if let Some(insert) = &ov.insert {
+                    if insert.run_at == d {
+                        reason = ScheduleReason::OverrideInsert;
+                        note = ov.note.clone().or_else(|| ov.reason.clone());
+                    }
+                }
+                if ov.due == Some(d) {
+                    reason = ScheduleReason::OverrideDue;
+                    note = ov.note.clone().or_else(|| ov.reason.clone());
+                }
+                if ov.weekday.is_some() && matches!(reason, ScheduleReason::Cadence) {
+                    reason = ScheduleReason::OverrideWeekday;
+                    note = ov.note.clone().or_else(|| ov.reason.clone());
+                }
+            }
+            out.push(ScheduleEntryView {
+                control_id: c.id.clone(),
+                cadence: cadence_str(c.cadence),
+                date: d,
+                reason,
+                note,
+                overdue,
+            });
+        }
+    }
+
+    // Standalone inserts that fall on a date different from the control's
+    // computed next_due (catches "extra firing" overrides).
+    for ov in &project.registry.schedule.overrides {
+        if let Some(insert) = &ov.insert {
+            if insert.run_at < today {
+                continue;
+            }
+            let already = out.iter().any(|e| {
+                e.control_id == ov.control_id && e.date == insert.run_at
+            });
+            if already {
+                continue;
+            }
+            let cadence = project
+                .registry
+                .controls
+                .get(&ov.control_id)
+                .map(|c| cadence_str(c.cadence))
+                .unwrap_or_else(|| "scheduled".into());
+            out.push(ScheduleEntryView {
+                control_id: ov.control_id.clone(),
+                cadence,
+                date: insert.run_at,
+                reason: ScheduleReason::OverrideInsert,
+                note: ov.note.clone().or_else(|| ov.reason.clone()),
+                overdue: false,
+            });
+        }
+    }
+
+    out.sort_by(|a, b| a.date.cmp(&b.date).then(a.control_id.cmp(&b.control_id)));
+    Ok(out)
+}
+
+#[tauri::command]
 pub fn get_inventory(
     today: Option<NaiveDate>,
     state: State<'_, AppState>,
