@@ -1,0 +1,17 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+id:         sca-weekly-dependency-scan
+title:      Weekly software composition analysis (dependency vulnerability scan)
+policy:     security/system-and-information-integrity-policy.md
+nist:       SI-2, RA-5
+owner:      cto
+cadence:    Weekly
+weekday:    Monday
+skill:      sca-weekly-dependency-scan
+scope:      {"kind":"source_repo","all":null,"has_tags":["has-sca"],"excludes":[]}
+evidence:
+  - scan-output — Dependency audit output for each in-scope repo
+  - dependabot-state — Dependabot configuration and open alerts per repo
+  - summary — New, resolved, and persisting findings vs prior run, per repo and across repos

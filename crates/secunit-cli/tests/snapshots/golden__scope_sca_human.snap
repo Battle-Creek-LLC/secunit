@@ -1,0 +1,8 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+NAME                                     KIND             TAGS                                    
+app-api                                  source_repo      production,customer-data,has-sca,has-sast
+app-ui                                   source_repo      production,customer-data,has-sca,has-sast
+data-pipeline                            source_repo      internal,has-sca

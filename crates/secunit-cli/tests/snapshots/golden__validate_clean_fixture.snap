@@ -1,0 +1,5 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+✓ registry is valid

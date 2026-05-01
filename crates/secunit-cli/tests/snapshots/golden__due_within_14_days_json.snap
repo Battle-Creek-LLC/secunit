@@ -1,0 +1,27 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+[
+  {
+    "cadence": "quarterly",
+    "control_id": "ca-quarterly-vuln-scan",
+    "next_due": "2026-05-01",
+    "overdue": false,
+    "owner": "cto"
+  },
+  {
+    "cadence": "weekly",
+    "control_id": "aa-weekly-audit-review",
+    "next_due": "2026-05-04",
+    "overdue": false,
+    "owner": "cto"
+  },
+  {
+    "cadence": "weekly",
+    "control_id": "sca-weekly-dependency-scan",
+    "next_due": "2026-05-04",
+    "overdue": false,
+    "owner": "cto"
+  }
+]

@@ -1,0 +1,8 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+ID                                       CADENCE      DUE          STATUS  OWNER     
+ca-quarterly-vuln-scan                   quarterly    2026-05-01   due     cto
+aa-weekly-audit-review                   weekly       2026-05-04   due     cto
+sca-weekly-dependency-scan               weekly       2026-05-04   due     cto
