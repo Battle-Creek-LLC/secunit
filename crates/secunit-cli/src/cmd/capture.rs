@@ -172,6 +172,12 @@ fn deps(_cmd: DepsCmd) -> Result<ExitCode> {
 fn github(cmd: GithubCmd) -> Result<ExitCode> {
     use secunit_capture::github;
     let rt = build_runtime()?;
+    // Octocrab's HTTP stack constructs a `tower::buffer::Service` at build time,
+    // which spawns a worker task and therefore requires an active Tokio reactor
+    // in the current thread context. Without this guard, `GhClient::from_env`
+    // panics with "there is no reactor running" because it's called between
+    // `Runtime::new` and the first `block_on`.
+    let _rt_guard = rt.enter();
     let client = github::GhClient::from_env().map_err(map_runtime)?;
     let env_and_out = match cmd {
         GithubCmd::DependabotAlerts { repo, state, out } => {
@@ -267,4 +273,32 @@ fn map_runtime(e: anyhow::Error) -> anyhow::Error {
     // exit code 2. We don't have a typed error layer yet — just
     // re-throw with a marker the main loop picks up.
     e.context("capture runtime failure")
+}
+
+#[cfg(all(test, feature = "github"))]
+mod tests {
+    use super::*;
+
+    /// Regression: GhClient construction goes through Octocrab::builder().build(),
+    /// whose transport (tower::buffer::Service) spawns a worker task at build
+    /// time. Without entering the runtime context first, this panics with
+    /// "there is no reactor running". The CLI's github subcommand must hold
+    /// an `rt.enter()` guard across the client construction. Tests using
+    /// `#[tokio::test]` mask this because they run inside an already-entered
+    /// runtime — the bug only surfaces in the synchronous CLI path that builds
+    /// the runtime, then constructs the client outside its context. We use
+    /// `with_base_uri` instead of `from_env` here to keep the test free of
+    /// global env mutation; both go through the same Octocrab::build path.
+    #[test]
+    fn ghclient_build_does_not_panic_without_runtime_guard() {
+        let rt = build_runtime().expect("build runtime");
+        let _guard = rt.enter();
+        let client =
+            secunit_capture::github::GhClient::with_base_uri("https://example.invalid", Some("t"));
+        assert!(
+            client.is_ok(),
+            "client build should succeed under rt.enter(): {}",
+            client.err().map(|e| e.to_string()).unwrap_or_default()
+        );
+    }
 }
