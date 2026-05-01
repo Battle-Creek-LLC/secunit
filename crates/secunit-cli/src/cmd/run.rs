@@ -24,8 +24,17 @@ pub fn prepare(ctx: &Ctx, control_id: &str, note: Option<&str>, human: bool) -> 
     let prepare_ctx = match result {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("error: {e:#}");
-            return Ok(ExitCode::from(4));
+            // docs/cli.md exit codes: 4 = pending run prevents action,
+            // 2 = runtime failure (everything else: not-a-git-repo,
+            // unknown control, empty scope, IO).
+            let msg = format!("{e:#}");
+            let code = if msg.contains("pending run already exists") {
+                4
+            } else {
+                2
+            };
+            eprintln!("error: {msg}");
+            return Ok(ExitCode::from(code));
         }
     };
 
