@@ -209,6 +209,53 @@ When per-system divergence is itself the finding (e.g. one repo has SCA, another
 
 The whole tree is plain files. Versioning the registry under git gives free auditability of policy/runbook changes and makes the inventory git sha referenced from manifests meaningful.
 
+## Viewer (Tauri GUI)
+
+`secunit-gui` is an optional, read-only Tauri desktop app for inspecting one or more `secunit` projects. It is a companion to the CLI, not a replacement: it reads the same on-disk tree and never writes to it. The agent + CLI remain the only paths that mutate state, so the audit trail is unaffected.
+
+### Architecture
+
+- The Tauri shell embeds `secunit-core` as a library — the same crate the CLI uses for registry parsing, scope resolution, cadence/status computation, and run-state derivation. No shelling out to the CLI; no duplicated logic in the frontend.
+- A single `notify` filesystem watcher per open project, debounced, emits typed events (`control_changed`, `run_state_changed`, `state_json_changed`, `inventory_changed`) to the webview.
+- The webview keeps a reactive in-memory index keyed by `control_id` and `run_id`; events patch it; views subscribe.
+- All status derivation (overdue / due / pending / sealed / aborted) happens in `secunit-core` so cadence rules are not duplicated on the frontend.
+
+### Views
+
+| View | Source | Purpose |
+|---|---|---|
+| Overview | `state.json` + recent manifests | Health tiles + last-N runs timeline |
+| Controls | `controls/*.yaml` + `state.json` | Table of every control with status badge; row → detail + recent runs |
+| Schedule | computed cadence + `schedule.yaml` | Calendar / list of `next_due` per control with overrides pinned |
+| Findings | `evidence/**/findings.md` | Reverse-chron feed of rendered markdown, filterable by control / system / quarter |
+| Evidence | `evidence/<y>/<q>/<control>/<run>/` | File browser mirroring the on-disk layout, with run-state badges and artifact preview |
+| Inventory | `inventory.yaml` | Read-only table by kind |
+
+### Command bar
+
+`⌘K` opens a palette that searches across controls, runs, findings text, inventory entries, and artifact filenames. Result kinds are typed and grouped; `↵` opens in the right pane, `⌘↵` reveals on disk.
+
+The index is a Tantivy in-memory index (`RamDirectory`) built on project open and patched by the same `notify` events that drive the live UI. Schema fields: `kind`, `id`, `title`, `tags`, `body`, `path`, `mtime`, `status`. Ranking is BM25 with `title` and `tags` boosted over `body`. No on-disk index files; no separate indexer process. If cold-start indexing ever becomes uncomfortable on very large trees, swap `RamDirectory` for `MmapDirectory` keyed by inventory git sha — same code path, persistent cache.
+
+### Project config
+
+The GUI reads its own config from `~/.config/secunit-gui/projects.yaml`:
+
+```yaml
+projects:
+  - name: acme-corp
+    path: ~/work/acme-secops
+  - name: widgets-inc
+    path: ~/work/widgets-secops
+default: acme-corp
+```
+
+A switcher in the top bar swaps the watched root.
+
+### Read-only contract
+
+The GUI never writes inside a project tree. The only buttons that act are "open in editor", "reveal in finder", and "copy path". Mutations to controls, schedule, inventory, evidence, or state always go through `secunit` CLI invocations or direct edits committed to git, preserving the hash-chained audit trail.
+
 ## Coverage from a WISP
 
 A typical WISP grounded in NIST 800-53 / SP 800-171 surfaces this set of cadence-bearing obligations. The reference shapes in `examples/controls/` are derived from this list; an org's actual registry is built by the `bootstrap` skill walking the org's WISP and emitting one control per obligation.
