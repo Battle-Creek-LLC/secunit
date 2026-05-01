@@ -340,3 +340,18 @@ fn prepare_refuses_concurrent_pending_run() {
     };
     runner::prepare(&reg, CONTROL, &later).expect("second prepare after finalize");
 }
+
+#[test]
+fn finalize_populates_next_due_in_state() {
+    let (_tmp, root) = staged_fixture();
+    // Monday 2026-05-04 — sca-weekly is a Monday weekly control.
+    run_one(&root, NaiveDate::from_ymd_opt(2026, 5, 4).unwrap());
+
+    let raw = fs::read(root.join("state.json")).expect("state.json");
+    let state: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    let next = state
+        .pointer("/controls/sca-weekly-dependency-scan/next_due")
+        .expect("next_due present in state.json");
+    // Next Monday after a Monday-weekly run is the following Monday.
+    assert_eq!(next.as_str(), Some("2026-05-11"));
+}

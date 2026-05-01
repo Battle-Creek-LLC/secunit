@@ -252,7 +252,7 @@ pub fn finalize(reg: &LoadedRegistry, run_dir: &Path) -> Result<Manifest> {
     let bytes = serde_json::to_vec(&manifest)?;
     atomic_write(&run_dir.join(MANIFEST_FILE), &bytes)?;
 
-    update_state(&reg.root, &manifest)?;
+    update_state(reg, &manifest)?;
 
     let pending = run_dir.join(PENDING_SENTINEL);
     if pending.exists() {
@@ -413,8 +413,8 @@ fn git_head(root: &Path) -> Result<String> {
     Ok(id.to_hex().to_string())
 }
 
-fn update_state(root: &Path, manifest: &Manifest) -> Result<()> {
-    let path = root.join(STATE_FILE);
+fn update_state(reg: &LoadedRegistry, manifest: &Manifest) -> Result<()> {
+    let path = reg.root.join(STATE_FILE);
     // Bail loudly on a corrupt state file rather than silently dropping
     // every prior control's entry by replacing with default. Operators
     // who genuinely want to reset state.json can remove it; finalize
@@ -430,24 +430,47 @@ fn update_state(root: &Path, manifest: &Manifest) -> Result<()> {
     } else {
         crate::model::State::default()
     };
+
+    // Compute the next firing date as part of finalize so state.json is
+    // a useful cache for `secunit due` and downstream report skills,
+    // rather than a placeholder readers have to re-derive on every load.
+    // Anchor at "the day after the run's target date" (parsed from the
+    // run-id's YYYY-MM-DD prefix, not wall-clock completion time) so a
+    // weekly control with target Monday returns *next* Monday, not today.
+    let run_date = manifest
+        .run_id
+        .get(0..10)
+        .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+    let next_due = run_date.and_then(|d| {
+        let lookup_from = d + chrono::Duration::days(1);
+        reg.controls.get(&manifest.control_id).and_then(|ctrl| {
+            crate::registry::resolver::next_due(
+                ctrl,
+                &reg.schedule,
+                None,
+                lookup_from,
+                reg.config.weekly_default_weekday,
+            )
+        })
+    });
+
     state.controls.insert(
         manifest.control_id.clone(),
         StateEntry {
             last_run_id: Some(manifest.run_id.clone()),
-            last_run_path: Some(manifest_relative_path(root, manifest)),
+            last_run_path: Some(manifest_relative_path(&reg.root, manifest)),
             last_run_at: Some(manifest.completed_at),
             last_status: match manifest.status {
                 RunOutcome::Complete => RunStatus::Complete,
                 RunOutcome::Partial => RunStatus::InProgress,
                 RunOutcome::Failed => RunStatus::Failed,
             },
-            next_due: None,
+            next_due,
         },
     );
     state.updated_at = Some(Utc::now());
     let bytes = serde_json::to_vec_pretty(&state)?;
-    let tmp_dest = path;
-    atomic_write(&tmp_dest, &bytes)?;
+    atomic_write(&path, &bytes)?;
     Ok(())
 }
 
