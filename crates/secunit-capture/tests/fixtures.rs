@@ -52,7 +52,7 @@ mod deps_fixtures {
         let r = CannedRunner::new();
         r.register(
             "pip-audit",
-            &["--format=json", "--strict"],
+            &["--format=json", "--strict", "-r", "requirements.txt"],
             CmdOutput {
                 stdout,
                 stderr: String::new(),
@@ -60,6 +60,14 @@ mod deps_fixtures {
             },
         );
         r
+    }
+
+    /// Stage a scratch project dir containing a `requirements.txt` so the
+    /// capturer's manifest detection picks it up.
+    fn pip_audit_project_dir() -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("requirements.txt"), "# placeholder\n").unwrap();
+        d
     }
 
     fn pnpm_runner(stdout: String) -> CannedRunner {
@@ -82,8 +90,9 @@ mod deps_fixtures {
         let fx = fixture_root().join("deps/pip-audit/sample.json");
         let stdout = fs::read_to_string(&fx).unwrap();
         let runner = pip_audit_runner(stdout);
-        let a = secunit_capture::deps::pip_audit::capture_with(Path::new("/tmp"), &runner).unwrap();
-        let b = secunit_capture::deps::pip_audit::capture_with(Path::new("/tmp"), &runner).unwrap();
+        let d = pip_audit_project_dir();
+        let a = secunit_capture::deps::pip_audit::capture_with(d.path(), &runner).unwrap();
+        let b = secunit_capture::deps::pip_audit::capture_with(d.path(), &runner).unwrap();
         assert_byte_identical_and_schema_valid(&a, &b);
     }
 
