@@ -1,0 +1,62 @@
+source_repos:
+  - name: app-api
+    url: github.com/<org>/app-api
+    stack: python-django
+    tags: [production, customer-data, has-sca, has-sast]
+    in_scope_since: 2026-01-01
+
+  - name: app-ui
+    url: github.com/<org>/app-ui
+    stack: typescript-react
+    tags: [production, customer-data, has-sca, has-sast]
+    in_scope_since: 2026-01-01
+
+  - name: marketing-site
+    url: github.com/<org>/marketing-site
+    stack: static
+    tags: [production, marketing]
+    excludes: [sca-weekly-dependency-scan]   # static site; no deps to scan
+    in_scope_since: 2026-01-01
+
+  - name: data-pipeline
+    url: github.com/<org>/data-pipeline
+    stack: python
+    tags: [internal, has-sca]
+    in_scope_since: 2024-06-01
+    retired_on: 2026-09-01
+    aliases: [legacy-pipeline]
+
+cloud_accounts:
+  - name: prod
+    provider: aws
+    profile: prod
+    tags: [production, customer-data]
+    in_scope_since: 2024-01-01
+
+  - name: staging
+    provider: aws
+    profile: staging
+    tags: [staging]
+    in_scope_since: 2024-01-01
+
+saas:
+  - name: github-org
+    owner: <handle>
+    tags: [production, source-control]
+
+  - name: cloud-console
+    owner: <handle>
+    tags: [production, infrastructure]
+
+  - name: error-monitoring
+    owner: <handle>
+    tags: [production, observability]
+
+  - name: email
+    owner: <handle>
+    tags: [production, communications]
+
+sites:
+  - name: hq
+    address: <city>
+    tags: [physical]

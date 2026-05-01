@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "control_id": "sca-weekly-dependency-scan",
+  "run_id": "2026-05-04-run-001",
+  "started_at": "2026-05-04T13:05:00Z",
+  "completed_at": "2026-05-04T13:42:00Z",
+  "operator": "<operator handle>",
+  "agent": {
+    "model": "claude-opus-4-7",
+    "skill": "sca-weekly-dependency-scan",
+    "skill_sha256": "9f1e2c4a8b7d...truncated...",
+    "control_sha256": "4b7a3c9e1f5d...truncated..."
+  },
+  "registry_git_sha": "f71c2a4e9d8b6e2c5a1f8d7c3b4a5e6f1c2d3e4a",
+  "inventory_git_sha": "e8d6b3a1c2f4...truncated...",
+  "scope_layout": "by-system",
+  "resolved_scope": [
+    {
+      "name": "app-api",
+      "kind": "source_repo",
+      "stack": "python-django",
+      "tags": ["production", "customer-data", "has-sca", "has-sast"]
+    },
+    {
+      "name": "app-ui",
+      "kind": "source_repo",
+      "stack": "typescript-react",
+      "tags": ["production", "customer-data", "has-sca", "has-sast"]
+    }
+  ],
+  "prior_run": {
+    "run_id": "2026-04-27-run-001",
+    "manifest_sha256": "1c2d3e4f5a6b...truncated..."
+  },
+  "artifacts": [
+    { "path": "findings.md", "sha256": "a7b8c9d0e1f2...truncated...", "bytes": 3812 }
+  ],
+  "by_system": [
+    {
+      "name": "app-api",
+      "status": "complete",
+      "summary": { "critical": 0, "high": 1, "medium": 4, "low": 11 },
+      "artifacts": [
+        { "path": "by-system/app-api/raw/pip-audit.json", "sha256": "b8c9d0e1f2a3...truncated...", "bytes": 8412 },
+        { "path": "by-system/app-api/raw/dependabot-config.yml", "sha256": "c9d0e1f2a3b4...truncated...", "bytes": 412 },
+        { "path": "by-system/app-api/raw/dependabot-alerts.json", "sha256": "d0e1f2a3b4c5...truncated...", "bytes": 1843 },
+        { "path": "by-system/app-api/raw/diff-pip-audit.txt", "sha256": "e1f2a3b4c5d6...truncated...", "bytes": 318 }
+      ]
+    },
+    {
+      "name": "app-ui",
+      "status": "complete",
+      "summary": { "critical": 0, "high": 0, "medium": 2, "low": 7 },
+      "artifacts": [
+        { "path": "by-system/app-ui/raw/pnpm-audit.json", "sha256": "f2a3b4c5d6e7...truncated...", "bytes": 6391 },
+        { "path": "by-system/app-ui/raw/dependabot-config.yml", "sha256": "a3b4c5d6e7f8...truncated...", "bytes": 387 },
+        { "path": "by-system/app-ui/raw/dependabot-alerts.json", "sha256": "b4c5d6e7f8a9...truncated...", "bytes": 1102 },
+        { "path": "by-system/app-ui/raw/diff-pnpm-audit.txt", "sha256": "c5d6e7f8a9b0...truncated...", "bytes": 204 }
+      ]
+    }
+  ],
+  "status": "complete",
+  "draft_risks": [
+    {
+      "title": "Werkzeug 2.x — CVE-2024-XXXXX (request smuggling)",
+      "affected_systems": ["app-api"],
+      "impact": 3,
+      "likelihood": 3,
+      "body_path": "findings.md#risk-1"
+    }
+  ],
+  "draft_issues": [],
+  "external_links": []
+}

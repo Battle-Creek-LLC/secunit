@@ -1,0 +1,8 @@
+Diff vs prior run (2026-04-27-run-001).
+
+NEW (0): none
+
+RESOLVED (1):
+  - tar@6.1.13 — CVE-2024-CCCCC (Low) [upgraded to 6.2.1]
+
+PERSISTING (9): unchanged from prior run

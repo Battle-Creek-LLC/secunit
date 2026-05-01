@@ -1,0 +1,34 @@
+id: aa-weekly-audit-review
+title: Weekly audit and accountability review
+policy: security/audit-and-accountability-procedure.md
+nist: [AU-6, AU-7, AU-12]
+owner: cto
+cadence: weekly
+weekday: monday
+skill: aa-weekly-audit-review
+
+scope:
+  kind: cloud_account
+  has_tags: [production]
+
+evidence_required:
+  - kind: command-output
+    description: Active findings from the cloud access analyzer
+  - kind: command-output
+    description: Network firewall alerts since prior run
+  - kind: command-output
+    description: Configuration compliance state
+  - kind: command-output
+    description: Sample of object-store access logs covering the review window
+  - kind: summary
+    prompt: Anomalies in this week's logs vs prior 4 weeks
+
+outputs:
+  findings: required
+  draft_risks: when-anomalies-present
+
+references:
+  - title: Audit and Accountability Procedure — Weekly Review
+    path: security/audit-and-accountability-procedure.md#weekly-review
+  - title: Audit and Accountability Policy
+    path: security/audit-and-accountability-policy.md

@@ -1,0 +1,39 @@
+id: cp-annual-bcp-test
+title: Annual Business Continuity Plan test
+policy: security/business-continuity-plan.md
+nist: [CP-2, CP-3, CP-4]
+owner: bct
+cadence: annual
+skill: cp-annual-bcp-test
+
+# Scope is declared inline rather than via inventory tags — BCP exercises
+# select specific systems per drill script, not the full inventory.
+scope:
+  inline:
+    - name: prod
+      kind: cloud_account
+    - name: app-api
+      kind: source_repo
+
+evidence_required:
+  - kind: drill-script
+    description: Selected drill script for the annual test
+  - kind: transcript
+    description: Time-stamped log of the exercise
+  - kind: roster
+    description: Participants and roles
+  - kind: result
+    description: Pass/fail per drill objective
+  - kind: lessons-learned
+    description: Findings, action items, and owners
+
+outputs:
+  findings: required
+  draft_risks: per-objective-failure
+  report_section: cp-annual-bcp-status
+
+references:
+  - title: Contingency Planning Policy §1 Business Continuity Plan
+    path: security/contingency-planning-policy.md
+  - title: Business Continuity Plan — drill scripts
+    path: security/business-continuity-plan.md

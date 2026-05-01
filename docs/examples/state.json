@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "controls": {
+    "aa-weekly-audit-review": {
+      "last_run_id": "2026-04-26-run-013",
+      "last_run_path": "evidence/2026/q2/aa-weekly-audit-review/2026-04-26-run-013/",
+      "last_run_at": "2026-04-26T15:08:00Z",
+      "last_status": "complete",
+      "next_due": "2026-05-04"
+    },
+    "ca-quarterly-vuln-scan": {
+      "last_run_id": "2026-04-01-run-001",
+      "last_run_path": "evidence/2026/q2/ca-quarterly-vuln-scan/2026-04-01-run-001/",
+      "last_run_at": "2026-04-01T17:42:00Z",
+      "last_status": "complete",
+      "next_due": "2026-07-01"
+    },
+    "ac-annual-access-review": {
+      "last_run_id": "2025-12-19-run-001",
+      "last_run_path": "evidence/2025/q4/ac-annual-access-review/2025-12-19-run-001/",
+      "last_run_at": "2025-12-19T22:11:00Z",
+      "last_status": "complete",
+      "next_due": "2026-12-31"
+    },
+    "cp-annual-bcp-test": {
+      "last_run_id": null,
+      "last_run_path": null,
+      "last_run_at": null,
+      "last_status": "never-run",
+      "next_due": "2026-12-31"
+    },
+    "policy-annual-review-access-control": {
+      "last_run_id": "2025-12-15-run-001",
+      "last_run_path": "evidence/2025/q4/policy-annual-review-access-control/2025-12-15-run-001/",
+      "last_run_at": "2025-12-15T19:30:00Z",
+      "last_status": "complete",
+      "next_due": "2026-12-31"
+    }
+  },
+  "updated_at": "2026-05-01T14:32:00Z"
+}

@@ -1,0 +1,5 @@
+No structural change vs prior run (2026-04-26-run-013).
+3 active findings present in both runs:
+  - <finding-id-1> (unchanged)
+  - <finding-id-2> (unchanged)
+  - <finding-id-3> (unchanged)

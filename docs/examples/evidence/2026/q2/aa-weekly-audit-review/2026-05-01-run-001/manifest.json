@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "control_id": "aa-weekly-audit-review",
+  "run_id": "2026-05-01-run-001",
+  "started_at": "2026-05-01T14:05:00Z",
+  "completed_at": "2026-05-01T14:32:00Z",
+  "operator": "<operator handle>",
+  "agent": {
+    "model": "claude-opus-4-7",
+    "skill": "aa-weekly-audit-review",
+    "skill_sha256": "b6d4e3c9f1a8...truncated...",
+    "control_sha256": "29ab74f0c5e2...truncated..."
+  },
+  "registry_git_sha": "f71c2a4e9d8b6e2c5a1f8d7c3b4a5e6f1c2d3e4a",
+  "inventory_git_sha": "e8d6b3a1c2f4...truncated...",
+  "scope_layout": "flat",
+  "resolved_scope": [
+    {
+      "name": "prod",
+      "kind": "cloud_account",
+      "tags": ["production", "customer-data"]
+    }
+  ],
+  "prior_run": {
+    "run_id": "2026-04-26-run-013",
+    "manifest_sha256": "0a1b2c3d4e5f...truncated..."
+  },
+  "artifacts": [
+    {
+      "path": "findings.md",
+      "sha256": "c2d3e4f5a6b7...truncated...",
+      "bytes": 2147
+    },
+    {
+      "path": "raw/access-analyzer-findings.json",
+      "sha256": "d3e4f5a6b7c8...truncated...",
+      "bytes": 4863
+    },
+    {
+      "path": "raw/network-firewall-alerts.json",
+      "sha256": "e4f5a6b7c8d9...truncated...",
+      "bytes": 12871
+    },
+    {
+      "path": "raw/config-compliance.json",
+      "sha256": "f5a6b7c8d9e0...truncated...",
+      "bytes": 3402
+    },
+    {
+      "path": "raw/object-store-access-sample.txt",
+      "sha256": "a6b7c8d9e0f1...truncated...",
+      "bytes": 18992
+    },
+    {
+      "path": "raw/diff-access-analyzer-findings.txt",
+      "sha256": "b7c8d9e0f1a2...truncated...",
+      "bytes": 412
+    }
+  ],
+  "status": "complete",
+  "draft_risks": [
+    {
+      "title": "New external principal accessing audit-logs bucket",
+      "impact": 3,
+      "likelihood": 2,
+      "body_path": "findings.md#risk-1"
+    }
+  ],
+  "draft_issues": [],
+  "external_links": [
+    {
+      "kind": "risk",
+      "url": "<filed-issue-url-pasted-here-after-operator-files>"
+    }
+  ]
+}

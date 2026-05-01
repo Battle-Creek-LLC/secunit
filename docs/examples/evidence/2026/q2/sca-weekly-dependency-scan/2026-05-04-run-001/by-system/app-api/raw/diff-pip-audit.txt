@@ -1,0 +1,10 @@
+Diff vs prior run (2026-04-27-run-001).
+
+NEW (1):
+  + Werkzeug==2.3.7 — CVE-2024-XXXXX (High) — request smuggling
+
+RESOLVED (2):
+  - certifi==2024.2.2 — CVE-2024-AAAAA (Medium) [upgraded to 2024.6.2]
+  - idna==3.4 — CVE-2024-BBBBB (Medium) [upgraded to 3.7]
+
+PERSISTING (13): unchanged from prior run

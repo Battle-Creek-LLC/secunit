@@ -1,0 +1,34 @@
+id: ac-annual-access-review
+title: Annual access review across all in-scope systems
+policy: security/access-control-policy.md
+nist: [AC-2, AC-6]
+owner: cto
+cadence: annual
+due_by: december-31
+skill: ac-annual-access-review
+
+scope:
+  kind: saas
+  all: true
+
+evidence_required:
+  - kind: roster
+    description: Current personnel roster with role and employment status
+  - kind: entitlement-export
+    per_system: true
+    description: For each in-scope system, full list of accounts and roles
+  - kind: walkthrough
+    description: Operator-attested confirmation that each entitlement is still required
+  - kind: change-log
+    description: Access changes filed during the review (grant/revoke external issues)
+
+outputs:
+  findings: required
+  draft_risks: when-orphaned-or-overprivileged-accounts-found
+  draft_issues: per-revocation
+
+references:
+  - title: Access Control Policy §12 Access Review
+    path: security/access-control-policy.md
+  - title: Access Control Procedure
+    path: security/access-control-procedure.md

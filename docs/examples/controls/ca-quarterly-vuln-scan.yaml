@@ -1,0 +1,36 @@
+id: ca-quarterly-vuln-scan
+title: Quarterly internal and external vulnerability scan
+policy: security/assessment-authorization-monitoring-policy.md
+nist: [CA-2, CA-7, RA-5]
+owner: cto
+cadence: quarterly
+skill: ca-quarterly-vuln-scan
+
+scope:
+  kind: cloud_account
+  has_tags: [production]
+
+evidence_required:
+  - kind: scan-report
+    description: Internal vulnerability scan output, full asset list
+  - kind: scan-report
+    description: External vulnerability scan output, internet-facing surfaces
+  - kind: summary
+    prompt: New, resolved, and persisting findings vs prior quarter
+  - kind: remediation-plan
+    description: Owner and due date for each Critical/High finding
+
+remediation_thresholds:
+  critical: 30
+  high: 90
+
+outputs:
+  findings: required
+  draft_risks: per-finding-above-threshold
+  report_section: ca-quarterly-program-status
+
+references:
+  - title: Assessment, Authorization, and Monitoring Policy §2 Vulnerability Scanning
+    path: security/assessment-authorization-monitoring-policy.md
+  - title: System and Information Integrity Policy — Flaw Remediation
+    path: security/system-and-information-integrity-policy.md
