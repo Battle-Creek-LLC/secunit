@@ -1,15 +1,12 @@
-//! IPC commands callable from the webview. Read-only by design; see
-//! `JOB-13-readonly-audit.md` for the audit checklist.
+//! Project-config IPC: list, select, current. Mirrors what JOB-02
+//! introduced; the registry-loading commands live next door in
+//! `registry_cmd.rs` so the read-only audit can keep the surfaces tidy.
 
 use tauri::State;
 
-use crate::projects::{
-    self, PersistedState, ProjectsError, ProjectsView,
-};
+use crate::projects::{self, PersistedState, ProjectsError, ProjectsView};
 use crate::state::AppState;
 
-/// Errors are surfaced as plain strings to the frontend — the operator
-/// sees them in the explainer card or a toast, never a stack trace.
 fn stringify(err: ProjectsError) -> String {
     err.to_string()
 }
@@ -25,13 +22,11 @@ pub fn list_projects() -> Result<ProjectsView, String> {
 
 #[tauri::command]
 pub fn select_project(name: String, state: State<'_, AppState>) -> Result<String, String> {
-    // Validate the name resolves to a known project before persisting.
     let yaml_path = projects::projects_yaml_path().map_err(stringify)?;
     let cfg = projects::load_config(&yaml_path).map_err(stringify)?;
     if !cfg.projects.iter().any(|p| p.name == name) {
         return Err(format!("unknown project `{name}`"));
     }
-
     {
         let mut sel = state
             .selected
@@ -39,7 +34,6 @@ pub fn select_project(name: String, state: State<'_, AppState>) -> Result<String
             .expect("AppState.selected mutex poisoned");
         *sel = Some(name.clone());
     }
-
     let state_path = projects::state_json_path().map_err(stringify)?;
     projects::save_state(
         &state_path,
@@ -48,7 +42,6 @@ pub fn select_project(name: String, state: State<'_, AppState>) -> Result<String
         },
     )
     .map_err(stringify)?;
-
     tracing::info!(project = %name, "selected project");
     Ok(name)
 }

@@ -48,6 +48,18 @@ describe("App — bootstrap", () => {
       calls.push({ cmd, args: args as Record<string, unknown> });
       if (cmd === "list_projects") return view;
       if (cmd === "select_project") return (args as { name: string }).name;
+      if (cmd === "load_project")
+        return {
+          name: (args as { name: string }).name,
+          root: "/x",
+          controls_count: 0,
+          inventory_count: 0,
+          has_state: false,
+          has_config: false,
+          errors: [],
+          warnings: [],
+        };
+      if (cmd === "list_controls") return [];
       throw new Error(`unexpected: ${cmd}`);
     });
 

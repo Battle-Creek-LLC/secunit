@@ -24,6 +24,14 @@ pub fn run() {
             api::list_projects,
             api::select_project,
             api::current_project,
+            api::load_project,
+            api::list_controls,
+            api::get_control,
+            api::due_rows,
+            api::get_inventory,
+            api::list_runs,
+            api::recent_runs,
+            api::get_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running secunit-gui");
