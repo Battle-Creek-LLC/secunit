@@ -174,7 +174,13 @@ function AppWithPalette({
           <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>
       </AppShell>
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        view={view}
+        selectedProject={selected}
+        onSelectProject={onSelect}
+      />
     </>
   );
 }

@@ -6,14 +6,26 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { searchPalette, type SearchHit } from "@/lib/ipc";
+import {
+  searchPalette,
+  type ProjectsView,
+  type SearchHit,
+} from "@/lib/ipc";
 import { Input, Kbd } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
-const GROUP_ORDER = ["control", "run", "finding", "inventory", "artifact"] as const;
+const GROUP_ORDER = [
+  "project",
+  "control",
+  "run",
+  "finding",
+  "inventory",
+  "artifact",
+] as const;
 type GroupKey = (typeof GROUP_ORDER)[number];
 
 const GROUP_LABEL: Record<GroupKey, string> = {
+  project: "Projects",
   control: "Controls",
   run: "Runs",
   finding: "Findings",
@@ -24,9 +36,18 @@ const GROUP_LABEL: Record<GroupKey, string> = {
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
+  view?: ProjectsView | null;
+  selectedProject?: string | null;
+  onSelectProject?: (name: string) => void | Promise<void>;
 }
 
-export function CommandPalette({ open, onClose }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  onClose,
+  view,
+  selectedProject,
+  onSelectProject,
+}: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -73,9 +94,34 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     };
   }, [query, open]);
 
+  const projectHits = useMemo<SearchHit[]>(() => {
+    if (!view || !onSelectProject) return [];
+    const q = query.trim().toLowerCase();
+    if (q === "") return [];
+    return view.projects
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.path.toLowerCase().includes(q),
+      )
+      .map((p) => ({
+        kind: "project",
+        id: p.name,
+        title: p.name + (p.exists ? "" : " (missing)"),
+        path: p.path,
+        status: p.name === selectedProject ? "current" : null,
+        score: p.name.toLowerCase() === q ? 100 : p.name.toLowerCase().startsWith(q) ? 50 : 10,
+      }));
+  }, [view, query, onSelectProject, selectedProject]);
+
+  const combined = useMemo(
+    () => [...projectHits, ...hits],
+    [projectHits, hits],
+  );
+
   const grouped = useMemo(() => {
     const m = new Map<GroupKey, SearchHit[]>();
-    for (const h of hits) {
+    for (const h of combined) {
       const k = (GROUP_ORDER.includes(h.kind as GroupKey)
         ? h.kind
         : "artifact") as GroupKey;
@@ -86,13 +132,19 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     return GROUP_ORDER.map((k) => ({ key: k, items: m.get(k) ?? [] })).filter(
       (g) => g.items.length > 0,
     );
-  }, [hits]);
+  }, [combined]);
 
   const flat = useMemo(() => grouped.flatMap((g) => g.items), [grouped]);
 
   const openHit = useCallback(
     (hit: SearchHit) => {
       switch (hit.kind) {
+        case "project":
+          if (onSelectProject && hit.id !== selectedProject) {
+            void onSelectProject(hit.id);
+          }
+          onClose();
+          return;
         case "control":
           navigate(`/controls?id=${encodeURIComponent(hit.id)}`);
           break;
@@ -110,7 +162,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       }
       onClose();
     },
-    [navigate, onClose],
+    [navigate, onClose, onSelectProject, selectedProject],
   );
 
   // Keyboard navigation across the flat order.
@@ -173,7 +225,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               Start typing to search the index.
             </p>
           )}
-          {!error && query.trim() !== "" && hits.length === 0 && (
+          {!error && query.trim() !== "" && combined.length === 0 && (
             <p className="px-4 py-6 text-center text-xs text-muted-foreground">
               No matches.
             </p>
