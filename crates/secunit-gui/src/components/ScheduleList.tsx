@@ -59,13 +59,13 @@ export function ScheduleList({ entries }: { entries: ScheduleEntryView[] }) {
                 </span>
                 <span className="truncate font-medium">
                   {e.cadence} · {e.date}
-                  {relative && (
-                    <span className={cn("ml-1.5 tabular-nums", tone)}>
-                      · {relative}
-                    </span>
-                  )}
                 </span>
               </div>
+              {relative && (
+                <span className={cn("shrink-0 tabular-nums text-xs", tone)}>
+                  {relative}
+                </span>
+              )}
               {override && (
                 <Badge
                   variant={overrideTone[override]}
