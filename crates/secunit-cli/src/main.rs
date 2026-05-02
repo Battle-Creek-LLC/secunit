@@ -57,7 +57,12 @@ enum Command {
         at: Option<chrono::NaiveDate>,
     },
     /// Show registry-wide or per-control status.
-    Status { control_id: Option<String> },
+    Status {
+        control_id: Option<String>,
+        /// Print the latest run's findings.md inline. Requires CONTROL_ID.
+        #[arg(short = 'e', long, requires = "control_id")]
+        evidence: bool,
+    },
     /// Validate the registry (schema + cross-refs).
     Validate {
         /// Adds opinionated checks (NIST id format, etc).
@@ -181,7 +186,10 @@ fn main() -> ExitCode {
         } => cmd::due::run(&ctx, within, overdue_only, owner.as_deref()),
         Command::Show { control_id } => cmd::show::run(&ctx, &control_id),
         Command::Scope { control_id, at } => cmd::scope::run(&ctx, &control_id, at),
-        Command::Status { control_id } => cmd::status::run(&ctx, control_id.as_deref()),
+        Command::Status {
+            control_id,
+            evidence,
+        } => cmd::status::run(&ctx, control_id.as_deref(), evidence),
         Command::Validate { strict } => cmd::validate::run(&ctx, strict),
         Command::Run { sub } => match sub {
             RunCmd::Prepare {

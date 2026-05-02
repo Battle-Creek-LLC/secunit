@@ -1,0 +1,8 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+cp-annual-bcp-test (Annual)
+  next due: 2026-08-01
+  last run: — (NeverRun)
+  evidence: no run on record
