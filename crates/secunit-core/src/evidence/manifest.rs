@@ -127,21 +127,12 @@ pub struct Manifest {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub by_system: Vec<BySystemBlock>,
     pub status: RunOutcome,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_reason: Option<String>,
     #[serde(default)]
     pub draft_risks: Vec<serde_json::Value>,
     #[serde(default)]
     pub draft_issues: Vec<serde_json::Value>,
     #[serde(default)]
     pub external_links: Vec<serde_json::Value>,
-}
-
-// ---------- abort sidecar --------------------------------------------------
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AbortRecord {
-    pub schema_version: u32,
-    pub control_id: String,
-    pub run_id: String,
-    pub aborted_at: DateTime<Utc>,
-    pub reason: String,
 }

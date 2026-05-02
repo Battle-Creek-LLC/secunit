@@ -83,9 +83,9 @@ pub fn finalize(ctx: &Ctx, run_dir: &Path) -> Result<ExitCode> {
 }
 
 pub fn abort(ctx: &Ctx, run_dir: &Path, reason: &str) -> Result<ExitCode> {
-    let _ = ctx;
-    let record = runner::abort(run_dir, reason)?;
-    println!("aborted {} (run {})", record.control_id, record.run_id);
+    let (reg, _report) = ctx.load()?;
+    let manifest = runner::abort(&reg, run_dir, reason)?;
+    println!("aborted {} (run {})", manifest.control_id, manifest.run_id);
     Ok(ExitCode::SUCCESS)
 }
 

@@ -318,7 +318,6 @@ pub struct StateEntry {
 pub enum RunStatus {
     Complete,
     InProgress,
-    Aborted,
     Failed,
     NeverRun,
 }

@@ -14,8 +14,8 @@ use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use super::hasher::{self, atomic_write, sha256_bytes, sha256_file};
 use super::lock::RootLock;
 use super::manifest::{
-    AbortRecord, AgentInfo, Artifact, BySystemBlock, Manifest, PrepareContext, PriorRun,
-    RunOutcome, RunResult, ScopeLayout, SystemOutcome,
+    AgentInfo, Artifact, BySystemBlock, Manifest, PrepareContext, PriorRun, RunOutcome, RunResult,
+    ScopeLayout, SystemOutcome,
 };
 use crate::model::{LoadedRegistry, RunStatus, StateEntry};
 use crate::registry::resolver;
@@ -25,7 +25,6 @@ const PENDING_SENTINEL: &str = ".run-pending";
 const PREPARE_FILE: &str = "prepare.json";
 const RESULT_FILE: &str = "result.json";
 const MANIFEST_FILE: &str = "manifest.json";
-const ABORT_FILE: &str = "abort.json";
 const STATE_FILE: &str = "state.json";
 
 /// Options for `prepare`. Only `today` is required; the rest are
@@ -139,27 +138,57 @@ pub fn resume(run_dir: &Path) -> Result<PrepareContext> {
     Ok(ctx)
 }
 
-/// Tear down a pending run: write `abort.json`, remove `.run-pending`,
-/// keep everything else for audit.
-pub fn abort(run_dir: &Path, reason: &str) -> Result<AbortRecord> {
-    let prepare_path = run_dir.join(PREPARE_FILE);
-    let prepare_bytes =
-        fs::read(&prepare_path).with_context(|| format!("read {}", prepare_path.display()))?;
-    let prepare: PrepareContext = serde_json::from_slice(&prepare_bytes)?;
-    let record = AbortRecord {
+/// Tear down a pending run by sealing a failed manifest. Records the
+/// reason in `manifest.failure_reason` so the audit trail says why.
+/// Leaves any partial evidence on disk under the run dir.
+pub fn abort(reg: &LoadedRegistry, run_dir: &Path, reason: &str) -> Result<Manifest> {
+    let _lock = RootLock::acquire(&reg.root).context("acquire root lock")?;
+
+    let prepare: PrepareContext = read_json(&run_dir.join(PREPARE_FILE))?;
+    let ctrl = reg
+        .controls
+        .get(&prepare.control_id)
+        .ok_or_else(|| anyhow!("control `{}` not found", prepare.control_id))?;
+
+    let prior_run = prior_run_link(&reg.root, &prepare.control_id, &prepare.run_id)?;
+    let control_sha256 = sha256_for_control(&reg.root, &prepare.control_id)?;
+    let skill_sha256 = sha256_for_skill(&reg.root, &ctrl.skill)?;
+
+    let manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         control_id: prepare.control_id.clone(),
         run_id: prepare.run_id.clone(),
-        aborted_at: Utc::now(),
-        reason: reason.to_string(),
+        started_at: prepare.started_at,
+        completed_at: Utc::now(),
+        operator: prepare.operator.clone(),
+        agent: AgentInfo {
+            model: std::env::var("SECUNIT_AGENT_MODEL").unwrap_or_else(|_| "unknown".into()),
+            skill: ctrl.skill.clone(),
+            skill_sha256,
+            control_sha256,
+        },
+        registry_git_sha: prepare.registry_git_sha.clone(),
+        scope_layout: prepare.scope_layout,
+        resolved_scope: prepare.resolved_scope.clone(),
+        prior_run,
+        artifacts: Vec::new(),
+        by_system: Vec::new(),
+        status: RunOutcome::Failed,
+        failure_reason: Some(reason.to_string()),
+        draft_risks: Vec::new(),
+        draft_issues: Vec::new(),
+        external_links: Vec::new(),
     };
-    let json = serde_json::to_vec_pretty(&record)?;
-    atomic_write(&run_dir.join(ABORT_FILE), &json)?;
+
+    let bytes = serde_json::to_vec(&manifest)?;
+    atomic_write(&run_dir.join(MANIFEST_FILE), &bytes)?;
+    update_state(reg, &manifest)?;
+
     let pending = run_dir.join(PENDING_SENTINEL);
     if pending.exists() {
         fs::remove_file(&pending)?;
     }
-    Ok(record)
+    Ok(manifest)
 }
 
 /// Hash every artifact, link the manifest to the prior run, atomically
@@ -181,13 +210,7 @@ pub fn finalize(reg: &LoadedRegistry, run_dir: &Path) -> Result<Manifest> {
     }
 
     // Skip the per-run metadata files when hashing.
-    let exclude = [
-        PREPARE_FILE,
-        RESULT_FILE,
-        MANIFEST_FILE,
-        ABORT_FILE,
-        PENDING_SENTINEL,
-    ];
+    let exclude = [PREPARE_FILE, RESULT_FILE, MANIFEST_FILE, PENDING_SENTINEL];
     let hashed = hasher::hash_tree(run_dir, &exclude)?;
 
     let mut artifacts: Vec<Artifact> = Vec::new();
@@ -260,6 +283,7 @@ pub fn finalize(reg: &LoadedRegistry, run_dir: &Path) -> Result<Manifest> {
         artifacts,
         by_system: by_system_blocks,
         status: result.status,
+        failure_reason: None,
         draft_risks: result.draft_risks.clone(),
         draft_issues: result.draft_issues.clone(),
         external_links: result.external_links.clone(),

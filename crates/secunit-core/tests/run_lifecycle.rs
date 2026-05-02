@@ -237,7 +237,7 @@ fn tamper_prior_manifest_breaks_chain() {
 }
 
 #[test]
-fn abort_writes_record_and_clears_sentinel() {
+fn abort_seals_failed_manifest_and_clears_sentinel() {
     let (_tmp, root) = staged_fixture();
     let (reg, report) = loader::load(&root);
     assert!(report.errors.is_empty());
@@ -249,16 +249,25 @@ fn abort_writes_record_and_clears_sentinel() {
     let ctx = runner::prepare(&reg, CONTROL, &opts).unwrap();
     assert!(ctx.run_dir.join(".run-pending").exists());
 
-    let record = runner::abort(&ctx.run_dir, "operator-cancelled").expect("abort");
-    assert_eq!(record.reason, "operator-cancelled");
-    assert_eq!(record.run_id, ctx.run_id);
+    let manifest = runner::abort(&reg, &ctx.run_dir, "operator-cancelled").expect("abort");
+    assert_eq!(manifest.run_id, ctx.run_id);
+    assert_eq!(manifest.failure_reason.as_deref(), Some("operator-cancelled"));
 
-    let abort_json = ctx.run_dir.join("abort.json");
-    assert!(abort_json.exists(), "abort.json should be written");
+    let manifest_path = ctx.run_dir.join("manifest.json");
+    assert!(manifest_path.exists(), "manifest.json should be written");
     let parsed: serde_json::Value =
-        serde_json::from_slice(&fs::read(&abort_json).unwrap()).unwrap();
-    assert_eq!(parsed["reason"], "operator-cancelled");
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    assert_eq!(parsed["status"], "failed");
+    assert_eq!(parsed["failure_reason"], "operator-cancelled");
+    assert!(
+        parsed["artifacts"].as_array().unwrap().is_empty(),
+        "aborted run records no artifacts"
+    );
 
+    assert!(
+        !ctx.run_dir.join("abort.json").exists(),
+        "no abort.json sidecar after the cleanup"
+    );
     assert!(
         !ctx.run_dir.join(".run-pending").exists(),
         "sentinel should be cleared"

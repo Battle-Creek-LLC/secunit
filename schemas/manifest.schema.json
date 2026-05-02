@@ -88,6 +88,7 @@
       "type": "string",
       "enum": ["complete", "partial", "failed"]
     },
+    "failure_reason": { "type": "string" },
     "draft_risks": { "type": "array" },
     "draft_issues": { "type": "array" },
     "external_links": { "type": "array" }
