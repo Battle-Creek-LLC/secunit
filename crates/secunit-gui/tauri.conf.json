@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "work.battlecreek.secunit",
   "build": {
-    "beforeDevCommand": "npm --prefix web run dev",
-    "beforeBuildCommand": "npm --prefix web run build",
+    "beforeDevCommand": "pnpm --dir web dev",
+    "beforeBuildCommand": "pnpm --dir web build",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../web/dist"
   },

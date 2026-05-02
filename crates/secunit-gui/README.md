@@ -27,7 +27,7 @@ crates/secunit-gui/
 Frontend deps:
 
 ```sh
-npm --prefix crates/secunit-gui/web install
+pnpm --dir crates/secunit-gui/web install
 ```
 
 Run the app in dev mode (Tauri spawns Vite via `beforeDevCommand`):
@@ -48,14 +48,14 @@ cargo check -p secunit-gui
 Frontend type-check and tests:
 
 ```sh
-npm --prefix crates/secunit-gui/web run typecheck
-npm --prefix crates/secunit-gui/web test
+pnpm --dir crates/secunit-gui/web typecheck
+pnpm --dir crates/secunit-gui/web test
 ```
 
 ## Build
 
 ```sh
-npm --prefix crates/secunit-gui/web run build
+pnpm --dir crates/secunit-gui/web build
 cd crates/secunit-gui && cargo build --release
 ```
 

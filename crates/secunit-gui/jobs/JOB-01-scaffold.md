@@ -16,7 +16,7 @@ A new workspace member `crates/secunit-gui/` that builds a Tauri 2.x desktop app
   - Path alias `@/` → `web/src/`.
 - `crates/secunit-gui/web/package.json` pinned to deterministic versions; lockfile committed.
 - `crates/secunit-gui/README.md` — one paragraph + the dev/build commands.
-- A `cargo xtask` is *not* required; document `npm --prefix crates/secunit-gui/web install && (cd crates/secunit-gui && cargo tauri dev)` in the README.
+- A `cargo xtask` is *not* required; document `pnpm --dir crates/secunit-gui/web install && (cd crates/secunit-gui && cargo tauri dev)` in the README.
 
 ## Non-goals
 
@@ -29,10 +29,10 @@ A new workspace member `crates/secunit-gui/` that builds a Tauri 2.x desktop app
 
 - `cargo build -p secunit-gui` succeeds on Linux (Tauri 2 dependencies present).
 - `cargo build` (no flags) on the workspace **still** succeeds and **does not** compile Tauri or its native deps.
-- `npm --prefix crates/secunit-gui/web run build` produces `dist/` with `index.html`, hashed JS, hashed CSS.
+- `pnpm --dir crates/secunit-gui/web build` produces `dist/` with `index.html`, hashed JS, hashed CSS.
 - `cargo tauri dev` (or the equivalent Tauri 2 invocation) opens a window titled `secunit` containing the hello text rendered in Inter.
 - `clippy -p secunit-gui -- -D warnings` is clean.
-- `npm --prefix crates/secunit-gui/web run typecheck` passes.
+- `pnpm --dir crates/secunit-gui/web typecheck` passes.
 
 ## Test plan
 
