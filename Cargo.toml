@@ -4,6 +4,15 @@ members = [
     "crates/secunit-core",
     "crates/secunit-cli",
     "crates/secunit-capture",
+    "crates/secunit-gui/src-tauri",
+]
+# secunit-gui pulls Tauri/WebKit native deps; keep it out of the default
+# `cargo build` so headless CI and core development stay fast. Build
+# explicitly with `cargo build -p secunit-gui` or `cargo tauri dev`.
+default-members = [
+    "crates/secunit-core",
+    "crates/secunit-cli",
+    "crates/secunit-capture",
 ]
 
 [workspace.package]
@@ -32,6 +41,21 @@ fs2 = "0.4"
 gix = { version = "0.66", default-features = false, features = ["max-performance-safe"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# secunit-gui only — kept here so versions pin in one place.
+tauri = { version = "2", features = [] }
+tauri-build = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+notify = "8"
+notify-debouncer-full = "0.7"
+tantivy = "0.26"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+ammonia = "4"
+ts-rs = { version = "12", features = ["chrono-impl", "serde-compat"] }
+shellexpand = "3"
+dirs = "6"
 
 # dev / test
 insta = { version = "1", features = ["yaml", "json"] }

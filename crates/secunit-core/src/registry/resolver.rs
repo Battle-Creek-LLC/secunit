@@ -8,16 +8,51 @@
 use std::collections::HashSet;
 
 use chrono::{Datelike, Duration, NaiveDate};
+use serde::{Deserialize, Serialize};
 
 use crate::model::{
     Cadence, Control, Inventory, LoadedRegistry, ResolvedSystem, Schedule, Scope, StateEntry,
     Weekday,
 };
 
+// ---------- due resolution --------------------------------------------------
+
+/// Why a particular firing date won — i.e. which input to the resolver
+/// produced it. The CLI surfaces this via `secunit due --why`; the GUI
+/// renders it as a chip on the Schedule view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DueReason {
+    /// The cadence rules produced the date with no override in play.
+    Cadence,
+    /// A `schedule.yaml` override pinned a specific date for this control.
+    OverrideDue,
+    /// A `schedule.yaml` insert added a one-off firing.
+    OverrideInsert,
+    /// A `schedule.yaml` override changed the weekday a weekly cadence
+    /// fires on. The date is still cadence-derived; the weekday is the
+    /// operator's pick.
+    OverrideWeekday,
+}
+
+/// A firing date with provenance and (where the override carried one)
+/// the operator's note.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DueResolution {
+    pub date: NaiveDate,
+    pub reason: DueReason,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
 // ---------- cadence ---------------------------------------------------------
 
-/// Compute the next firing date for `control` on or after `today`, taking
-/// schedule overrides and the last-run pointer into account.
+/// Compute the next firing date for `control` on or after `today`,
+/// taking schedule overrides and the last-run pointer into account.
+///
+/// Thin facade over [`next_due_with_reason`]; callers that need to
+/// know *why* a date won (the GUI's Schedule view, a future
+/// `secunit due --why` flag) should call the richer version directly.
 pub fn next_due(
     control: &Control,
     schedule: &Schedule,
@@ -25,6 +60,25 @@ pub fn next_due(
     today: NaiveDate,
     config_default_weekday: Option<Weekday>,
 ) -> Option<NaiveDate> {
+    next_due_with_reason(control, schedule, state, today, config_default_weekday)
+        .map(|r| r.date)
+}
+
+/// Like [`next_due`] but returns the date together with the
+/// [`DueReason`] that produced it and the override's note (if any).
+///
+/// Precedence rules:
+///   * Earlier date always wins.
+///   * On a tie, override sources beat cadence: insert > dated > weekday > cadence.
+///   * A skip override removes the cadence firing for the matching
+///     window; the next-earliest insert (if any) takes its place.
+pub fn next_due_with_reason(
+    control: &Control,
+    schedule: &Schedule,
+    state: Option<&StateEntry>,
+    today: NaiveDate,
+    config_default_weekday: Option<Weekday>,
+) -> Option<DueResolution> {
     // Skip a single firing window if `schedule.yaml` says so.
     let skip_today = schedule
         .overrides
@@ -42,29 +96,65 @@ pub fn next_due(
             false
         });
 
-    // Inserts (one-off extra firings) compete with the cadence-derived date.
-    let inserted: Vec<NaiveDate> = schedule
+    // Candidate buckets, each carrying provenance for the reason field.
+    let mut candidates: Vec<DatedCandidate> = Vec::new();
+
+    // Inserts — one-off extra firings. Note precedence: explicit
+    // entry note → insert's own reason → entry-level reason. This
+    // covers both the YAML shape `entry.note: "x"` and the more
+    // common `insert: { run_at, reason: "x" }`.
+    for ov in schedule
         .overrides
         .iter()
         .filter(|o| o.control_id == control.id)
-        .filter_map(|o| o.insert.as_ref().map(|i| i.run_at))
-        .filter(|d| *d >= today)
-        .collect();
+    {
+        if let Some(insert) = &ov.insert {
+            if insert.run_at >= today {
+                candidates.push(DatedCandidate {
+                    date: insert.run_at,
+                    reason: DueReason::OverrideInsert,
+                    note: ov
+                        .note
+                        .clone()
+                        .or_else(|| insert.reason.clone())
+                        .or_else(|| ov.reason.clone()),
+                    precedence: 0,
+                });
+            }
+        }
+    }
 
-    let weekday_override = schedule
-        .overrides
-        .iter()
-        .find(|o| o.control_id == control.id && o.weekday.is_some())
-        .and_then(|o| o.weekday);
-
-    let dated_override = schedule
+    // Dated overrides — a pinned `due:` date.
+    for ov in schedule
         .overrides
         .iter()
         .filter(|o| o.control_id == control.id)
-        .filter_map(|o| o.due)
-        .filter(|d| *d >= today)
-        .min();
+    {
+        if let Some(d) = ov.due {
+            if d >= today {
+                candidates.push(DatedCandidate {
+                    date: d,
+                    reason: DueReason::OverrideDue,
+                    note: ov.note.clone().or_else(|| ov.reason.clone()),
+                    precedence: 1,
+                });
+            }
+        }
+    }
 
+    // Weekday override only changes the cadence-derived date for
+    // weekly controls — capture the note so the cadence candidate can
+    // pick it up if it ends up labelled `OverrideWeekday`.
+    let weekday_override_entry = schedule
+        .overrides
+        .iter()
+        .find(|o| o.control_id == control.id && o.weekday.is_some());
+    let weekday_override = weekday_override_entry.and_then(|o| o.weekday);
+    let weekday_note = weekday_override_entry
+        .and_then(|o| o.note.clone().or_else(|| o.reason.clone()));
+
+    // Cadence-derived date, accounting for any weekday override that
+    // applies to a weekly cadence.
     let cadence_due = match control.cadence {
         Cadence::Continuous => None,
         Cadence::Weekly => {
@@ -81,26 +171,65 @@ pub fn next_due(
         Cadence::Scheduled => control
             .due
             .as_ref()
-            .and_then(|d| earliest_scheduled(d.as_slice(), today))
-            .or(dated_override),
+            .and_then(|d| earliest_scheduled(d.as_slice(), today)),
     };
 
-    let mut candidates: Vec<NaiveDate> = inserted.clone();
-    if let Some(c) = cadence_due {
-        candidates.push(c);
+    if let Some(d) = cadence_due {
+        let weekday_active = matches!(control.cadence, Cadence::Weekly)
+            && weekday_override.is_some();
+        let (reason, note, precedence) = if weekday_active {
+            (DueReason::OverrideWeekday, weekday_note.clone(), 2u8)
+        } else {
+            (DueReason::Cadence, None, 3u8)
+        };
+        candidates.push(DatedCandidate {
+            date: d,
+            reason,
+            note,
+            precedence,
+        });
     }
-    if let Some(c) = dated_override {
-        candidates.push(c);
+
+    // Pick the earliest date; on ties, lower precedence index wins
+    // (insert > dated > weekday > cadence).
+    let winner = candidates
+        .iter()
+        .min_by(|a, b| a.date.cmp(&b.date).then(a.precedence.cmp(&b.precedence)))
+        .cloned();
+
+    let winner = winner?;
+
+    if skip_today && winner.reason == DueReason::Cadence {
+        // Cadence firing is skipped — fall back to the earliest insert
+        // (if any). Dated overrides survive a skip; only the cadence
+        // window is removed, per the spec's `skip` semantics.
+        return candidates
+            .into_iter()
+            .filter(|c| c.reason == DueReason::OverrideInsert)
+            .min_by_key(|c| c.date)
+            .map(Into::into);
     }
-    let next = candidates.into_iter().min()?;
-    if skip_today && Some(next) == cadence_due {
-        // Drop the skipped firing; next non-skipped date is the cadence's
-        // following window. For now we just return `None` if skipping
-        // empties the queue — callers report "skipped" via the override
-        // diagnostic path.
-        return inserted.into_iter().min();
+
+    Some(winner.into())
+}
+
+#[derive(Debug, Clone)]
+struct DatedCandidate {
+    date: NaiveDate,
+    reason: DueReason,
+    note: Option<String>,
+    /// Lower wins when dates tie. 0=insert, 1=dated, 2=weekday, 3=cadence.
+    precedence: u8,
+}
+
+impl From<DatedCandidate> for DueResolution {
+    fn from(c: DatedCandidate) -> Self {
+        DueResolution {
+            date: c.date,
+            reason: c.reason,
+            note: c.note,
+        }
     }
-    Some(next)
 }
 
 /// Has the control passed its grace window?
