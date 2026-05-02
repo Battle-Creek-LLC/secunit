@@ -415,7 +415,6 @@ mod tests {
                 owner: "x@example".into(),
                 cadence: secunit_core::model::Cadence::Weekly,
                 weekday: None,
-                due: None,
                 due_by: None,
                 skill: "skill".into(),
                 skill_args: None,

@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use chrono::NaiveDate;
 use proptest::prelude::*;
 use secunit_core::model::{
-    Cadence, Control, EvidenceRequirement, InventoryEntry, ResolvedSystem, Schedule,
-    ScheduleEntry, ScheduleInsert, ScheduleSkip, Scope, State, Weekday,
+    Cadence, Control, EvidenceRequirement, InventoryEntry, ResolvedSystem, Schedule, ScheduleEntry,
+    ScheduleInsert, ScheduleSkip, Scope, State, Weekday,
 };
 use secunit_core::registry::{
     loader,
