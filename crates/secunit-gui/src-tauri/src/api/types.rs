@@ -109,6 +109,71 @@ pub struct DueRowView {
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum PeriodStatusView {
+    Satisfied,
+    Gap,
+    Skipped,
+    Future,
+    Open,
+}
+
+impl From<secunit_core::registry::coverage::PeriodStatus> for PeriodStatusView {
+    fn from(s: secunit_core::registry::coverage::PeriodStatus) -> Self {
+        use secunit_core::registry::coverage::PeriodStatus as Core;
+        match s {
+            Core::Satisfied => PeriodStatusView::Satisfied,
+            Core::Gap => PeriodStatusView::Gap,
+            Core::Skipped => PeriodStatusView::Skipped,
+            Core::Future => PeriodStatusView::Future,
+            Core::Open => PeriodStatusView::Open,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CurrentPeriodStatus {
+    pub control_id: String,
+    pub cadence: String,
+    /// `None` for continuous controls; otherwise the period containing
+    /// `today`.
+    pub period_id: Option<String>,
+    pub period_start: Option<NaiveDate>,
+    pub period_end: Option<NaiveDate>,
+    pub status: PeriodStatusView,
+    pub satisfied_by_run_id: Option<String>,
+    pub late: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PeriodCoverageView {
+    pub period_id: String,
+    pub period_start: NaiveDate,
+    pub period_end: NaiveDate,
+    pub status: PeriodStatusView,
+    pub satisfied_by_run_id: Option<String>,
+    pub late: bool,
+    pub skipped_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CoverageReportView {
+    pub control_id: String,
+    pub window_start: NaiveDate,
+    pub window_end: NaiveDate,
+    pub periods: Vec<PeriodCoverageView>,
+    pub unclassified_runs: Vec<UnclassifiedRunView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UnclassifiedRunView {
+    pub run_id: String,
+    pub period_id: Option<String>,
+    pub completed_at: DateTime<Utc>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ScheduleReason {
     Cadence,
     OverrideDue,

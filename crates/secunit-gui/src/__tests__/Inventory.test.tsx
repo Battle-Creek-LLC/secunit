@@ -17,6 +17,7 @@ describe("Inventory", () => {
     mockedInvoke.mockImplementation(async (cmd) => {
       if (cmd === "list_controls") return [];
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "recent_runs") return [];
       if (cmd === "get_inventory")
         return {
@@ -69,6 +70,7 @@ describe("Inventory", () => {
     mockedInvoke.mockImplementation(async (cmd) => {
       if (cmd === "list_controls") return [];
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "recent_runs") return [];
       if (cmd === "get_inventory")
         return {

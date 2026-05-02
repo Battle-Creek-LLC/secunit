@@ -13,6 +13,7 @@ use secunit_core::evidence::manifest::{
 };
 use secunit_core::evidence::runner::{self, PrepareOpts};
 use secunit_core::evidence::verifier::{self, FailureKind};
+use secunit_core::registry::coverage::{self, PeriodStatus};
 use secunit_core::registry::loader;
 use secunit_core::SCHEMA_VERSION;
 use tempfile::TempDir;
@@ -137,6 +138,7 @@ fn round_trip_three_runs_chain_intact() {
         NaiveDate::from_ymd_opt(2026, 5, 11).unwrap(),
         NaiveDate::from_ymd_opt(2026, 5, 18).unwrap(),
     ];
+    let expected_periods = ["2026-W19", "2026-W20", "2026-W21"];
 
     let mut manifests: Vec<PathBuf> = Vec::new();
     for d in dates {
@@ -156,6 +158,12 @@ fn round_trip_three_runs_chain_intact() {
             let link = m.prior_run.as_ref().expect("prior_run set");
             assert_eq!(link.manifest_sha256, prior_sha.as_deref().unwrap());
         }
+        assert_eq!(
+            m.period_id.as_deref(),
+            Some(expected_periods[i]),
+            "run {i} should claim period {}",
+            expected_periods[i]
+        );
         prior_sha = Some(sha256_file(mp).unwrap());
     }
 
@@ -476,4 +484,114 @@ fn unreadable_artifact_does_not_abort_chain_walk() {
     let mut perm = fs::metadata(&target).unwrap().permissions();
     perm.set_mode(0o644);
     fs::set_permissions(&target, perm).unwrap();
+}
+
+#[test]
+fn prepare_with_period_override_claims_past_week() {
+    let (_tmp, root) = staged_fixture();
+    let (reg, _) = loader::load(&root);
+
+    // Today is Tue 2026-05-05 — the W19 deadline (Mon May 4) has passed.
+    // Operator runs late and claims W19 explicitly.
+    let opts = PrepareOpts {
+        today: Some(NaiveDate::from_ymd_opt(2026, 5, 5).unwrap()),
+        period_id: Some("2026-W19".to_string()),
+        ..Default::default()
+    };
+    let ctx = runner::prepare(&reg, CONTROL, &opts).expect("prepare");
+    assert_eq!(ctx.period_id.as_deref(), Some("2026-W19"));
+
+    // Drive finalize and assert the manifest carries the operator's choice
+    // unchanged — period commits at prepare and is immutable thereafter.
+    for sys in &ctx.resolved_scope {
+        let raw = ctx.run_dir.join("by-system").join(&sys.name).join("raw");
+        fs::write(raw.join("scan.json"), b"{}").unwrap();
+    }
+    fs::write(ctx.run_dir.join("findings.md"), b"# none\n").unwrap();
+    let result = RunResult {
+        schema_version: SCHEMA_VERSION,
+        control_id: ctx.control_id.clone(),
+        run_id: ctx.run_id.clone(),
+        status: RunOutcome::Complete,
+        by_system: ctx
+            .resolved_scope
+            .iter()
+            .map(|s| SystemResult {
+                name: s.name.clone(),
+                status: SystemOutcome::Complete,
+                note: None,
+            })
+            .collect(),
+        draft_risks: Vec::new(),
+        draft_issues: Vec::new(),
+        external_links: Vec::new(),
+    };
+    fs::write(
+        ctx.run_dir.join("result.json"),
+        serde_json::to_vec_pretty(&result).unwrap(),
+    )
+    .unwrap();
+    let manifest = runner::finalize(&reg, &ctx.run_dir).expect("finalize");
+    assert_eq!(manifest.period_id.as_deref(), Some("2026-W19"));
+}
+
+#[test]
+fn coverage_buckets_periods_after_two_runs() {
+    let (_tmp, root) = staged_fixture();
+    // Two complete weekly runs: W19 (May 4) and W20 (May 11).
+    run_one(&root, NaiveDate::from_ymd_opt(2026, 5, 4).unwrap());
+    run_one(&root, NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
+
+    let (reg, _) = loader::load(&root);
+    // Window W18..W21 with today=W21 → expect Gap, Satisfied, Satisfied,
+    // Open (W21 is the current week, no run yet).
+    let report = coverage::coverage(
+        &reg,
+        CONTROL,
+        NaiveDate::from_ymd_opt(2026, 4, 27).unwrap(),
+        NaiveDate::from_ymd_opt(2026, 5, 24).unwrap(),
+        NaiveDate::from_ymd_opt(2026, 5, 18).unwrap(),
+    )
+    .expect("coverage");
+
+    let by_id: std::collections::HashMap<&str, PeriodStatus> = report
+        .periods
+        .iter()
+        .map(|p| (p.period_id.as_str(), p.status))
+        .collect();
+    assert_eq!(by_id.get("2026-W18"), Some(&PeriodStatus::Gap));
+    assert_eq!(by_id.get("2026-W19"), Some(&PeriodStatus::Satisfied));
+    assert_eq!(by_id.get("2026-W20"), Some(&PeriodStatus::Satisfied));
+    assert_eq!(by_id.get("2026-W21"), Some(&PeriodStatus::Open));
+
+    // Both satisfied weeks have a satisfier; neither was late (Mon run
+    // for the same ISO week).
+    let w19 = report.periods.iter().find(|p| p.period_id == "2026-W19").unwrap();
+    assert!(w19.satisfied_by.is_some());
+    assert!(!w19.late);
+}
+
+#[test]
+fn prepare_rejects_invalid_period_no_run_dir_created() {
+    let (_tmp, root) = staged_fixture();
+    let (reg, _) = loader::load(&root);
+
+    let opts = PrepareOpts {
+        today: Some(NaiveDate::from_ymd_opt(2026, 5, 4).unwrap()),
+        period_id: Some("not-a-period".to_string()),
+        ..Default::default()
+    };
+    let err = runner::prepare(&reg, CONTROL, &opts)
+        .expect_err("prepare must reject an invalid period id");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("not a valid period"),
+        "expected validation error, got: {msg}"
+    );
+    // Critical: no run dir was allocated.
+    let evidence_dir = root.join("evidence/2026/q2/sca-weekly-dependency-scan");
+    assert!(
+        !evidence_dir.exists(),
+        "no run dir should be allocated when prepare rejects --period"
+    );
 }

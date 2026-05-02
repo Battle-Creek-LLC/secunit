@@ -91,7 +91,8 @@
     "failure_reason": { "type": "string" },
     "draft_risks": { "type": "array" },
     "draft_issues": { "type": "array" },
-    "external_links": { "type": "array" }
+    "external_links": { "type": "array" },
+    "period_id": { "type": "string", "minLength": 1 }
   },
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },

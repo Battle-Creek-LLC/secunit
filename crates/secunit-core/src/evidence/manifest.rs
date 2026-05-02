@@ -48,6 +48,8 @@ pub struct PrepareContext {
     pub scope_layout: ScopeLayout,
     pub resolved_scope: Vec<ResolvedSystem>,
     pub registry_git_sha: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub period_id: Option<String>,
 }
 
 // ---------- result (skill output) ------------------------------------------
@@ -135,4 +137,6 @@ pub struct Manifest {
     pub draft_issues: Vec<serde_json::Value>,
     #[serde(default)]
     pub external_links: Vec<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub period_id: Option<String>,
 }

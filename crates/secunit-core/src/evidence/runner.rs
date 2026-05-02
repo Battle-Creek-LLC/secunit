@@ -17,8 +17,8 @@ use super::manifest::{
     AgentInfo, Artifact, BySystemBlock, Manifest, PrepareContext, PriorRun, RunOutcome, RunResult,
     ScopeLayout, SystemOutcome,
 };
-use crate::model::{LoadedRegistry, RunStatus, StateEntry};
-use crate::registry::resolver;
+use crate::model::{Cadence, LoadedRegistry, RunStatus, StateEntry};
+use crate::registry::{period, resolver};
 use crate::SCHEMA_VERSION;
 
 const PENDING_SENTINEL: &str = ".run-pending";
@@ -35,6 +35,9 @@ pub struct PrepareOpts {
     pub operator: Option<String>,
     pub note: Option<String>,
     pub now: Option<DateTime<Utc>>,
+    /// Operator-supplied period claim. `None` means derive from the next
+    /// firing date for `today` and the control's cadence.
+    pub period_id: Option<String>,
 }
 
 /// Allocate a run directory, snapshot scope, write `prepare.json`, drop
@@ -93,6 +96,40 @@ pub fn prepare(
         ScopeLayout::BySystem
     };
 
+    // Resolve period_id before allocating any disk state so an invalid
+    // --period rejects without leaving a half-formed run dir behind.
+    let period_id = match &opts.period_id {
+        Some(supplied) => {
+            if matches!(ctrl.cadence, Cadence::Continuous) {
+                bail!(
+                    "control `{control_id}` has continuous cadence and does not have schedule periods; --period is not allowed"
+                );
+            }
+            if period::bounds(ctrl.cadence, supplied).is_none() {
+                bail!(
+                    "`{supplied}` is not a valid period id for cadence {:?}",
+                    ctrl.cadence
+                );
+            }
+            Some(supplied.clone())
+        }
+        None => {
+            if matches!(ctrl.cadence, Cadence::Continuous) {
+                None
+            } else {
+                let state_entry = reg.state.controls.get(control_id);
+                resolver::next_due(
+                    ctrl,
+                    &reg.schedule,
+                    state_entry,
+                    today,
+                    reg.config.weekly_default_weekday,
+                )
+                .and_then(|target| period::derive(ctrl.cadence, target))
+            }
+        }
+    };
+
     let run_dir = allocate_run_dir(&reg.root, control_id, today)?;
     if matches!(scope_layout, ScopeLayout::BySystem) {
         for sys in &resolved {
@@ -120,6 +157,7 @@ pub fn prepare(
         scope_layout,
         resolved_scope: resolved,
         registry_git_sha,
+        period_id,
     };
 
     let json = serde_json::to_vec_pretty(&ctx)?;
@@ -178,6 +216,7 @@ pub fn abort(reg: &LoadedRegistry, run_dir: &Path, reason: &str) -> Result<Manif
         draft_risks: Vec::new(),
         draft_issues: Vec::new(),
         external_links: Vec::new(),
+        period_id: prepare.period_id.clone(),
     };
 
     let bytes = serde_json::to_vec(&manifest)?;
@@ -287,6 +326,7 @@ pub fn finalize(reg: &LoadedRegistry, run_dir: &Path) -> Result<Manifest> {
         draft_risks: result.draft_risks.clone(),
         draft_issues: result.draft_issues.clone(),
         external_links: result.external_links.clone(),
+        period_id: prepare.period_id.clone(),
     };
 
     // Compact canonical JSON (no pretty-printing) so `jq`-style

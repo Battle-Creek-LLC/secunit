@@ -6,7 +6,13 @@ use secunit_core::evidence::runner::{self, PrepareOpts};
 
 use super::Ctx;
 
-pub fn prepare(ctx: &Ctx, control_id: &str, note: Option<&str>, human: bool) -> Result<ExitCode> {
+pub fn prepare(
+    ctx: &Ctx,
+    control_id: &str,
+    note: Option<&str>,
+    period: Option<&str>,
+    human: bool,
+) -> Result<ExitCode> {
     let (reg, report) = ctx.load()?;
     if !report.is_clean() {
         for e in &report.errors {
@@ -19,6 +25,7 @@ pub fn prepare(ctx: &Ctx, control_id: &str, note: Option<&str>, human: bool) -> 
         operator: std::env::var("SECUNIT_OPERATOR").ok(),
         note: note.map(str::to_string),
         now: None,
+        period_id: period.map(str::to_string),
     };
     let result = runner::prepare(&reg, control_id, &opts);
     let prepare_ctx = match result {
@@ -42,6 +49,9 @@ pub fn prepare(ctx: &Ctx, control_id: &str, note: Option<&str>, human: bool) -> 
         println!("control:    {}", prepare_ctx.control_id);
         println!("run id:     {}", prepare_ctx.run_id);
         println!("run dir:    {}", prepare_ctx.run_dir.display());
+        if let Some(pid) = &prepare_ctx.period_id {
+            println!("period:     {pid}");
+        }
         println!("scope:      {} system(s)", prepare_ctx.resolved_scope.len());
         for s in &prepare_ctx.resolved_scope {
             println!("  - {} ({})", s.name, s.kind);

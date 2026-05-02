@@ -5,11 +5,13 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
+  currentPeriodStatus,
   dueRows,
   getInventory,
   listControls,
   recentRuns,
   type ControlSummary,
+  type CurrentPeriodStatus,
   type DueRowView,
   type InventoryView,
   type RunRow,
@@ -19,6 +21,8 @@ import type { WatcherEvent } from "./events";
 export interface StoreState {
   controls: Map<string, ControlSummary>;
   due: Map<string, DueRowView>;
+  /** Per-control current-period coverage (open / done / overdue / etc). */
+  periods: Map<string, CurrentPeriodStatus>;
   inventory: InventoryView | null;
   runs: RunRow[];
   /** Bumped on every successful refresh — handy for downstream memoisation. */
@@ -28,6 +32,7 @@ export interface StoreState {
 const initialState = (): StoreState => ({
   controls: new Map(),
   due: new Map(),
+  periods: new Map(),
   inventory: null,
   runs: [],
   revision: 0,
@@ -55,15 +60,17 @@ class Store {
 
   /** Prime after `load_project` succeeds. */
   async prime() {
-    const [controls, due, inventory, runs] = await Promise.all([
+    const [controls, due, periods, inventory, runs] = await Promise.all([
       listControls(),
       dueRows(),
+      currentPeriodStatus(),
       getInventory(),
       recentRuns(50),
     ]);
     this.state = {
       controls: new Map(controls.map((c) => [c.id, c])),
       due: new Map(due.map((d) => [d.control_id, d])),
+      periods: new Map(periods.map((p) => [p.control_id, p])),
       inventory,
       runs,
       revision: this.state.revision + 1,
@@ -77,21 +84,29 @@ class Store {
       case "control_changed": {
         // Re-fetch the whole control list for now — title/cadence/owner
         // can all change in one edit. Cheap; refine if profiles say so.
-        const next = await listControls();
-        const due = await dueRows();
+        const [next, due, periods] = await Promise.all([
+          listControls(),
+          dueRows(),
+          currentPeriodStatus(),
+        ]);
         this.state = {
           ...this.state,
           controls: new Map(next.map((c) => [c.id, c])),
           due: new Map(due.map((d) => [d.control_id, d])),
+          periods: new Map(periods.map((p) => [p.control_id, p])),
           revision: this.state.revision + 1,
         };
         break;
       }
       case "state_json_changed": {
-        const next = await listControls();
+        const [next, periods] = await Promise.all([
+          listControls(),
+          currentPeriodStatus(),
+        ]);
         this.state = {
           ...this.state,
           controls: new Map(next.map((c) => [c.id, c])),
+          periods: new Map(periods.map((p) => [p.control_id, p])),
           revision: this.state.revision + 1,
         };
         break;
@@ -107,12 +122,16 @@ class Store {
       }
       case "run_state_changed":
       case "findings_changed": {
-        const runs = await recentRuns(50);
-        const controls = await listControls();
+        const [runs, controls, periods] = await Promise.all([
+          recentRuns(50),
+          listControls(),
+          currentPeriodStatus(),
+        ]);
         this.state = {
           ...this.state,
           runs,
           controls: new Map(controls.map((c) => [c.id, c])),
+          periods: new Map(periods.map((p) => [p.control_id, p])),
           revision: this.state.revision + 1,
         };
         break;

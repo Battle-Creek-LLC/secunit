@@ -37,6 +37,7 @@
         "additionalProperties": false
       }
     },
-    "registry_git_sha": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" }
+    "registry_git_sha": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" },
+    "period_id": { "type": "string", "minLength": 1 }
   }
 }

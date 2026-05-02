@@ -1,13 +1,16 @@
 //! Registry-backed read commands. Every entry point loads or reads from
 //! the cached `LoadedProject` in `AppState`; the cache is populated by
-//! `load_project` and rebuilt by the watcher on disk events (JOB-04).
+//! `load_project`. The watcher refreshes the `state.json` slice on disk
+//! changes (so finalize / abort flips through immediately); edits to
+//! controls, inventory, schedule, or config still require a project
+//! reload to surface.
 
 use std::path::{Path, PathBuf};
 
 use chrono::{Local, NaiveDate};
 use secunit_core::evidence::manifest::{Manifest, PrepareContext};
 use secunit_core::model::{Cadence, Control, RunStatus};
-use secunit_core::registry::{self, loader, resolver};
+use secunit_core::registry::{self, coverage as core_coverage, loader, period, resolver};
 use tauri::{AppHandle, State};
 
 use crate::api::types::*;
@@ -293,6 +296,144 @@ pub fn due_rows(
             overdue: r.overdue,
         })
         .collect())
+}
+
+#[tauri::command]
+pub fn current_period_status(
+    today: Option<NaiveDate>,
+    state: State<'_, AppState>,
+) -> Result<Vec<CurrentPeriodStatus>, String> {
+    let project = state.project.lock().expect("AppState.project poisoned");
+    let project = require_loaded(&project)?;
+    let today = today_or(today);
+
+    let mut out: Vec<CurrentPeriodStatus> = Vec::with_capacity(project.registry.controls.len());
+    for ctrl in project.registry.controls.values() {
+        let cadence = cadence_str(ctrl.cadence);
+        if matches!(ctrl.cadence, secunit_core::model::Cadence::Continuous) {
+            out.push(CurrentPeriodStatus {
+                control_id: ctrl.id.clone(),
+                cadence,
+                period_id: None,
+                period_start: None,
+                period_end: None,
+                status: PeriodStatusView::Future, // unused; UIs hide continuous
+                satisfied_by_run_id: None,
+                late: false,
+            });
+            continue;
+        }
+        let pid = period::derive(ctrl.cadence, today);
+        let bounds = pid
+            .as_deref()
+            .and_then(|p| period::bounds(ctrl.cadence, p));
+        let (period_start, period_end) = match bounds {
+            Some((s, e)) => (Some(s), Some(e)),
+            None => (None, None),
+        };
+
+        // Walk evidence once per control. If the report has zero
+        // expected periods (continuous), short-circuit.
+        let report = match (period_start, period_end) {
+            (Some(s), Some(e)) => {
+                core_coverage::coverage(&project.registry, &ctrl.id, s, e, today).ok()
+            }
+            _ => None,
+        };
+        let current = report
+            .as_ref()
+            .and_then(|r| r.periods.first().cloned());
+        let (status, satisfied_by, late) = match current {
+            Some(p) => (
+                PeriodStatusView::from(p.status),
+                p.satisfied_by.map(|r| r.run_id),
+                p.late,
+            ),
+            None => (PeriodStatusView::Future, None, false),
+        };
+
+        out.push(CurrentPeriodStatus {
+            control_id: ctrl.id.clone(),
+            cadence,
+            period_id: pid,
+            period_start,
+            period_end,
+            status,
+            satisfied_by_run_id: satisfied_by,
+            late,
+        });
+    }
+    out.sort_by(|a, b| a.control_id.cmp(&b.control_id));
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn coverage(
+    control_id: String,
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+    today: Option<NaiveDate>,
+    state: State<'_, AppState>,
+) -> Result<CoverageReportView, String> {
+    let project = state.project.lock().expect("AppState.project poisoned");
+    let project = require_loaded(&project)?;
+    let today = today_or(today);
+    let (start, end) = window_or_default_quarter(today, from, to);
+    let report = core_coverage::coverage(&project.registry, &control_id, start, end, today)
+        .map_err(|e| format!("coverage: {e:#}"))?;
+
+    Ok(CoverageReportView {
+        control_id: report.control_id,
+        window_start: report.window_start,
+        window_end: report.window_end,
+        periods: report
+            .periods
+            .into_iter()
+            .map(|p| PeriodCoverageView {
+                period_id: p.period_id,
+                period_start: p.period_start,
+                period_end: p.period_end,
+                status: p.status.into(),
+                satisfied_by_run_id: p.satisfied_by.map(|r| r.run_id),
+                late: p.late,
+                skipped_reason: p.skipped_reason,
+            })
+            .collect(),
+        unclassified_runs: report
+            .unclassified_runs
+            .into_iter()
+            .map(|u| UnclassifiedRunView {
+                run_id: u.run_id,
+                period_id: u.period_id,
+                completed_at: u.completed_at,
+                reason: u.reason,
+            })
+            .collect(),
+    })
+}
+
+fn window_or_default_quarter(
+    today: NaiveDate,
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+) -> (NaiveDate, NaiveDate) {
+    use chrono::Datelike;
+    let q_first_month = match today.month() {
+        1..=3 => 1,
+        4..=6 => 4,
+        7..=9 => 7,
+        _ => 10,
+    };
+    let default_start = NaiveDate::from_ymd_opt(today.year(), q_first_month, 1).unwrap();
+    let default_end = if q_first_month == 10 {
+        NaiveDate::from_ymd_opt(today.year(), 12, 31).unwrap()
+    } else {
+        NaiveDate::from_ymd_opt(today.year(), q_first_month + 3, 1)
+            .unwrap()
+            .pred_opt()
+            .unwrap()
+    };
+    (from.unwrap_or(default_start), to.unwrap_or(default_end))
 }
 
 #[tauri::command]

@@ -47,6 +47,16 @@ enum Command {
         #[arg(long)]
         owner: Option<String>,
     },
+    /// Period-by-period coverage report for one control.
+    Coverage {
+        control_id: String,
+        /// Window start (inclusive). Defaults to start of current quarter.
+        #[arg(long, value_name = "DATE")]
+        from: Option<chrono::NaiveDate>,
+        /// Window end (inclusive). Defaults to end of current quarter.
+        #[arg(long, value_name = "DATE")]
+        to: Option<chrono::NaiveDate>,
+    },
     /// Show one control's full configuration.
     Show { control_id: String },
     /// Preview resolved scope for a control.
@@ -147,6 +157,10 @@ enum RunCmd {
         control_id: String,
         #[arg(long)]
         note: Option<String>,
+        /// Override the period this run claims (e.g. `2026-W18`,
+        /// `2026-q2`). Defaults to the current period derived from cadence.
+        #[arg(long)]
+        period: Option<String>,
         /// Print human-readable summary instead of JSON.
         #[arg(long)]
         human: bool,
@@ -184,6 +198,11 @@ fn main() -> ExitCode {
             overdue_only,
             owner,
         } => cmd::due::run(&ctx, within, overdue_only, owner.as_deref()),
+        Command::Coverage {
+            control_id,
+            from,
+            to,
+        } => cmd::coverage::run(&ctx, &control_id, from, to),
         Command::Show { control_id } => cmd::show::run(&ctx, &control_id),
         Command::Scope { control_id, at } => cmd::scope::run(&ctx, &control_id, at),
         Command::Status {
@@ -195,8 +214,9 @@ fn main() -> ExitCode {
             RunCmd::Prepare {
                 control_id,
                 note,
+                period,
                 human,
-            } => cmd::run::prepare(&ctx, &control_id, note.as_deref(), human),
+            } => cmd::run::prepare(&ctx, &control_id, note.as_deref(), period.as_deref(), human),
             RunCmd::Finalize { run_dir } => cmd::run::finalize(&ctx, &run_dir),
             RunCmd::Abort { run_dir, reason } => cmd::run::abort(&ctx, &run_dir, &reason),
             RunCmd::Resume { run_dir } => cmd::run::resume(&ctx, &run_dir),

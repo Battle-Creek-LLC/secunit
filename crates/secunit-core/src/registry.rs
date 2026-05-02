@@ -6,5 +6,7 @@
 //! does its scope expand to on this date?" — both pure functions over the
 //! loaded model so they're easy to property-test.
 
+pub mod coverage;
 pub mod loader;
+pub mod period;
 pub mod resolver;

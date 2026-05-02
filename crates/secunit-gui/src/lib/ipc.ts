@@ -152,6 +152,62 @@ export const getControl = (id: string, today?: string | null) =>
 export const dueRows = (today?: string | null) =>
   invoke<DueRowView[]>("due_rows", { today: today ?? null });
 
+export type PeriodStatus = "satisfied" | "gap" | "skipped" | "future" | "open";
+
+export interface CurrentPeriodStatus {
+  control_id: string;
+  cadence: string;
+  period_id: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  status: PeriodStatus;
+  satisfied_by_run_id: string | null;
+  late: boolean;
+}
+
+export interface PeriodCoverageView {
+  period_id: string;
+  period_start: string;
+  period_end: string;
+  status: PeriodStatus;
+  satisfied_by_run_id: string | null;
+  late: boolean;
+  skipped_reason: string | null;
+}
+
+export interface UnclassifiedRunView {
+  run_id: string;
+  period_id: string | null;
+  completed_at: string;
+  reason: string;
+}
+
+export interface CoverageReportView {
+  control_id: string;
+  window_start: string;
+  window_end: string;
+  periods: PeriodCoverageView[];
+  unclassified_runs: UnclassifiedRunView[];
+}
+
+export const currentPeriodStatus = (today?: string | null) =>
+  invoke<CurrentPeriodStatus[]>("current_period_status", {
+    today: today ?? null,
+  });
+
+export const coverage = (
+  controlId: string,
+  from?: string | null,
+  to?: string | null,
+  today?: string | null,
+) =>
+  invoke<CoverageReportView>("coverage", {
+    controlId,
+    from: from ?? null,
+    to: to ?? null,
+    today: today ?? null,
+  });
+
 export type ScheduleReason =
   | "cadence"
   | "override-due"

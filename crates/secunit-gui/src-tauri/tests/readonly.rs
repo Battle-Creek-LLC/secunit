@@ -29,6 +29,8 @@ const ALLOWLIST: &[&str] = &[
     "list_controls",
     "get_control",
     "due_rows",
+    "current_period_status",
+    "coverage",
     "get_inventory",
     "list_runs",
     "recent_runs",
