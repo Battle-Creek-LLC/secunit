@@ -9,6 +9,8 @@ import type {
 } from "@/lib/ipc";
 
 const STALLED_DAYS = 3;
+const DUE_HORIZON_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 type FocusKind = "overdue" | "due" | "stalled";
 
@@ -92,19 +94,24 @@ interface BuildArgs {
 
 function buildFocusItems({
   controls,
+  due,
   periods,
   runs,
   now,
 }: BuildArgs): FocusItem[] {
   const items: FocusItem[] = [];
-  const seen = new Set<string>();
   const runsByControl = groupRunsByControl(runs);
 
-  // Period-driven Open / Overdue. A "gap" is a current period that ended
-  // without a satisfying run; "open" is the current period still inside
-  // its window. The legacy 7-day horizon is gone — period coverage IS the
-  // signal, so a control completed this period stays quiet until the
-  // next period rolls.
+  // "Focus now" is action-shaped, not coverage-shaped. We surface:
+  //   * Overdue gaps (period ended uncovered) — always.
+  //   * Open periods whose next_due is within DUE_HORIZON_DAYS — i.e.,
+  //     work the operator should do this week. An annual control's
+  //     period is "open" for ~360 days/year; without this filter it
+  //     would crowd out actually-imminent work.
+  //   * Stalled pending runs (>STALLED_DAYS old) — finish or abort.
+  // An open period with an in-flight pending run gets a "· run prepared"
+  // tag rather than a separate item, so the user sees one row per
+  // control with the most actionable framing.
   periods.forEach((p) => {
     const c = controls.get(p.control_id);
     const inPeriod = findPendingRunInPeriod(runsByControl.get(p.control_id), p);
@@ -119,8 +126,13 @@ function buildFocusItems({
         rank: -1000,
         to: `/controls?id=${encodeURIComponent(p.control_id)}`,
       });
-      seen.add(p.control_id);
     } else if (p.status === "open") {
+      const days = daysUntilDue(due.get(p.control_id), now);
+      const withinHorizon = days != null && days <= DUE_HORIZON_DAYS;
+      // Surface when next_due is in the horizon, OR when there's a
+      // pending run in flight (operator already started — show it so
+      // they finish even if next_due is months out).
+      if (!withinHorizon && !inPeriod) return;
       items.push({
         key: `due:${p.control_id}`,
         controlId: p.control_id,
@@ -128,19 +140,17 @@ function buildFocusItems({
         kind: "due",
         badge: { label: "Open", tone: "warn" },
         detail: composeDetail(p.period_end ?? "open", inPeriod),
-        rank: 0,
+        rank: withinHorizon ? (days as number) : 100,
         to: `/controls?id=${encodeURIComponent(p.control_id)}`,
       });
-      seen.add(p.control_id);
     }
   });
 
-  const dayMs = 24 * 60 * 60 * 1000;
   runs.forEach((r) => {
     if (r.state !== "pending") return;
     const startedAt = r.started_at ? Date.parse(r.started_at) : NaN;
     if (Number.isNaN(startedAt)) return;
-    const ageDays = Math.floor((now - startedAt) / dayMs);
+    const ageDays = Math.floor((now - startedAt) / DAY_MS);
     if (ageDays < STALLED_DAYS) return;
     const c = controls.get(r.control_id);
     items.push({
@@ -157,6 +167,13 @@ function buildFocusItems({
 
   items.sort((a, b) => a.rank - b.rank);
   return items;
+}
+
+function daysUntilDue(row: DueRowView | undefined, now: number): number | null {
+  if (!row?.next_due) return null;
+  const t = Date.parse(row.next_due);
+  if (Number.isNaN(t)) return null;
+  return Math.ceil((t - now) / DAY_MS);
 }
 
 function groupRunsByControl(runs: RunRow[]): Map<string, RunRow[]> {
