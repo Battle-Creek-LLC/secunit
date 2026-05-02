@@ -131,6 +131,50 @@ fn no_command_name_smells_like_a_write() {
 }
 
 #[test]
+fn csp_does_not_relax_style_src_with_unsafe_inline() {
+    // The CSP allows `style-src-attr 'unsafe-inline'` (so React's `style={}`
+    // prop on react-router-dom's default error boundary still renders) but
+    // forbids the bare `style-src 'unsafe-inline'` that lets attackers inject
+    // <style> blocks from sanitised HTML. Catch a regression that drops the
+    // -elem/-attr split and reverts to the broad form.
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
+    let body = fs::read_to_string(&path).expect("read tauri.conf.json");
+    let csp: serde_json::Value =
+        serde_json::from_str(&body).expect("tauri.conf.json parses");
+    let csp_str = csp
+        .pointer("/app/security/csp")
+        .and_then(|v| v.as_str())
+        .expect("app.security.csp is a string");
+
+    // No `style-src 'unsafe-inline'` (must use the -elem/-attr split).
+    let directives: Vec<&str> = csp_str.split(';').map(str::trim).collect();
+    for d in &directives {
+        if let Some(rest) = d.strip_prefix("style-src ") {
+            assert!(
+                !rest.contains("'unsafe-inline'"),
+                "CSP directive `{d}` allows broad inline styles — split into \
+                 `style-src-elem 'self'` and `style-src-attr 'unsafe-inline'` \
+                 so injected <style> blocks remain blocked. See JOB-13 / Q6."
+            );
+        }
+    }
+
+    // And `script-src` must not relax to inline either — there is no React
+    // path that produces inline scripts; permitting it would defang the
+    // findings sanitiser.
+    for d in &directives {
+        if let Some(rest) = d.strip_prefix("script-src") {
+            assert!(
+                !rest.contains("'unsafe-inline'") && !rest.contains("'unsafe-eval'"),
+                "CSP `{d}` permits unsafe scripts. The findings sanitiser \
+                 strips <script> tags but defence in depth requires `script-src` \
+                 to stay strict."
+            );
+        }
+    }
+}
+
+#[test]
 fn capabilities_grant_no_fs_write() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("capabilities/default.json");
