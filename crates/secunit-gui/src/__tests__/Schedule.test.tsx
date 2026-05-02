@@ -58,6 +58,22 @@ describe("Schedule", () => {
         screen.getByText(/2 upcoming firings/),
       ).toBeInTheDocument(),
     );
+
+    // Each row links into the controls page filter+select for that id —
+    // same shape as Focus now / Recent runs rows on Overview.
+    const rowLinks = screen.getAllByRole("link");
+    expect(
+      rowLinks.find(
+        (el) =>
+          el.getAttribute("href") ===
+          "/controls?q=aa-weekly-audit-review&id=aa-weekly-audit-review",
+      ),
+    ).toBeDefined();
+    expect(
+      rowLinks.find(
+        (el) => el.getAttribute("href") === "/controls?q=ra-pentest&id=ra-pentest",
+      ),
+    ).toBeDefined();
   });
 
   it("flags overdue entries", async () => {

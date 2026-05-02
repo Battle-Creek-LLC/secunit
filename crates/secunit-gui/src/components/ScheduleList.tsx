@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { Badge, type BadgeVariant } from "@/components/ui";
 import type { ScheduleEntryView, ScheduleReason } from "@/lib/ipc";
 import { daysFromNow } from "@/lib/time";
@@ -26,54 +27,54 @@ export function ScheduleList({ entries }: { entries: ScheduleEntryView[] }) {
     });
   }, [entries]);
 
-  const hasOverrides = useMemo(
-    () => sorted.some((e) => e.reason !== "cadence"),
-    [sorted],
-  );
-
   if (sorted.length === 0) {
     return (
-      <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+      <div className="rounded-md border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
         No firings in the window.
-      </p>
+      </div>
     );
   }
 
   return (
-    <ul className="divide-y">
+    <ul className="divide-y rounded-md border bg-background">
       {sorted.map((e) => {
         const days = daysFromNow(e.date);
         const relative = relativeLabel(days, e.overdue);
         const tone = urgencyTone(days, e.overdue);
         const override = e.reason !== "cadence" ? e.reason : null;
-
+        const cid = encodeURIComponent(e.control_id);
         return (
-          <li
-            key={`${e.control_id}/${e.date}`}
-            className={cn(
-              "grid items-center gap-3 px-4 py-2 text-sm",
-              hasOverrides
-                ? "grid-cols-[auto_1fr_auto_auto_auto]"
-                : "grid-cols-[auto_1fr_auto_auto]",
-              e.overdue && "border-l-2 border-error/70 bg-error/5",
-            )}
-          >
-            <span className="font-mono text-xs text-muted-foreground">{e.date}</span>
-            <span className="font-mono text-xs">{e.control_id}</span>
-            <span className={cn("text-xs tabular-nums", tone)}>{relative}</span>
-            <span className="text-[11px] text-muted-foreground">{e.cadence}</span>
-            {hasOverrides && (
-              <span className="min-w-[5.5rem] text-right">
-                {override && (
-                  <Badge
-                    variant={overrideTone[override]}
-                    title={e.note ?? overrideLabel[override]}
-                  >
-                    {overrideLabel[override]}
-                  </Badge>
-                )}
-              </span>
-            )}
+          <li key={`${e.control_id}/${e.date}`}>
+            <Link
+              to={`/controls?q=${cid}&id=${cid}`}
+              className={cn(
+                "flex items-center gap-3 px-4 py-2.5 text-sm",
+                "hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                e.overdue && "border-l-2 border-error/70 bg-error/5",
+              )}
+            >
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate font-mono text-xs text-muted-foreground">
+                  {e.control_id}
+                </span>
+                <span className="truncate font-medium">
+                  {e.cadence} · {e.date}
+                  {relative && (
+                    <span className={cn("ml-1.5 tabular-nums", tone)}>
+                      · {relative}
+                    </span>
+                  )}
+                </span>
+              </div>
+              {override && (
+                <Badge
+                  variant={overrideTone[override]}
+                  title={e.note ?? overrideLabel[override]}
+                >
+                  {overrideLabel[override]}
+                </Badge>
+              )}
+            </Link>
           </li>
         );
       })}
