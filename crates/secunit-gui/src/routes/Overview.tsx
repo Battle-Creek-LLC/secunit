@@ -7,6 +7,7 @@ import { HowAmIDoing } from "@/components/HowAmIDoing";
 import { RunTimeline } from "@/components/RunTimeline";
 
 const STALLED_DAYS = 3;
+const DUE_HORIZON_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function Overview() {
@@ -14,16 +15,23 @@ export function Overview() {
 
   const counts = useMemo(() => {
     const now = Date.now();
-    // Period coverage replaces the 7-day "due-soon" horizon. A control is
-    // "open" when its current period exists and isn't yet satisfied;
-    // "overdue" comes straight from the period status (a past gap, not a
-    // grace-window edge). Continuous controls have no period and are
-    // intentionally counted in neither bucket.
+    // Overdue counts past-grace gaps (periods that ended without a
+    // satisfier). "Due this week" counts open periods whose period_end
+    // is within DUE_HORIZON_DAYS — period_end is the actual lapse
+    // deadline, and an annual control's period is "open" for ~360
+    // days/year, so gating on period_end keeps the count honest.
     let overdue = 0;
-    let open = 0;
+    let dueSoon = 0;
     snapshot.periods.forEach((p) => {
-      if (p.status === "gap") overdue += 1;
-      else if (p.status === "open") open += 1;
+      if (p.status === "gap") {
+        overdue += 1;
+      } else if (p.status === "open") {
+        if (!p.period_end) return;
+        const t = Date.parse(p.period_end);
+        if (Number.isNaN(t)) return;
+        const days = Math.ceil((t - now) / DAY_MS);
+        if (days >= 0 && days <= DUE_HORIZON_DAYS) dueSoon += 1;
+      }
     });
     let stalled = 0;
     snapshot.runs.forEach((r) => {
@@ -31,7 +39,7 @@ export function Overview() {
       const t = Date.parse(r.started_at);
       if (!Number.isNaN(t) && now - t > STALLED_DAYS * DAY_MS) stalled += 1;
     });
-    return { overdue, dueSoon: open, stalled };
+    return { overdue, dueSoon, stalled };
   }, [snapshot]);
 
   const recent = useMemo(() => snapshot.runs.slice(0, 25), [snapshot.runs]);
@@ -63,7 +71,6 @@ export function Overview() {
             </h2>
             <FocusList
               controls={snapshot.controls}
-              due={snapshot.due}
               periods={snapshot.periods}
               runs={snapshot.runs}
             />

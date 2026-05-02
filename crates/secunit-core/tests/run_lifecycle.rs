@@ -539,6 +539,24 @@ fn prepare_with_period_override_claims_past_week() {
 }
 
 #[test]
+fn prepare_without_period_id_anchors_on_today_not_next_due() {
+    // Sat 2026-05-02 is in ISO week W18; the next weekly Monday firing
+    // is 2026-05-04, which is in W19. period_id must record the calendar
+    // week the work was done in (W18), so coverage attributes the run
+    // to the open W18 period — anchoring on next_due would mis-claim W19
+    // and leave W18 stuck Open forever.
+    let (_tmp, root) = staged_fixture();
+    let (reg, _) = loader::load(&root);
+
+    let opts = PrepareOpts {
+        today: Some(NaiveDate::from_ymd_opt(2026, 5, 2).unwrap()),
+        ..Default::default()
+    };
+    let ctx = runner::prepare(&reg, CONTROL, &opts).expect("prepare");
+    assert_eq!(ctx.period_id.as_deref(), Some("2026-W18"));
+}
+
+#[test]
 fn coverage_buckets_periods_after_two_runs() {
     let (_tmp, root) = staged_fixture();
     // Two complete weekly runs: W19 (May 4) and W20 (May 11).

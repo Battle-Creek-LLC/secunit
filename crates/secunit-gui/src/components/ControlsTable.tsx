@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import type { ControlSummary } from "@/lib/ipc";
 import { cn } from "@/lib/cn";
 import { relTime, daysFromNow } from "@/lib/time";
+import { status, urgency, type Urgency } from "@/lib/controlStatus";
 
 type SortKey = "id" | "title" | "cadence" | "owner" | "next_due" | "status";
 
@@ -97,6 +98,7 @@ function Row({
   onSelect: (id: string) => void;
 }) {
   const dueDelta = useMemo(() => daysFromNow(row.next_due), [row.next_due]);
+  const u = useMemo(() => urgency(row), [row]);
   return (
     <TR
       data-state={isSelected ? "selected" : undefined}
@@ -112,11 +114,11 @@ function Row({
       <TD className="text-xs">{row.owner}</TD>
       <TD title={row.next_due ?? "—"}>
         {row.next_due ? (
-          <span className="text-xs">
+          <span className={cn("text-xs", urgencyToneClass(u))}>
             {row.next_due}
             {dueDelta !== null && (
-              <span className="ml-2 text-muted-foreground">
-                ({dueDelta >= 0 ? `in ${dueDelta}d` : `${-dueDelta}d ago`})
+              <span className="ml-2 opacity-80">
+                ({urgencyDeltaLabel(u, dueDelta)})
               </span>
             )}
           </span>
@@ -125,11 +127,28 @@ function Row({
         )}
       </TD>
       <TD>
-        <StatusBadge status={row.status} />
+        <StatusBadge status={status(row)} />
       </TD>
       <TD className="text-xs text-muted-foreground" title={row.last_run_at ?? "never"}>
         {row.last_run_at ? relTime(row.last_run_at) : "never"}
       </TD>
     </TR>
   );
+}
+
+function urgencyToneClass(u: Urgency): string {
+  switch (u) {
+    case "overdue":
+      return "font-medium text-error";
+    case "due-soon":
+      return "font-medium text-warn";
+    default:
+      return "";
+  }
+}
+
+function urgencyDeltaLabel(u: Urgency, days: number): string {
+  if (u === "overdue") return `${Math.abs(days)}d overdue`;
+  if (days === 0) return "today";
+  return days >= 0 ? `in ${days}d` : `${-days}d ago`;
 }

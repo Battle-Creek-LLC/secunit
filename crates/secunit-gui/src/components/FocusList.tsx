@@ -1,14 +1,11 @@
 import { Link } from "react-router-dom";
 import { Badge, type BadgeVariant } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import type {
-  ControlSummary,
-  CurrentPeriodStatus,
-  DueRowView,
-  RunRow,
-} from "@/lib/ipc";
+import type { ControlSummary, CurrentPeriodStatus, RunRow } from "@/lib/ipc";
 
 const STALLED_DAYS = 3;
+const DUE_HORIZON_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 type FocusKind = "overdue" | "due" | "stalled";
 
@@ -26,7 +23,6 @@ interface FocusItem {
 
 interface FocusListProps {
   controls: Map<string, ControlSummary>;
-  due: Map<string, DueRowView>;
   periods: Map<string, CurrentPeriodStatus>;
   runs: RunRow[];
   now?: number;
@@ -35,13 +31,12 @@ interface FocusListProps {
 
 export function FocusList({
   controls,
-  due,
   periods,
   runs,
   now = Date.now(),
   limit = 8,
 }: FocusListProps) {
-  const items = buildFocusItems({ controls, due, periods, runs, now });
+  const items = buildFocusItems({ controls, periods, runs, now });
   const top = items.slice(0, limit);
   if (top.length === 0) {
     return (
@@ -84,7 +79,6 @@ export function FocusList({
 
 interface BuildArgs {
   controls: Map<string, ControlSummary>;
-  due: Map<string, DueRowView>;
   periods: Map<string, CurrentPeriodStatus>;
   runs: RunRow[];
   now: number;
@@ -97,15 +91,23 @@ function buildFocusItems({
   now,
 }: BuildArgs): FocusItem[] {
   const items: FocusItem[] = [];
-  const seen = new Set<string>();
+  const runsByControl = groupRunsByControl(runs);
 
-  // Period-driven Open / Overdue. A "gap" is a current period that ended
-  // without a satisfying run; "open" is the current period still inside
-  // its window. The legacy 7-day horizon is gone — period coverage IS the
-  // signal, so a control completed this period stays quiet until the
-  // next period rolls.
+  // "Focus now" is action-shaped, not coverage-shaped. We surface:
+  //   * Overdue gaps (period ended uncovered) — always.
+  //   * Open periods whose period_end is within DUE_HORIZON_DAYS — i.e.,
+  //     work the operator should do this week. period_end is the actual
+  //     lapse deadline (once today > period_end with no satisfier, the
+  //     period flips to gap); next_due is the next scheduled fire date,
+  //     which can be later. An annual control's period is "open" for
+  //     ~360 days/year, so this filter is what keeps the list useful.
+  //   * Stalled pending runs (>STALLED_DAYS old) — finish or abort.
+  // An open period with an in-flight pending run gets a "· run prepared"
+  // tag rather than a separate item, so the user sees one row per
+  // control with the most actionable framing.
   periods.forEach((p) => {
     const c = controls.get(p.control_id);
+    const inPeriod = findPendingRunInPeriod(runsByControl.get(p.control_id), p);
     if (p.status === "gap") {
       items.push({
         key: `overdue:${p.control_id}`,
@@ -113,36 +115,35 @@ function buildFocusItems({
         cadence: c?.cadence ?? p.cadence,
         kind: "overdue",
         badge: { label: "Overdue", tone: "error" },
-        detail: p.period_id ? `gap on ${p.period_id}` : "uncovered period",
+        detail: composeDetail(p.period_end ?? "uncovered period", inPeriod),
         rank: -1000,
         to: `/controls?id=${encodeURIComponent(p.control_id)}`,
       });
-      seen.add(p.control_id);
     } else if (p.status === "open") {
+      const days = daysUntilIso(p.period_end, now);
+      const withinHorizon = days != null && days <= DUE_HORIZON_DAYS;
+      // Surface when period_end is in the horizon, OR when there's a
+      // pending run in flight (operator already started — show it so
+      // they finish even if the deadline is months out).
+      if (!withinHorizon && !inPeriod) return;
       items.push({
         key: `due:${p.control_id}`,
         controlId: p.control_id,
         cadence: c?.cadence ?? p.cadence,
         kind: "due",
         badge: { label: "Open", tone: "warn" },
-        detail: p.period_id
-          ? `current period ${p.period_id}${
-              p.period_end ? ` ends ${p.period_end}` : ""
-            }`
-          : "current period",
-        rank: 0,
+        detail: composeDetail(p.period_end ?? "open", inPeriod),
+        rank: withinHorizon ? (days as number) : 100,
         to: `/controls?id=${encodeURIComponent(p.control_id)}`,
       });
-      seen.add(p.control_id);
     }
   });
 
-  const dayMs = 24 * 60 * 60 * 1000;
   runs.forEach((r) => {
     if (r.state !== "pending") return;
     const startedAt = r.started_at ? Date.parse(r.started_at) : NaN;
     if (Number.isNaN(startedAt)) return;
-    const ageDays = Math.floor((now - startedAt) / dayMs);
+    const ageDays = Math.floor((now - startedAt) / DAY_MS);
     if (ageDays < STALLED_DAYS) return;
     const c = controls.get(r.control_id);
     items.push({
@@ -159,4 +160,47 @@ function buildFocusItems({
 
   items.sort((a, b) => a.rank - b.rank);
   return items;
+}
+
+function daysUntilIso(date: string | null, now: number): number | null {
+  if (!date) return null;
+  const t = Date.parse(date);
+  if (Number.isNaN(t)) return null;
+  return Math.ceil((t - now) / DAY_MS);
+}
+
+function groupRunsByControl(runs: RunRow[]): Map<string, RunRow[]> {
+  const m = new Map<string, RunRow[]>();
+  runs.forEach((r) => {
+    const arr = m.get(r.control_id);
+    if (arr) arr.push(r);
+    else m.set(r.control_id, [r]);
+  });
+  return m;
+}
+
+// A pending run inside the period window is in-flight work the user
+// already started — worth surfacing so they finish it. A sealed run in
+// the same window would normally flip the period to "satisfied" and
+// drop it from focus entirely, so we don't tag that case.
+function findPendingRunInPeriod(
+  rs: RunRow[] | undefined,
+  p: CurrentPeriodStatus,
+): RunRow | null {
+  if (!rs || rs.length === 0) return null;
+  const start = p.period_start ? Date.parse(p.period_start) : NaN;
+  const end = p.period_end ? Date.parse(p.period_end) : NaN;
+  for (const r of rs) {
+    if (r.state !== "pending") continue;
+    const t = r.started_at ? Date.parse(r.started_at) : NaN;
+    if (Number.isNaN(t)) continue;
+    if (!Number.isNaN(start) && t < start) continue;
+    if (!Number.isNaN(end) && t > end + 24 * 60 * 60 * 1000) continue;
+    return r;
+  }
+  return null;
+}
+
+function composeDetail(base: string, run: RunRow | null): string {
+  return run ? `${base} · run prepared` : base;
 }

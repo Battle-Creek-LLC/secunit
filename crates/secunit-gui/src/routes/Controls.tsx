@@ -4,15 +4,24 @@ import { useStore } from "@/store";
 import { ControlsTable } from "@/components/ControlsTable";
 import { ControlDetailPane } from "@/components/ControlDetail";
 import { Input, Label, Select } from "@/components/ui";
-import type { ControlStatus } from "@/lib/ipc";
+import type { ControlSummary } from "@/lib/ipc";
+import { status, urgency } from "@/lib/controlStatus";
 
-const STATUSES: Array<{ key: string; label: string; match: (s: ControlStatus) => boolean }> = [
+// Filters intentionally mix the two axes — pure status (sealed, failed,
+// in-progress, never-run) and urgency (overdue, due-soon) — so the user
+// can ask either kind of question from one dropdown.
+const STATUSES: Array<{
+  key: string;
+  label: string;
+  match: (c: ControlSummary) => boolean;
+}> = [
   { key: "all", label: "all", match: () => true },
-  { key: "overdue", label: "overdue", match: (s) => s === "overdue" },
-  { key: "due-soon", label: "due soon", match: (s) => s === "due-soon" },
-  { key: "in-progress", label: "in progress", match: (s) => s === "in-progress" },
-  { key: "sealed", label: "sealed", match: (s) => s === "sealed" },
-  { key: "never-run", label: "never run", match: (s) => s === "never-run" },
+  { key: "overdue", label: "overdue", match: (c) => urgency(c) === "overdue" },
+  { key: "due-soon", label: "due soon", match: (c) => urgency(c) === "due-soon" },
+  { key: "in-progress", label: "in progress", match: (c) => status(c) === "in-progress" },
+  { key: "failed", label: "failed", match: (c) => status(c) === "failed" },
+  { key: "sealed", label: "sealed", match: (c) => status(c) === "sealed" },
+  { key: "never-run", label: "never run", match: (c) => status(c) === "never-run" },
 ];
 
 const CADENCES = [
@@ -31,7 +40,7 @@ type SortKey = "id" | "title" | "cadence" | "owner" | "next_due" | "status";
 export function Controls() {
   const [params, setParams] = useSearchParams();
   const snapshot = useStore();
-  const status = params.get("status") ?? "all";
+  const statusKey = params.get("status") ?? "all";
   const cadence = params.get("cadence") ?? "all";
   const query = params.get("q") ?? "";
   const selected = params.get("id");
@@ -40,11 +49,11 @@ export function Controls() {
 
   const filtered = useMemo(() => {
     const all = Array.from(snapshot.controls.values());
-    const statusFilter = STATUSES.find((s) => s.key === status) ?? STATUSES[0]!;
+    const statusFilter = STATUSES.find((s) => s.key === statusKey) ?? STATUSES[0]!;
     const q = query.trim().toLowerCase();
     let rows = all.filter(
       (c) =>
-        statusFilter.match(c.status) &&
+        statusFilter.match(c) &&
         (cadence === "all" || c.cadence === cadence) &&
         (q === "" ||
           c.id.toLowerCase().includes(q) ||
@@ -56,7 +65,7 @@ export function Controls() {
       return sortAsc ? cmp : -cmp;
     });
     return rows;
-  }, [snapshot.controls, status, cadence, query, sort, sortAsc]);
+  }, [snapshot.controls, statusKey, cadence, query, sort, sortAsc]);
 
   const updateParam = (key: string, value: string | null) => {
     setParams((prev) => {
@@ -104,7 +113,7 @@ export function Controls() {
             <Select
               id="status"
               className="w-36"
-              value={status}
+              value={statusKey}
               onChange={(v) => updateParam("status", v)}
               options={STATUSES.map((s) => ({ value: s.key, label: s.label }))}
             />
@@ -141,11 +150,7 @@ export function Controls() {
   );
 }
 
-function compare(
-  a: { id: string; title: string; cadence: string; owner: string; next_due: string | null; status: string },
-  b: { id: string; title: string; cadence: string; owner: string; next_due: string | null; status: string },
-  key: SortKey,
-): number {
+function compare(a: ControlSummary, b: ControlSummary, key: SortKey): number {
   switch (key) {
     case "id":
       return a.id.localeCompare(b.id);
@@ -156,7 +161,7 @@ function compare(
     case "owner":
       return a.owner.localeCompare(b.owner);
     case "status":
-      return a.status.localeCompare(b.status);
+      return status(a).localeCompare(status(b));
     case "next_due": {
       // nulls at the end on asc, at the start on desc — mirror cli's `secunit due`.
       if (a.next_due == null && b.next_due == null) return a.id.localeCompare(b.id);
