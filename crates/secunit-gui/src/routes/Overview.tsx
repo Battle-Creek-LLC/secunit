@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { useStore } from "@/store";
 import { AlertStrip } from "@/components/AlertStrip";
 import { FocusList } from "@/components/FocusList";
@@ -84,14 +83,12 @@ export function Overview() {
           <HowAmIDoing controls={snapshot.controls} runs={snapshot.runs} />
         </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent runs</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <RunTimeline runs={recent} emptyHint="no runs in evidence/ yet" />
-          </CardContent>
-        </Card>
+        <section className="flex flex-col gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Recent runs
+          </h2>
+          <RunTimeline runs={recent} emptyHint="no runs in evidence/ yet" />
+        </section>
       </div>
     </div>
   );
