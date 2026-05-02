@@ -43,10 +43,7 @@ pub fn run(
         return Ok(ExitCode::SUCCESS);
     }
 
-    println!(
-        "{:<14} {:<12} {:<24} {}",
-        "PERIOD", "STATUS", "EVIDENCE", "NOTE"
-    );
+    println!("{:<14} {:<12} {:<24} NOTE", "PERIOD", "STATUS", "EVIDENCE");
     let mut satisfied = 0;
     let mut gaps = 0;
     let mut open = 0;
@@ -76,10 +73,13 @@ pub fn run(
             .as_ref()
             .map(|r| r.run_id.clone())
             .unwrap_or_else(|| "—".to_string());
-        let note = p
-            .skipped_reason
-            .clone()
-            .unwrap_or_else(|| if p.late { "completed late".into() } else { String::new() });
+        let note = p.skipped_reason.clone().unwrap_or_else(|| {
+            if p.late {
+                "completed late".into()
+            } else {
+                String::new()
+            }
+        });
         println!(
             "{:<14} {:<12} {:<24} {}",
             p.period_id, status_label, evidence, note

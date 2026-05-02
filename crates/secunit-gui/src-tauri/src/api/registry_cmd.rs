@@ -79,8 +79,7 @@ pub fn load_project(
         root: root.display().to_string(),
         controls_count: registry.controls.len(),
         inventory_count: registry.inventory.iter().count(),
-        has_state: !registry.state.controls.is_empty()
-            || registry.state.updated_at.is_some(),
+        has_state: !registry.state.controls.is_empty() || registry.state.updated_at.is_some(),
         has_config: registry.config.org.is_some()
             || !registry.config.owners.is_empty()
             || !registry.config.integrations.is_empty(),
@@ -324,9 +323,7 @@ pub fn current_period_status(
             continue;
         }
         let pid = period::derive(ctrl.cadence, today);
-        let bounds = pid
-            .as_deref()
-            .and_then(|p| period::bounds(ctrl.cadence, p));
+        let bounds = pid.as_deref().and_then(|p| period::bounds(ctrl.cadence, p));
         let (period_start, period_end) = match bounds {
             Some((s, e)) => (Some(s), Some(e)),
             None => (None, None),
@@ -340,9 +337,7 @@ pub fn current_period_status(
             }
             _ => None,
         };
-        let current = report
-            .as_ref()
-            .and_then(|r| r.periods.first().cloned());
+        let current = report.as_ref().and_then(|r| r.periods.first().cloned());
         let (status, satisfied_by, late) = match current {
             Some(p) => (
                 PeriodStatusView::from(p.status),
@@ -590,10 +585,7 @@ pub fn list_runs(
 }
 
 #[tauri::command]
-pub fn recent_runs(
-    limit: usize,
-    state: State<'_, AppState>,
-) -> Result<Vec<RunRow>, String> {
+pub fn recent_runs(limit: usize, state: State<'_, AppState>) -> Result<Vec<RunRow>, String> {
     let project = state.project.lock().expect("AppState.project poisoned");
     let project = require_loaded(&project)?;
     let mut rows = walk_runs(&project.root);
@@ -604,10 +596,7 @@ pub fn recent_runs(
 const ARTIFACT_PREVIEW_CAP: u64 = 2 * 1024 * 1024; // 2 MiB
 
 #[tauri::command]
-pub fn read_artifact(
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<ArtifactView, String> {
+pub fn read_artifact(path: String, state: State<'_, AppState>) -> Result<ArtifactView, String> {
     let project_root = {
         let project = state.project.lock().expect("AppState.project poisoned");
         let project = require_loaded(&project)?;
@@ -625,8 +614,8 @@ pub fn read_artifact(
         return Err("artifact path escapes project root".into());
     }
 
-    let metadata = std::fs::metadata(&canonical)
-        .map_err(|e| format!("stat {}: {e}", canonical.display()))?;
+    let metadata =
+        std::fs::metadata(&canonical).map_err(|e| format!("stat {}: {e}", canonical.display()))?;
     let bytes = metadata.len();
 
     let ext = canonical
@@ -719,7 +708,11 @@ pub fn list_findings(
             Ok(n) => n,
             Err(_) => continue,
         };
-        for q_entry in std::fs::read_dir(&year_path).into_iter().flatten().flatten() {
+        for q_entry in std::fs::read_dir(&year_path)
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
             let q_path = q_entry.path();
             if !q_path.is_dir() {
                 continue;
@@ -745,7 +738,11 @@ pub fn list_findings(
                 if !ctrl_path.is_dir() {
                     continue;
                 }
-                for run_entry in std::fs::read_dir(&ctrl_path).into_iter().flatten().flatten() {
+                for run_entry in std::fs::read_dir(&ctrl_path)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                {
                     let run_path = run_entry.path();
                     if !run_path.is_dir() {
                         continue;
@@ -762,8 +759,8 @@ pub fn list_findings(
                             let metadata = f.metadata().ok();
                             let bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
                             let manifest_path = run_path.join("manifest.json");
-                            let completed_at = read_manifest(&manifest_path)
-                                .map(|m| m.completed_at);
+                            let completed_at =
+                                read_manifest(&manifest_path).map(|m| m.completed_at);
                             let run_state = if manifest_path.exists() {
                                 RunState::Sealed
                             } else {
@@ -826,9 +823,7 @@ pub fn read_findings(
             break;
         }
     }
-    let path = found.ok_or_else(|| {
-        format!("findings.md not found for {control_id}/{run_id}")
-    })?;
+    let path = found.ok_or_else(|| format!("findings.md not found for {control_id}/{run_id}"))?;
     let canonical = path
         .canonicalize()
         .map_err(|e| format!("canonicalise {}: {e}", path.display()))?;
@@ -891,16 +886,13 @@ pub fn get_run(
     })
 }
 
-fn read_json_if_present<T: serde::de::DeserializeOwned>(
-    path: &Path,
-) -> Result<Option<T>, String> {
+fn read_json_if_present<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
     if !path.exists() {
         return Ok(None);
     }
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
-    let v = serde_json::from_str(&text)
-        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let v = serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
     Ok(Some(v))
 }
 
@@ -960,7 +952,11 @@ fn walk_runs(root: &Path) -> Vec<RunRow> {
             Ok(n) => n,
             Err(_) => continue,
         };
-        for q in std::fs::read_dir(&year_path).into_iter().flatten().flatten() {
+        for q in std::fs::read_dir(&year_path)
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
             let q_path = q.path();
             if !q_path.is_dir() {
                 continue;
@@ -976,7 +972,11 @@ fn walk_runs(root: &Path) -> Vec<RunRow> {
                     continue;
                 }
                 let control_id = ctrl.file_name().to_string_lossy().into_owned();
-                for run in std::fs::read_dir(&ctrl_path).into_iter().flatten().flatten() {
+                for run in std::fs::read_dir(&ctrl_path)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                {
                     let run_path = run.path();
                     if !run_path.is_dir() {
                         continue;
@@ -1015,10 +1015,14 @@ fn row_from_run_dir(
     let (state, started_at, completed_at, manifest_sha) =
         if let Some(m) = read_manifest(&manifest_path) {
             let sha = sha256_of_file(&manifest_path);
-            (RunState::Sealed, Some(m.started_at), Some(m.completed_at), sha)
+            (
+                RunState::Sealed,
+                Some(m.started_at),
+                Some(m.completed_at),
+                sha,
+            )
         } else if pending_path.exists() {
-            let started = read_prepare(&run_dir.join("prepare.json"))
-                .map(|p| p.started_at);
+            let started = read_prepare(&run_dir.join("prepare.json")).map(|p| p.started_at);
             (RunState::Pending, started, None, None)
         } else {
             (RunState::Pending, None, None, None)
@@ -1155,5 +1159,4 @@ mod tests {
         let names: Vec<_> = tree.iter().map(|n| n.name.as_str()).collect();
         assert_eq!(names, vec!["a.txt", "sub", "z.txt"]);
     }
-
 }

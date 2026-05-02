@@ -38,10 +38,7 @@ pub fn derive(cadence: Cadence, target_date: NaiveDate) -> Option<String> {
             Some(format!("{:04}-H{}", target_date.year(), h))
         }
         Cadence::Annual => Some(format!("{:04}", target_date.year())),
-        Cadence::Scheduled => Some(format!(
-            "scheduled-{}",
-            target_date.format("%Y-%m-%d")
-        )),
+        Cadence::Scheduled => Some(format!("scheduled-{}", target_date.format("%Y-%m-%d"))),
     }
 }
 
@@ -154,28 +151,64 @@ mod tests {
     #[test]
     fn derive_weekly_iso_week_format() {
         // 2026-05-04 is a Monday in ISO week 19 of 2026.
-        assert_eq!(derive(Cadence::Weekly, d(2026, 5, 4)), Some("2026-W19".into()));
+        assert_eq!(
+            derive(Cadence::Weekly, d(2026, 5, 4)),
+            Some("2026-W19".into())
+        );
         // 2026-05-02 is a Saturday in ISO week 18 of 2026.
-        assert_eq!(derive(Cadence::Weekly, d(2026, 5, 2)), Some("2026-W18".into()));
+        assert_eq!(
+            derive(Cadence::Weekly, d(2026, 5, 2)),
+            Some("2026-W18".into())
+        );
         // Year-boundary: 2026-01-01 is a Thursday in ISO week 1 of 2026.
-        assert_eq!(derive(Cadence::Weekly, d(2026, 1, 1)), Some("2026-W01".into()));
+        assert_eq!(
+            derive(Cadence::Weekly, d(2026, 1, 1)),
+            Some("2026-W01".into())
+        );
         // 2024-12-30 (Mon) is in ISO week 1 of 2025 — chrono should report
         // the ISO year, not the calendar year.
-        assert_eq!(derive(Cadence::Weekly, d(2024, 12, 30)), Some("2025-W01".into()));
+        assert_eq!(
+            derive(Cadence::Weekly, d(2024, 12, 30)),
+            Some("2025-W01".into())
+        );
     }
 
     #[test]
     fn derive_monthly_quarterly_semiannual_annual() {
-        assert_eq!(derive(Cadence::Monthly, d(2026, 5, 4)), Some("2026-05".into()));
-        assert_eq!(derive(Cadence::Monthly, d(2026, 12, 31)), Some("2026-12".into()));
+        assert_eq!(
+            derive(Cadence::Monthly, d(2026, 5, 4)),
+            Some("2026-05".into())
+        );
+        assert_eq!(
+            derive(Cadence::Monthly, d(2026, 12, 31)),
+            Some("2026-12".into())
+        );
 
-        assert_eq!(derive(Cadence::Quarterly, d(2026, 1, 1)), Some("2026-q1".into()));
-        assert_eq!(derive(Cadence::Quarterly, d(2026, 5, 4)), Some("2026-q2".into()));
-        assert_eq!(derive(Cadence::Quarterly, d(2026, 7, 1)), Some("2026-q3".into()));
-        assert_eq!(derive(Cadence::Quarterly, d(2026, 12, 31)), Some("2026-q4".into()));
+        assert_eq!(
+            derive(Cadence::Quarterly, d(2026, 1, 1)),
+            Some("2026-q1".into())
+        );
+        assert_eq!(
+            derive(Cadence::Quarterly, d(2026, 5, 4)),
+            Some("2026-q2".into())
+        );
+        assert_eq!(
+            derive(Cadence::Quarterly, d(2026, 7, 1)),
+            Some("2026-q3".into())
+        );
+        assert_eq!(
+            derive(Cadence::Quarterly, d(2026, 12, 31)),
+            Some("2026-q4".into())
+        );
 
-        assert_eq!(derive(Cadence::SemiAnnual, d(2026, 6, 30)), Some("2026-H1".into()));
-        assert_eq!(derive(Cadence::SemiAnnual, d(2026, 7, 1)), Some("2026-H2".into()));
+        assert_eq!(
+            derive(Cadence::SemiAnnual, d(2026, 6, 30)),
+            Some("2026-H1".into())
+        );
+        assert_eq!(
+            derive(Cadence::SemiAnnual, d(2026, 7, 1)),
+            Some("2026-H2".into())
+        );
 
         assert_eq!(derive(Cadence::Annual, d(2026, 5, 4)), Some("2026".into()));
     }

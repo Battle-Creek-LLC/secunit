@@ -151,8 +151,7 @@ pub fn start<S: EventSink>(
     });
 
     let (tx, rx) = std::sync::mpsc::channel::<DebounceEventResult>();
-    let mut debouncer = new_debouncer(debounce, None, tx)
-        .map_err(|e| format!("debouncer: {e}"))?;
+    let mut debouncer = new_debouncer(debounce, None, tx).map_err(|e| format!("debouncer: {e}"))?;
     debouncer
         .watch(&root, RecursiveMode::Recursive)
         .map_err(|e| format!("watch {}: {e}", root.display()))?;
@@ -248,12 +247,7 @@ fn classify(root: &Path, path: &Path) -> Option<WatcherEvent> {
     }
 }
 
-fn classify_evidence(
-    control: &str,
-    run: &str,
-    rest: &[&str],
-    abs: &Path,
-) -> Option<WatcherEvent> {
+fn classify_evidence(control: &str, run: &str, rest: &[&str], abs: &Path) -> Option<WatcherEvent> {
     if rest.is_empty() {
         return None;
     }
@@ -353,7 +347,8 @@ mod tests {
             Some(WatcherEvent::FindingsChanged {
                 control_id: "aa-weekly-audit-review".into(),
                 run_id: "run-001".into(),
-                path: "/r/evidence/2026/q2/aa-weekly-audit-review/run-001/by-system/x/findings.md".into(),
+                path: "/r/evidence/2026/q2/aa-weekly-audit-review/run-001/by-system/x/findings.md"
+                    .into(),
             })
         );
         assert_eq!(classify(root, &root.join("README.md")), None);
@@ -376,10 +371,12 @@ mod tests {
         std::fs::write(&target, "id: aa-weekly-audit-review\nupdated: true\n").unwrap();
 
         settle(&sink, |evs| {
-            evs.iter().any(|e| matches!(
-                e,
-                WatcherEvent::ControlChanged { id, .. } if id == "aa-weekly-audit-review"
-            ))
+            evs.iter().any(|e| {
+                matches!(
+                    e,
+                    WatcherEvent::ControlChanged { id, .. } if id == "aa-weekly-audit-review"
+                )
+            })
         });
     }
 
@@ -542,12 +539,14 @@ mod tests {
         std::fs::write(run.join("manifest.json"), "{}").unwrap();
 
         settle(&sink, |evs| {
-            evs.iter().any(|e| matches!(
-                e,
-                WatcherEvent::RunStateChanged { change, control_id, .. }
-                    if *change == RunChange::Sealed
-                    && control_id == "sca-weekly-dependency-scan"
-            ))
+            evs.iter().any(|e| {
+                matches!(
+                    e,
+                    WatcherEvent::RunStateChanged { change, control_id, .. }
+                        if *change == RunChange::Sealed
+                        && control_id == "sca-weekly-dependency-scan"
+                )
+            })
         });
     }
 }

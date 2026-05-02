@@ -14,10 +14,44 @@ use pulldown_cmark::{html as md_html, Options, Parser};
 /// inline images, so the attribute surface is one less thing to police.
 fn allowed_tags() -> std::collections::HashSet<&'static str> {
     [
-        "a", "abbr", "b", "blockquote", "br", "code", "del", "details", "em", "h1", "h2", "h3",
-        "h4", "h5", "h6", "hr", "i", "ins", "kbd", "li", "ol", "p", "pre", "s",
-        "samp", "strong", "sub", "summary", "sup", "table", "tbody", "td", "tfoot", "th",
-        "thead", "tr", "ul", "var",
+        "a",
+        "abbr",
+        "b",
+        "blockquote",
+        "br",
+        "code",
+        "del",
+        "details",
+        "em",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hr",
+        "i",
+        "ins",
+        "kbd",
+        "li",
+        "ol",
+        "p",
+        "pre",
+        "s",
+        "samp",
+        "strong",
+        "sub",
+        "summary",
+        "sup",
+        "table",
+        "tbody",
+        "td",
+        "tfoot",
+        "th",
+        "thead",
+        "tr",
+        "ul",
+        "var",
     ]
     .into_iter()
     .collect()
@@ -53,7 +87,8 @@ mod tests {
 
     #[test]
     fn renders_basic_markdown() {
-        let html = render_findings("# Hello\n\nA **bold** line and a [link](https://example.com).\n");
+        let html =
+            render_findings("# Hello\n\nA **bold** line and a [link](https://example.com).\n");
         assert!(html.contains("<h1>"));
         assert!(html.contains("<strong>bold</strong>"));
         assert!(html.contains("href=\"https://example.com\""));
@@ -61,9 +96,7 @@ mod tests {
 
     #[test]
     fn renders_tables() {
-        let html = render_findings(
-            "| a | b |\n|---|---|\n| 1 | 2 |\n",
-        );
+        let html = render_findings("| a | b |\n|---|---|\n| 1 | 2 |\n");
         assert!(html.contains("<table>"));
         assert!(html.contains("<th>a</th>"));
         assert!(html.contains("<td>2</td>"));

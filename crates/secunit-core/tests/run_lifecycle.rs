@@ -259,7 +259,10 @@ fn abort_seals_failed_manifest_and_clears_sentinel() {
 
     let manifest = runner::abort(&reg, &ctx.run_dir, "operator-cancelled").expect("abort");
     assert_eq!(manifest.run_id, ctx.run_id);
-    assert_eq!(manifest.failure_reason.as_deref(), Some("operator-cancelled"));
+    assert_eq!(
+        manifest.failure_reason.as_deref(),
+        Some("operator-cancelled")
+    );
 
     let manifest_path = ctx.run_dir.join("manifest.json");
     assert!(manifest_path.exists(), "manifest.json should be written");
@@ -566,7 +569,11 @@ fn coverage_buckets_periods_after_two_runs() {
 
     // Both satisfied weeks have a satisfier; neither was late (Mon run
     // for the same ISO week).
-    let w19 = report.periods.iter().find(|p| p.period_id == "2026-W19").unwrap();
+    let w19 = report
+        .periods
+        .iter()
+        .find(|p| p.period_id == "2026-W19")
+        .unwrap();
     assert!(w19.satisfied_by.is_some());
     assert!(!w19.late);
 }

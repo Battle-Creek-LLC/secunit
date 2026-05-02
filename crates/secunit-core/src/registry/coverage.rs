@@ -94,24 +94,16 @@ pub fn expected_periods(
     }
     let mut out: Vec<(String, NaiveDate, NaiveDate)> = Vec::new();
     let mut cursor = window_start;
-    loop {
-        let pid = match period::derive(control.cadence, cursor) {
-            Some(p) => p,
-            None => break,
-        };
-        let (start, end) = match period::bounds(control.cadence, &pid) {
-            Some(b) => b,
-            None => break,
+    while let Some(pid) = period::derive(control.cadence, cursor) {
+        let Some((start, end)) = period::bounds(control.cadence, &pid) else {
+            break;
         };
         // Defensive guard against pathological bounds that don't move
         // forward (would otherwise infinite-loop).
-        if !out.last().is_some_and(|(p, _, _)| p == &pid) {
+        if out.last().is_none_or(|(p, _, _)| p != &pid) {
             out.push((pid, start, end));
         }
-        let next = match end.succ_opt() {
-            Some(n) => n,
-            None => break,
-        };
+        let Some(next) = end.succ_opt() else { break };
         if next > window_end {
             break;
         }
@@ -227,7 +219,7 @@ pub fn coverage(
         }
         break;
     }
-    periods.sort_by(|a, b| a.period_start.cmp(&b.period_start));
+    periods.sort_by_key(|p| p.period_start);
 
     // Runs whose claimed period falls outside the window: report as
     // out-of-window unclassified so auditors can see them.
@@ -244,7 +236,7 @@ pub fn coverage(
             }
         }
     }
-    legacy.sort_by(|a, b| a.completed_at.cmp(&b.completed_at));
+    legacy.sort_by_key(|u| u.completed_at);
 
     Ok(CoverageReport {
         control_id: control_id.to_string(),
@@ -263,7 +255,11 @@ fn is_skipped(
     schedule: &Schedule,
     period_start: NaiveDate,
 ) -> (bool, Option<String>) {
-    for entry in schedule.overrides.iter().filter(|o| o.control_id == control.id) {
+    for entry in schedule
+        .overrides
+        .iter()
+        .filter(|o| o.control_id == control.id)
+    {
         let Some(skip) = &entry.skip else {
             continue;
         };

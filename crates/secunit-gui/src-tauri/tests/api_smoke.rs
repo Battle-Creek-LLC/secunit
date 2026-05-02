@@ -61,7 +61,11 @@ fn due_rows_against_fixture_today_2026_05_01() {
     // scheduled or annual controls may legitimately have None.)
     for r in &rows {
         if matches!(r.cadence, secunit_core::model::Cadence::Weekly) {
-            assert!(r.next_due.is_some(), "weekly control {} missing next_due", r.control_id);
+            assert!(
+                r.next_due.is_some(),
+                "weekly control {} missing next_due",
+                r.control_id
+            );
         }
     }
 }
