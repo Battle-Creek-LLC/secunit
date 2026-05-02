@@ -118,6 +118,18 @@ pub enum ScheduleReason {
     OverrideSkip,
 }
 
+impl From<secunit_core::registry::resolver::DueReason> for ScheduleReason {
+    fn from(r: secunit_core::registry::resolver::DueReason) -> Self {
+        use secunit_core::registry::resolver::DueReason as Core;
+        match r {
+            Core::Cadence => ScheduleReason::Cadence,
+            Core::OverrideDue => ScheduleReason::OverrideDue,
+            Core::OverrideInsert => ScheduleReason::OverrideInsert,
+            Core::OverrideWeekday => ScheduleReason::OverrideWeekday,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ScheduleEntryView {
     pub control_id: String,

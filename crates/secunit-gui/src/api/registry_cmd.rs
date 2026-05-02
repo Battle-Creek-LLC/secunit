@@ -336,64 +336,43 @@ pub fn schedule_view(
     let today = today_or(today);
     let mut out: Vec<ScheduleEntryView> = Vec::new();
 
-    // Cadence-derived next-due (one entry per control).
+    // The winning firing per control, with provenance. Reason +
+    // note come straight from secunit-core; the GUI no longer
+    // re-walks the schedule.
     for c in project.registry.controls.values() {
         let entry = project.registry.state.controls.get(&c.id);
-        let next = resolver::next_due(
+        let resolution = resolver::next_due_with_reason(
             c,
             &project.registry.schedule,
             entry,
             today,
             project.registry.config.weekly_default_weekday,
         );
-        if let Some(d) = next {
-            let overdue = resolver::is_overdue(c, d, today);
-            // Reason: derive by scanning overrides for this control.
-            let mut reason = ScheduleReason::Cadence;
-            let mut note: Option<String> = None;
-            for ov in project
-                .registry
-                .schedule
-                .overrides
-                .iter()
-                .filter(|o| o.control_id == c.id)
-            {
-                if let Some(insert) = &ov.insert {
-                    if insert.run_at == d {
-                        reason = ScheduleReason::OverrideInsert;
-                        note = ov.note.clone().or_else(|| ov.reason.clone());
-                    }
-                }
-                if ov.due == Some(d) {
-                    reason = ScheduleReason::OverrideDue;
-                    note = ov.note.clone().or_else(|| ov.reason.clone());
-                }
-                if ov.weekday.is_some() && matches!(reason, ScheduleReason::Cadence) {
-                    reason = ScheduleReason::OverrideWeekday;
-                    note = ov.note.clone().or_else(|| ov.reason.clone());
-                }
-            }
+        if let Some(r) = resolution {
+            let overdue = resolver::is_overdue(c, r.date, today);
             out.push(ScheduleEntryView {
                 control_id: c.id.clone(),
                 cadence: cadence_str(c.cadence),
-                date: d,
-                reason,
-                note,
+                date: r.date,
+                reason: ScheduleReason::from(r.reason),
+                note: r.note,
                 overdue,
             });
         }
     }
 
-    // Standalone inserts that fall on a date different from the control's
-    // computed next_due (catches "extra firing" overrides).
+    // Surface inserts that did not win their control's race (i.e. an
+    // additional firing that the cadence-derived date already passed
+    // or that landed after the chosen date). These are still useful
+    // to show on the calendar as upcoming pinned events.
     for ov in &project.registry.schedule.overrides {
         if let Some(insert) = &ov.insert {
             if insert.run_at < today {
                 continue;
             }
-            let already = out.iter().any(|e| {
-                e.control_id == ov.control_id && e.date == insert.run_at
-            });
+            let already = out
+                .iter()
+                .any(|e| e.control_id == ov.control_id && e.date == insert.run_at);
             if already {
                 continue;
             }
@@ -408,7 +387,11 @@ pub fn schedule_view(
                 cadence,
                 date: insert.run_at,
                 reason: ScheduleReason::OverrideInsert,
-                note: ov.note.clone().or_else(|| ov.reason.clone()),
+                note: ov
+                    .note
+                    .clone()
+                    .or_else(|| insert.reason.clone())
+                    .or_else(|| ov.reason.clone()),
                 overdue: false,
             });
         }

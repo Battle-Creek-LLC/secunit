@@ -65,12 +65,12 @@ Decisions made while implementing the spec, plus questions for review at the end
 
 Punted to here per the user's "save questions / changes for the end" instruction. None were blocking; each is a follow-up:
 
-- **Q1**: React vs. Dioxus/Leptos for the frontend (probably stay on React).
-- **Q2**: ts-rs adoption when the IPC surface grows.
-- **Q3**: Incremental Tantivy patching on watcher events.
-- **Q4**: Editor invocation behaviour against `$EDITOR`.
-- **Q5**: Should JOB-08's `next_due_with_reason` push down into `secunit-core::registry::resolver`? Today the GUI derives reasons by inspecting the schedule directly; if the CLI ever wants the same enrichment (`secunit due --why`), the resolver is the right home.
+- **Q1**: React vs. Dioxus/Leptos for the frontend — **closed 2026-05-02**: stay on React.
+- **Q2**: ts-rs adoption when the IPC surface grows — **closed 2026-05-02**: skip until the surface roughly doubles.
+- **Q3**: Incremental Tantivy patching on watcher events — **closed 2026-05-02**: skip; cold rebuild is well within budget against the fixture.
+- **Q4**: Editor invocation behaviour against `$EDITOR` — **closed 2026-05-02**: skip; the OS default association is the spec's described behaviour.
+- **Q5**: ~~Push `next_due_with_reason` into `secunit-core`~~ — **done 2026-05-02**. Now lives in `secunit-core::registry::resolver`; the GUI's `schedule_view` is a thin adapter. See the dated note above.
 - **Q6**: Tauri 2's window security policy (CSP) currently allows `style-src 'self' 'unsafe-inline'` because Tailwind injects style elements at runtime under `react-router`'s scrollRestoration. Tightening CSP is a hardening pass; tracked but not done.
 - **Q7**: The Linux build pulls `webkit2gtk-4.1`. macOS and Windows still need a smoke build before any release; the CI workflow will need a matrix.
 
-Each of these is a small follow-up commit, not a blocker on the v1 ship.
+Q6 and Q7 remain as small follow-up commits; everything else is settled.
