@@ -4,3 +4,7 @@ dist/
 .vite/
 *.log
 tsconfig.tsbuildinfo
+
+# Stray icon source drops at the crate root (canonical lives in src-tauri/icons/source.png).
+Gemini_Generated_Image_*.png
+icon-source-*.png
