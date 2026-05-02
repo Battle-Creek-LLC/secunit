@@ -121,7 +121,6 @@ describe("Overview", () => {
 
     expect(screen.getByRole("heading", { name: /Overview/ })).toBeInTheDocument();
     expect(screen.getByText(/Focus now/i)).toBeInTheDocument();
-    expect(screen.getByText(/How am I doing/i)).toBeInTheDocument();
 
     // Alert strip — overdue / due / stalled link counts
     expect(screen.getByRole("link", { name: /^1 overdue$/i })).toHaveAttribute(
@@ -156,9 +155,6 @@ describe("Overview", () => {
     expect(
       screen.getByRole("link", { name: /open evidence for r1/i }),
     ).toHaveAttribute("href", "/evidence?control=c&run=r1");
-
-    // Coverage card — 2 of 3 on track-ish (sealed + due-soon) ⇒ 67%
-    expect(screen.getByText("67%")).toBeInTheDocument();
 
     vi.useRealTimers();
   });

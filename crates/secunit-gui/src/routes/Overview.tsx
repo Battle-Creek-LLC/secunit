@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useStore } from "@/store";
 import { AlertStrip } from "@/components/AlertStrip";
 import { FocusList } from "@/components/FocusList";
-import { HowAmIDoing } from "@/components/HowAmIDoing";
 import { RunTimeline } from "@/components/RunTimeline";
 
 const STALLED_DAYS = 3;
@@ -74,13 +73,6 @@ export function Overview() {
               runs={snapshot.runs}
             />
           </div>
-        </section>
-
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            How am I doing
-          </h2>
-          <HowAmIDoing controls={snapshot.controls} runs={snapshot.runs} />
         </section>
 
         <section className="flex flex-col gap-2">
