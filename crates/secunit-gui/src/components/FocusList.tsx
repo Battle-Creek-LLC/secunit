@@ -1,12 +1,7 @@
 import { Link } from "react-router-dom";
 import { Badge, type BadgeVariant } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import type {
-  ControlSummary,
-  CurrentPeriodStatus,
-  DueRowView,
-  RunRow,
-} from "@/lib/ipc";
+import type { ControlSummary, CurrentPeriodStatus, RunRow } from "@/lib/ipc";
 
 const STALLED_DAYS = 3;
 const DUE_HORIZON_DAYS = 7;
@@ -28,7 +23,6 @@ interface FocusItem {
 
 interface FocusListProps {
   controls: Map<string, ControlSummary>;
-  due: Map<string, DueRowView>;
   periods: Map<string, CurrentPeriodStatus>;
   runs: RunRow[];
   now?: number;
@@ -37,13 +31,12 @@ interface FocusListProps {
 
 export function FocusList({
   controls,
-  due,
   periods,
   runs,
   now = Date.now(),
   limit = 8,
 }: FocusListProps) {
-  const items = buildFocusItems({ controls, due, periods, runs, now });
+  const items = buildFocusItems({ controls, periods, runs, now });
   const top = items.slice(0, limit);
   if (top.length === 0) {
     return (
@@ -86,7 +79,6 @@ export function FocusList({
 
 interface BuildArgs {
   controls: Map<string, ControlSummary>;
-  due: Map<string, DueRowView>;
   periods: Map<string, CurrentPeriodStatus>;
   runs: RunRow[];
   now: number;
@@ -94,7 +86,6 @@ interface BuildArgs {
 
 function buildFocusItems({
   controls,
-  due,
   periods,
   runs,
   now,
@@ -104,10 +95,12 @@ function buildFocusItems({
 
   // "Focus now" is action-shaped, not coverage-shaped. We surface:
   //   * Overdue gaps (period ended uncovered) — always.
-  //   * Open periods whose next_due is within DUE_HORIZON_DAYS — i.e.,
-  //     work the operator should do this week. An annual control's
-  //     period is "open" for ~360 days/year; without this filter it
-  //     would crowd out actually-imminent work.
+  //   * Open periods whose period_end is within DUE_HORIZON_DAYS — i.e.,
+  //     work the operator should do this week. period_end is the actual
+  //     lapse deadline (once today > period_end with no satisfier, the
+  //     period flips to gap); next_due is the next scheduled fire date,
+  //     which can be later. An annual control's period is "open" for
+  //     ~360 days/year, so this filter is what keeps the list useful.
   //   * Stalled pending runs (>STALLED_DAYS old) — finish or abort.
   // An open period with an in-flight pending run gets a "· run prepared"
   // tag rather than a separate item, so the user sees one row per
@@ -127,11 +120,11 @@ function buildFocusItems({
         to: `/controls?id=${encodeURIComponent(p.control_id)}`,
       });
     } else if (p.status === "open") {
-      const days = daysUntilDue(due.get(p.control_id), now);
+      const days = daysUntilIso(p.period_end, now);
       const withinHorizon = days != null && days <= DUE_HORIZON_DAYS;
-      // Surface when next_due is in the horizon, OR when there's a
+      // Surface when period_end is in the horizon, OR when there's a
       // pending run in flight (operator already started — show it so
-      // they finish even if next_due is months out).
+      // they finish even if the deadline is months out).
       if (!withinHorizon && !inPeriod) return;
       items.push({
         key: `due:${p.control_id}`,
@@ -169,9 +162,9 @@ function buildFocusItems({
   return items;
 }
 
-function daysUntilDue(row: DueRowView | undefined, now: number): number | null {
-  if (!row?.next_due) return null;
-  const t = Date.parse(row.next_due);
+function daysUntilIso(date: string | null, now: number): number | null {
+  if (!date) return null;
+  const t = Date.parse(date);
   if (Number.isNaN(t)) return null;
   return Math.ceil((t - now) / DAY_MS);
 }

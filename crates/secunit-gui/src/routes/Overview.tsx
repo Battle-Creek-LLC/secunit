@@ -16,19 +16,18 @@ export function Overview() {
   const counts = useMemo(() => {
     const now = Date.now();
     // Overdue counts past-grace gaps (periods that ended without a
-    // satisfier). "Due this week" counts open periods whose next_due
-    // lands inside DUE_HORIZON_DAYS — the label makes a date promise,
-    // and an annual control's period is "open" for ~360 days/year, so
-    // gating on next_due is what keeps the count honest.
+    // satisfier). "Due this week" counts open periods whose period_end
+    // is within DUE_HORIZON_DAYS — period_end is the actual lapse
+    // deadline, and an annual control's period is "open" for ~360
+    // days/year, so gating on period_end keeps the count honest.
     let overdue = 0;
     let dueSoon = 0;
     snapshot.periods.forEach((p) => {
       if (p.status === "gap") {
         overdue += 1;
       } else if (p.status === "open") {
-        const row = snapshot.due.get(p.control_id);
-        if (!row?.next_due) return;
-        const t = Date.parse(row.next_due);
+        if (!p.period_end) return;
+        const t = Date.parse(p.period_end);
         if (Number.isNaN(t)) return;
         const days = Math.ceil((t - now) / DAY_MS);
         if (days >= 0 && days <= DUE_HORIZON_DAYS) dueSoon += 1;
@@ -72,7 +71,6 @@ export function Overview() {
             </h2>
             <FocusList
               controls={snapshot.controls}
-              due={snapshot.due}
               periods={snapshot.periods}
               runs={snapshot.runs}
             />
