@@ -35,8 +35,8 @@ pub struct PrepareOpts {
     pub operator: Option<String>,
     pub note: Option<String>,
     pub now: Option<DateTime<Utc>>,
-    /// Operator-supplied period claim. `None` means derive from the next
-    /// firing date for `today` and the control's cadence.
+    /// Operator-supplied period claim. `None` means derive from `today` —
+    /// `period_id` records the calendar period the work was performed in.
     pub period_id: Option<String>,
 }
 
@@ -117,15 +117,12 @@ pub fn prepare(
             if matches!(ctrl.cadence, Cadence::Continuous) {
                 None
             } else {
-                let state_entry = reg.state.controls.get(control_id);
-                resolver::next_due(
-                    ctrl,
-                    &reg.schedule,
-                    state_entry,
-                    today,
-                    reg.config.weekly_default_weekday,
-                )
-                .and_then(|target| period::derive(ctrl.cadence, target))
+                // period_id records the calendar period the work was
+                // done in, so anchor on `today`. Using `next_due` here
+                // would attribute a run on Sat 2026-05-02 (W18) to the
+                // upcoming Mon 2026-05-04 (W19), leaving the current
+                // week stuck Open in coverage.
+                period::derive(ctrl.cadence, today)
             }
         }
     };
