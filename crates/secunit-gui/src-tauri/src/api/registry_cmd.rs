@@ -1,6 +1,9 @@
 //! Registry-backed read commands. Every entry point loads or reads from
 //! the cached `LoadedProject` in `AppState`; the cache is populated by
-//! `load_project` and rebuilt by the watcher on disk events (JOB-04).
+//! `load_project`. The watcher refreshes the `state.json` slice on disk
+//! changes (so finalize flips through immediately); edits to controls,
+//! inventory, schedule, or config still require a project reload to
+//! surface.
 
 use std::path::{Path, PathBuf};
 
