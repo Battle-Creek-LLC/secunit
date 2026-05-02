@@ -52,24 +52,19 @@ export function FocusList({
           <Link
             to={item.to}
             className={cn(
-              "flex items-center justify-between gap-3 px-4 py-2.5 text-sm",
+              "flex items-center gap-3 px-4 py-2.5 text-sm",
               "hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
-            <div className="flex min-w-0 items-center gap-3">
-              <Badge variant={item.badge.tone}>{item.badge.label}</Badge>
-              <div className="flex min-w-0 flex-col">
-                <span className="truncate font-mono text-xs text-foreground">
-                  {item.controlId}
-                </span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {item.cadence} · {item.detail}
-                </span>
-              </div>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate font-mono text-xs text-muted-foreground">
+                {item.controlId}
+              </span>
+              <span className="truncate font-medium">
+                {item.cadence} · {item.detail}
+              </span>
             </div>
-            <span className="text-xs text-muted-foreground" aria-hidden="true">
-              →
-            </span>
+            <Badge variant={item.badge.tone}>{item.badge.label}</Badge>
           </Link>
         </li>
       ))}
@@ -117,7 +112,7 @@ function buildFocusItems({
         badge: { label: "Overdue", tone: "error" },
         detail: composeDetail(p.period_end ?? "uncovered period", inPeriod),
         rank: -1000,
-        to: `/controls?id=${encodeURIComponent(p.control_id)}`,
+        to: focusTo(p.control_id),
       });
     } else if (p.status === "open") {
       const days = daysUntilIso(p.period_end, now);
@@ -134,7 +129,7 @@ function buildFocusItems({
         badge: { label: "Open", tone: "warn" },
         detail: composeDetail(p.period_end ?? "open", inPeriod),
         rank: withinHorizon ? (days as number) : 100,
-        to: `/controls?id=${encodeURIComponent(p.control_id)}`,
+        to: focusTo(p.control_id),
       });
     }
   });
@@ -154,12 +149,20 @@ function buildFocusItems({
       badge: { label: "Stalled", tone: "info" },
       detail: `prepared ${ageDays}d ago, not sealed`,
       rank: 1000 - ageDays,
-      to: `/controls?id=${encodeURIComponent(r.control_id)}`,
+      to: focusTo(r.control_id),
     });
   });
 
   items.sort((a, b) => a.rank - b.rank);
   return items;
+}
+
+// Filter the table down to the one control AND select it so the detail
+// pane opens — the operator landed here from "Focus now" wanting to act
+// on this row, not browse around it.
+function focusTo(controlId: string): string {
+  const id = encodeURIComponent(controlId);
+  return `/controls?q=${id}&id=${id}`;
 }
 
 function daysUntilIso(date: string | null, now: number): number | null {
