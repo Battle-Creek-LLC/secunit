@@ -137,6 +137,26 @@ describe("Overview", () => {
     expect(screen.getAllByText(/Overdue/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("a").length).toBeGreaterThan(0);
 
+    // Focus row links filter+select on the controls page so the right
+    // detail pane opens on the row the operator clicked.
+    const focusLinks = screen
+      .getAllByRole("link")
+      .filter((el) => el.getAttribute("href") === "/controls?q=a&id=a");
+    expect(focusLinks.length).toBeGreaterThan(0);
+
+    // Recent runs: the row text deep-links to evidence with both ids,
+    // and each row carries icon links to control + evidence.
+    const evidenceLinks = screen
+      .getAllByRole("link")
+      .filter((el) => el.getAttribute("href") === "/evidence?control=c&run=r1");
+    expect(evidenceLinks.length).toBe(2); // row text + evidence icon
+    expect(
+      screen.getByRole("link", { name: /open control c/i }),
+    ).toHaveAttribute("href", "/controls?q=c&id=c");
+    expect(
+      screen.getByRole("link", { name: /open evidence for r1/i }),
+    ).toHaveAttribute("href", "/evidence?control=c&run=r1");
+
     // Coverage card — 2 of 3 on track-ish (sealed + due-soon) ⇒ 67%
     expect(screen.getByText("67%")).toBeInTheDocument();
 
