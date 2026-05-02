@@ -1,10 +1,10 @@
-id: ra-2026-03-vuln-audit
-title: 2026 Q1 risk-assessment-procedure vulnerability audit
+id: ra-vuln-audit
+title: Risk-assessment-procedure vulnerability audit
 policy: security/risk-assessment-procedure.md
 nist: [RA-3, RA-5]
 owner: cto
-cadence: scheduled
-due: 2026-03-15
+cadence: annual
+due_by: march-31
 skill: ra-vuln-audit
 
 evidence_required:

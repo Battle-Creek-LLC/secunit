@@ -31,7 +31,6 @@ const CADENCES = [
   "quarterly",
   "semi-annual",
   "annual",
-  "scheduled",
   "continuous",
 ];
 

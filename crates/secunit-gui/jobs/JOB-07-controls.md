@@ -9,7 +9,7 @@ A table of every control with status badge; row click opens a detail pane on the
 - `web/src/routes/Controls.tsx`:
   - Two-pane layout. Left: searchable, filterable table. Right: detail pane (or empty state).
   - Columns: id (mono), title, cadence, owner, next_due (relative + absolute on hover), status badge, last run (relative).
-  - Filters along the top: status (all / overdue / due-soon / pending / sealed / never-run), cadence (all / weekly / monthly / quarterly / semi-annual / annual / scheduled / continuous).
+  - Filters along the top: status (all / overdue / due-soon / pending / sealed / never-run), cadence (all / weekly / monthly / quarterly / semi-annual / annual / continuous).
   - Filters reflect URL search params so deep links from Overview tiles work.
   - Sort: by next_due ascending by default; column-header click toggles. Stable secondary sort on id.
 - Detail pane (right):

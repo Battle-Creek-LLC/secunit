@@ -31,8 +31,8 @@ describe("Schedule", () => {
             overdue: false,
           },
           {
-            control_id: "ra-2026-12-pentest",
-            cadence: "scheduled",
+            control_id: "ra-pentest",
+            cadence: "annual",
             date: "2026-12-01",
             reason: "override-insert",
             note: "annual pentest",

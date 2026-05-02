@@ -167,10 +167,6 @@ pub fn next_due_with_reason(
         Cadence::Quarterly => Some(next_business_day(today, quarterly_anchor(today))),
         Cadence::SemiAnnual => Some(next_business_day(today, semiannual_anchor(today))),
         Cadence::Annual => Some(next_annual(today, control.due_by.as_deref())),
-        Cadence::Scheduled => control
-            .due
-            .as_ref()
-            .and_then(|d| earliest_scheduled(d.as_slice(), today)),
     };
 
     if let Some(d) = cadence_due {
@@ -245,7 +241,6 @@ pub fn grace(cadence: Cadence) -> Duration {
         Cadence::Quarterly => Duration::days(14),
         Cadence::SemiAnnual => Duration::days(21),
         Cadence::Annual => Duration::days(30),
-        Cadence::Scheduled => Duration::days(7),
     }
 }
 
@@ -320,18 +315,6 @@ fn parse_due_by(s: &str, year: i32) -> Option<NaiveDate> {
         _ => return None,
     };
     NaiveDate::from_ymd_opt(year, m, day)
-}
-
-fn earliest_scheduled(values: Vec<&str>, today: NaiveDate) -> Option<NaiveDate> {
-    values
-        .into_iter()
-        .filter_map(|s| {
-            NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                .or_else(|_| NaiveDate::parse_from_str(&format!("{s}-01"), "%Y-%m-%d"))
-                .ok()
-        })
-        .filter(|d| *d >= today)
-        .min()
 }
 
 fn next_business_day(today: NaiveDate, anchor: NaiveDate) -> NaiveDate {

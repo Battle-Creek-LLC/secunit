@@ -365,7 +365,6 @@ mod tests {
             owner: "o".into(),
             cadence,
             weekday: None,
-            due: None,
             due_by: None,
             skill: "s".into(),
             skill_args: None,

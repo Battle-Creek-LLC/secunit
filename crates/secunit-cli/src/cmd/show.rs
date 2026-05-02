@@ -27,9 +27,6 @@ pub fn run(ctx: &Ctx, control_id: &str) -> Result<ExitCode> {
     if let Some(w) = ctrl.weekday {
         println!("weekday:    {:?}", w);
     }
-    if let Some(due) = &ctrl.due {
-        println!("due:        {:?}", due);
-    }
     if let Some(due_by) = &ctrl.due_by {
         println!("due_by:     {due_by}");
     }

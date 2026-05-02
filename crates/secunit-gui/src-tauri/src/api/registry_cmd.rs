@@ -27,7 +27,6 @@ fn cadence_str(c: Cadence) -> String {
         Cadence::Quarterly => "quarterly",
         Cadence::SemiAnnual => "semi-annual",
         Cadence::Annual => "annual",
-        Cadence::Scheduled => "scheduled",
     }
     .into()
 }
@@ -516,7 +515,7 @@ pub fn schedule_view(
                 .controls
                 .get(&ov.control_id)
                 .map(|c| cadence_str(c.cadence))
-                .unwrap_or_else(|| "scheduled".into());
+                .unwrap_or_else(|| "—".into());
             out.push(ScheduleEntryView {
                 control_id: ov.control_id.clone(),
                 cadence,
@@ -1133,7 +1132,6 @@ mod tests {
             (Cadence::Quarterly, "quarterly"),
             (Cadence::SemiAnnual, "semi-annual"),
             (Cadence::Annual, "annual"),
-            (Cadence::Scheduled, "scheduled"),
         ] {
             assert_eq!(cadence_str(c), expect);
         }

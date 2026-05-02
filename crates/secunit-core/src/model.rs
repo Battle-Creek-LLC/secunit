@@ -23,7 +23,6 @@ pub enum Cadence {
     #[serde(rename = "semi-annual")]
     SemiAnnual,
     Annual,
-    Scheduled,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -65,10 +64,6 @@ pub struct Control {
     pub cadence: Cadence,
     #[serde(default)]
     pub weekday: Option<Weekday>,
-    /// `due` may be a single ISO date/month or a list. Normalised by
-    /// `Control::due_dates`.
-    #[serde(default)]
-    pub due: Option<DueField>,
     #[serde(default)]
     pub due_by: Option<String>,
     pub skill: String,
@@ -84,22 +79,6 @@ pub struct Control {
     pub outputs: Option<serde_json::Value>,
     #[serde(default)]
     pub references: Vec<Reference>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum DueField {
-    Single(String),
-    Many(Vec<String>),
-}
-
-impl DueField {
-    pub fn as_slice(&self) -> Vec<&str> {
-        match self {
-            DueField::Single(s) => vec![s.as_str()],
-            DueField::Many(xs) => xs.iter().map(String::as_str).collect(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

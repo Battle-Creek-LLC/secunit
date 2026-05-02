@@ -33,8 +33,8 @@ A discrete, recurring obligation derived from a WISP. One YAML file per control 
 - `policy` — relative path or URL to the policy/procedure that mandates the control
 - `nist` — NIST control identifiers (`AU-6`, `CA-2`, etc.) for traceability, when applicable
 - `owner` — role responsible (e.g. `cto`, `owner`, `bct`)
-- `cadence` — `continuous | weekly | monthly | quarterly | semi-annual | annual | scheduled`
-- `due` — ISO date(s) for `scheduled` cadence; derived from cadence otherwise
+- `cadence` — `continuous | weekly | monthly | quarterly | semi-annual | annual`
+- `due_by` — for `annual` cadence, an ISO date or `<month>-<day>` pinning the firing within the year (e.g. `december-31`); derived from cadence otherwise. One-off dated firings live in `schedule.yaml`, not in the control.
 - `skill` — name of the agent skill that executes the runbook
 - `scope` — what to iterate over from the inventory (kind + tag filter, or `all`); omit if org-wide
 - `evidence_required` — list of expected evidence artifacts (`kind`, optional `path`/`prompt`/`cmd`)
@@ -267,7 +267,7 @@ A typical WISP grounded in NIST 800-53 / SP 800-171 surfaces this set of cadence
 | Assessment, Authorization, and Monitoring — leadership status | `ca-quarterly-program-status` | quarterly | org-wide |
 | Assessment, Authorization, and Monitoring — vulnerability scans | `ca-quarterly-vuln-scan` | quarterly | cloud_account, production |
 | Assessment, Authorization, and Monitoring — penetration testing | `ca-annual-pentest` | annual | declared inline |
-| Risk Assessment — fixed-date activities from a procedure | `ra-<yyyy-mm>-<activity>` | scheduled | varies |
+| Risk Assessment — annual fixed-month activities from a procedure | `ra-<activity>` (e.g. `ra-vuln-audit`, `ra-pentest`) | annual + `due_by` | varies |
 | Access Control — entitlement review | `ac-annual-access-review` | annual | saas, all |
 | Physical and Environmental — facility access list review | `pe-quarterly-physical-access-review` | quarterly | site, all |
 | Awareness and Training — annual training, status reporting | `at-annual-training`, `at-quarterly-training-status` | annual / quarterly | org-wide |

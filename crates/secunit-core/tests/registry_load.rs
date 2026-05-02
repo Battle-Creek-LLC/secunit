@@ -22,6 +22,6 @@ fn loads_multi_system_fixture() {
     assert!(reg.controls.contains_key("ca-quarterly-vuln-scan"));
     assert!(!reg.inventory.entries("source_repos").is_empty());
     assert!(!reg.inventory.entries("cloud_accounts").is_empty());
-    assert_eq!(reg.schedule.overrides.len(), 5);
+    assert_eq!(reg.schedule.overrides.len(), 4);
     assert!(reg.state.controls.contains_key("aa-weekly-audit-review"));
 }
