@@ -4,7 +4,6 @@ import { relTime, formatTimestamp } from "@/lib/time";
 
 const stateTone: Record<RunState, "ok" | "error" | "warn" | "info"> = {
   sealed: "ok",
-  aborted: "error",
   pending: "warn",
 };
 

@@ -5,7 +5,6 @@ import { cn } from "@/lib/cn";
 
 const stateTone: Record<RunState, BadgeVariant> = {
   sealed: "ok",
-  aborted: "error",
   pending: "warn",
 };
 

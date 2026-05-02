@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use chrono::{Local, NaiveDate};
-use secunit_core::evidence::manifest::{AbortRecord, Manifest, PrepareContext};
+use secunit_core::evidence::manifest::{Manifest, PrepareContext};
 use secunit_core::model::{Cadence, Control, RunStatus};
 use secunit_core::registry::{self, loader, resolver};
 use tauri::{AppHandle, State};
@@ -190,7 +190,6 @@ fn summarise_control(
         last_status: state_entry.map(|s| match s.last_status {
             RunStatus::Complete => "complete".into(),
             RunStatus::InProgress => "in-progress".into(),
-            RunStatus::Aborted => "aborted".into(),
             RunStatus::Failed => "failed".into(),
             RunStatus::NeverRun => "never-run".into(),
         }),
@@ -210,7 +209,7 @@ fn derive_status(
     match state {
         Some(s) => match s.last_status {
             RunStatus::InProgress => ControlStatus::InProgress,
-            RunStatus::Aborted | RunStatus::Failed => ControlStatus::Aborted,
+            RunStatus::Failed => ControlStatus::Failed,
             RunStatus::NeverRun => ControlStatus::NeverRun,
             RunStatus::Complete => match next_due {
                 Some(d) if d <= today + chrono::Duration::days(7) => ControlStatus::DueSoon,
@@ -508,9 +507,7 @@ pub fn read_artifact(
         "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" => ArtifactKind::Image,
         _ => match basename.as_str() {
             "findings.md" => ArtifactKind::Markdown,
-            "manifest.json" | "prepare.json" | "abort.json" | "result.json" => {
-                ArtifactKind::Json
-            }
+            "manifest.json" | "prepare.json" | "result.json" => ArtifactKind::Json,
             _ => ArtifactKind::Binary,
         },
     };
@@ -624,13 +621,10 @@ pub fn list_findings(
                             let metadata = f.metadata().ok();
                             let bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
                             let manifest_path = run_path.join("manifest.json");
-                            let abort_path = run_path.join("abort.json");
                             let completed_at = read_manifest(&manifest_path)
                                 .map(|m| m.completed_at);
                             let run_state = if manifest_path.exists() {
                                 RunState::Sealed
-                            } else if abort_path.exists() {
-                                RunState::Aborted
                             } else {
                                 RunState::Pending
                             };
@@ -745,8 +739,6 @@ pub fn get_run(
         .map(|m: Manifest| serde_json::to_value(m).expect("manifest serialisable"));
     let prepare = read_json_if_present(&canonical.join("prepare.json"))?
         .map(|p: PrepareContext| serde_json::to_value(p).expect("prepare serialisable"));
-    let abort = read_json_if_present(&canonical.join("abort.json"))?
-        .map(|a: AbortRecord| serde_json::to_value(a).expect("abort serialisable"));
 
     let tree = build_run_tree(&canonical, &canonical)?;
 
@@ -754,7 +746,6 @@ pub fn get_run(
         row,
         manifest,
         prepare,
-        abort,
         tree,
     })
 }
@@ -807,8 +798,8 @@ fn build_run_tree(_root: &Path, dir: &Path) -> Result<Vec<RunTreeNode>, String> 
 }
 
 /// Walk `<root>/evidence/<y>/<q>/<control>/<run>/` and produce one row
-/// per run directory we find. Sealed / aborted / pending derived from
-/// the presence of `manifest.json`, `abort.json`, `.run-pending`.
+/// per run directory we find. Sealed / pending derived from the presence
+/// of `manifest.json` (or `.run-pending`).
 fn walk_runs(root: &Path) -> Vec<RunRow> {
     let evidence = root.join("evidence");
     if !evidence.exists() {
@@ -878,15 +869,12 @@ fn row_from_run_dir(
     run_dir: &Path,
 ) -> RunRow {
     let manifest_path = run_dir.join("manifest.json");
-    let abort_path = run_dir.join("abort.json");
     let pending_path = run_dir.join(".run-pending");
 
     let (state, started_at, completed_at, manifest_sha) =
         if let Some(m) = read_manifest(&manifest_path) {
             let sha = sha256_of_file(&manifest_path);
             (RunState::Sealed, Some(m.started_at), Some(m.completed_at), sha)
-        } else if let Some(a) = read_abort(&abort_path) {
-            (RunState::Aborted, Some(a.aborted_at), Some(a.aborted_at), None)
         } else if pending_path.exists() {
             let started = read_prepare(&run_dir.join("prepare.json"))
                 .map(|p| p.started_at);
@@ -914,11 +902,6 @@ fn read_manifest(path: &Path) -> Option<Manifest> {
 }
 
 fn read_prepare(path: &Path) -> Option<PrepareContext> {
-    let text = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&text).ok()
-}
-
-fn read_abort(path: &Path) -> Option<AbortRecord> {
     let text = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()
 }

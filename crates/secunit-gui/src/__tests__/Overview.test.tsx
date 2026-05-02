@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 interface ControlSummaryFixture {
-  status?: "sealed" | "overdue" | "due-soon" | "in-progress" | "aborted" | "never-run" | "idle";
+  status?: "sealed" | "overdue" | "due-soon" | "in-progress" | "failed" | "never-run" | "idle";
   next_due?: string | null;
 }
 

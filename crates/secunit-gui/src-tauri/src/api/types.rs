@@ -25,8 +25,8 @@ pub struct LoadSummary {
 pub enum ControlStatus {
     /// Control has run cleanly within its grace window for `next_due`.
     Sealed,
-    /// Last run was an abort.
-    Aborted,
+    /// Last run sealed but reported `status=failed`.
+    Failed,
     /// A run is currently prepared but not yet sealed.
     InProgress,
     /// `next_due` is in the future and ≤ 7 days away.
@@ -83,7 +83,6 @@ pub struct ReferenceView {
 #[serde(rename_all = "kebab-case")]
 pub enum RunState {
     Sealed,
-    Aborted,
     Pending,
 }
 
@@ -167,7 +166,6 @@ pub struct RunDetail {
     pub row: RunRow,
     pub manifest: Option<serde_json::Value>,
     pub prepare: Option<serde_json::Value>,
-    pub abort: Option<serde_json::Value>,
     pub tree: Vec<RunTreeNode>,
 }
 

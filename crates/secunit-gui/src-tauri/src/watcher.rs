@@ -48,7 +48,6 @@ pub enum WatcherEvent {
 #[serde(rename_all = "kebab-case")]
 pub enum RunChange {
     Sealed,
-    Aborted,
     PreparedOrModified,
 }
 
@@ -226,11 +225,6 @@ fn classify_evidence(
             control_id: control.into(),
             run_id: run.into(),
             change: RunChange::Sealed,
-        }),
-        "abort.json" => Some(WatcherEvent::RunStateChanged {
-            control_id: control.into(),
-            run_id: run.into(),
-            change: RunChange::Aborted,
         }),
         ".run-pending" | "prepare.json" => Some(WatcherEvent::RunStateChanged {
             control_id: control.into(),

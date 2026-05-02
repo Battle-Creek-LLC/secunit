@@ -5,7 +5,6 @@ import { formatTimestamp, relTime } from "@/lib/time";
 
 const stateTone = {
   sealed: "ok",
-  aborted: "error",
   pending: "warn",
 } as const;
 

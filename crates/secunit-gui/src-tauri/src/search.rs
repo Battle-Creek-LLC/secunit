@@ -184,11 +184,10 @@ impl SearchIndex {
                     })
                     .unwrap_or(0);
 
-                if name == "manifest.json" || name == "abort.json" || name == "prepare.json" {
+                if name == "manifest.json" || name == "prepare.json" {
                     if let (Some(c), Some(r)) = (parts.get(2), parts.get(3)) {
                         let status = match name.as_ref() {
                             "manifest.json" => "sealed",
-                            "abort.json" => "aborted",
                             _ => "pending",
                         };
                         writer.add_document(doc!(
@@ -231,9 +230,7 @@ impl SearchIndex {
                     count += 1;
                 }
 
-                if !["manifest.json", "abort.json", "prepare.json", "findings.md"]
-                    .contains(&name.as_ref())
-                {
+                if !["manifest.json", "prepare.json", "findings.md"].contains(&name.as_ref()) {
                     writer.add_document(doc!(
                         self.fields.kind => "artifact",
                         self.fields.id => path_str.clone(),

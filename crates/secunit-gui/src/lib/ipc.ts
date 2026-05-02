@@ -40,7 +40,7 @@ export interface LoadSummary {
 
 export type ControlStatus =
   | "sealed"
-  | "aborted"
+  | "failed"
   | "in-progress"
   | "due-soon"
   | "overdue"
@@ -72,7 +72,7 @@ export interface ReferenceView {
   url: string | null;
 }
 
-export type RunState = "sealed" | "aborted" | "pending";
+export type RunState = "sealed" | "pending";
 
 export interface RunRow {
   control_id: string;
