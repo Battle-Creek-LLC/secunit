@@ -13,7 +13,10 @@ use std::time::Duration;
 
 use notify::RecursiveMode;
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
+use secunit_core::model::State;
 use serde::Serialize;
+
+use crate::state::AppState;
 
 const DEFAULT_DEBOUNCE_MS: u64 = 200;
 
@@ -48,7 +51,6 @@ pub enum WatcherEvent {
 #[serde(rename_all = "kebab-case")]
 pub enum RunChange {
     Sealed,
-    Aborted,
     PreparedOrModified,
 }
 
@@ -64,7 +66,17 @@ pub struct TauriSink {
 
 impl EventSink for TauriSink {
     fn emit(&self, event: WatcherEvent) {
-        use tauri::Emitter;
+        use tauri::{Emitter, Manager};
+
+        // Refresh the in-memory cache *before* the webview is told to
+        // re-fetch — otherwise list_controls would return pre-change
+        // data (e.g. last_status="in-progress" after finalize already
+        // wrote "complete" to state.json).
+        if let WatcherEvent::StateJsonChanged { path } = &event {
+            let app_state = self.handle.state::<AppState>();
+            refresh_state_cache(&app_state, Path::new(path));
+        }
+
         let topic = match &event {
             WatcherEvent::ControlChanged { .. } => "control_changed",
             WatcherEvent::InventoryChanged { .. } => "inventory_changed",
@@ -76,6 +88,30 @@ impl EventSink for TauriSink {
             tracing::warn!(error = %err, "failed to emit watcher event");
         }
     }
+}
+
+/// Re-read `state.json` and swap it into the cached `LoadedProject`. A read
+/// or parse error logs a warning and leaves the cache untouched — better to
+/// serve slightly-stale data than to wipe a working cache because of a
+/// transient half-written file (atomic_write happens *very* near the
+/// debounce boundary).
+pub(crate) fn refresh_state_cache(app_state: &AppState, path: &Path) {
+    let parsed = match read_state(path) {
+        Ok(s) => s,
+        Err(err) => {
+            tracing::warn!(error = %err, path = %path.display(), "refresh state.json cache");
+            return;
+        }
+    };
+    let mut slot = app_state.project.lock().expect("AppState.project poisoned");
+    if let Some(loaded) = slot.as_mut() {
+        loaded.registry.state = parsed;
+    }
+}
+
+fn read_state(path: &Path) -> Result<State, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("read: {e}"))?;
+    serde_json::from_slice(&bytes).map_err(|e| format!("parse: {e}"))
 }
 
 /// Owns the debouncer and the drain thread. Dropping it stops the watch.
@@ -115,8 +151,7 @@ pub fn start<S: EventSink>(
     });
 
     let (tx, rx) = std::sync::mpsc::channel::<DebounceEventResult>();
-    let mut debouncer = new_debouncer(debounce, None, tx)
-        .map_err(|e| format!("debouncer: {e}"))?;
+    let mut debouncer = new_debouncer(debounce, None, tx).map_err(|e| format!("debouncer: {e}"))?;
     debouncer
         .watch(&root, RecursiveMode::Recursive)
         .map_err(|e| format!("watch {}: {e}", root.display()))?;
@@ -212,12 +247,7 @@ fn classify(root: &Path, path: &Path) -> Option<WatcherEvent> {
     }
 }
 
-fn classify_evidence(
-    control: &str,
-    run: &str,
-    rest: &[&str],
-    abs: &Path,
-) -> Option<WatcherEvent> {
+fn classify_evidence(control: &str, run: &str, rest: &[&str], abs: &Path) -> Option<WatcherEvent> {
     if rest.is_empty() {
         return None;
     }
@@ -226,11 +256,6 @@ fn classify_evidence(
             control_id: control.into(),
             run_id: run.into(),
             change: RunChange::Sealed,
-        }),
-        "abort.json" => Some(WatcherEvent::RunStateChanged {
-            control_id: control.into(),
-            run_id: run.into(),
-            change: RunChange::Aborted,
         }),
         ".run-pending" | "prepare.json" => Some(WatcherEvent::RunStateChanged {
             control_id: control.into(),
@@ -322,7 +347,8 @@ mod tests {
             Some(WatcherEvent::FindingsChanged {
                 control_id: "aa-weekly-audit-review".into(),
                 run_id: "run-001".into(),
-                path: "/r/evidence/2026/q2/aa-weekly-audit-review/run-001/by-system/x/findings.md".into(),
+                path: "/r/evidence/2026/q2/aa-weekly-audit-review/run-001/by-system/x/findings.md"
+                    .into(),
             })
         );
         assert_eq!(classify(root, &root.join("README.md")), None);
@@ -345,10 +371,12 @@ mod tests {
         std::fs::write(&target, "id: aa-weekly-audit-review\nupdated: true\n").unwrap();
 
         settle(&sink, |evs| {
-            evs.iter().any(|e| matches!(
-                e,
-                WatcherEvent::ControlChanged { id, .. } if id == "aa-weekly-audit-review"
-            ))
+            evs.iter().any(|e| {
+                matches!(
+                    e,
+                    WatcherEvent::ControlChanged { id, .. } if id == "aa-weekly-audit-review"
+                )
+            })
         });
     }
 
@@ -387,6 +415,116 @@ mod tests {
     }
 
     #[test]
+    fn refresh_state_cache_swaps_in_new_state_json() {
+        use crate::state::{AppState, LoadedProject};
+        use secunit_core::registry::loader;
+
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("testdata/orgs/multi-system");
+
+        let (registry, _) = loader::load(&fixture);
+        // Sanity-check the fixture so a later edit doesn't silently
+        // invalidate this test.
+        let initial = registry
+            .state
+            .controls
+            .get("aa-weekly-audit-review")
+            .expect("fixture has aa-weekly-audit-review");
+        assert_eq!(initial.last_run_id.as_deref(), Some("2026-04-26-run-013"));
+
+        let app_state = AppState::default();
+        *app_state.project.lock().unwrap() = Some(LoadedProject {
+            name: "test".into(),
+            root: fixture.clone(),
+            registry,
+            diagnostics: vec![],
+        });
+
+        // Write a fresh state.json in a *different* root so we don't
+        // perturb the on-disk fixture; refresh_state_cache reads from
+        // the path we hand it, not from the project root.
+        let dir = tempfile::tempdir().unwrap();
+        let new_state = dir.path().join("state.json");
+        std::fs::write(
+            &new_state,
+            r#"{
+              "schema_version": 1,
+              "controls": {
+                "aa-weekly-audit-review": {
+                  "last_run_id": "2026-05-02-run-003",
+                  "last_run_path": "evidence/2026/q2/aa-weekly-audit-review/2026-05-02-run-003/",
+                  "last_run_at": "2026-05-02T13:58:01Z",
+                  "last_status": "complete",
+                  "next_due": "2026-05-04"
+                }
+              },
+              "updated_at": "2026-05-02T13:58:02Z"
+            }"#,
+        )
+        .unwrap();
+
+        refresh_state_cache(&app_state, &new_state);
+
+        let slot = app_state.project.lock().unwrap();
+        let entry = slot
+            .as_ref()
+            .unwrap()
+            .registry
+            .state
+            .controls
+            .get("aa-weekly-audit-review")
+            .unwrap();
+        assert_eq!(entry.last_run_id.as_deref(), Some("2026-05-02-run-003"));
+    }
+
+    #[test]
+    fn refresh_state_cache_keeps_old_data_on_corrupt_file() {
+        use crate::state::{AppState, LoadedProject};
+        use secunit_core::registry::loader;
+
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("testdata/orgs/multi-system");
+        let (registry, _) = loader::load(&fixture);
+        let app_state = AppState::default();
+        *app_state.project.lock().unwrap() = Some(LoadedProject {
+            name: "test".into(),
+            root: fixture.clone(),
+            registry,
+            diagnostics: vec![],
+        });
+
+        let dir = tempfile::tempdir().unwrap();
+        let bad = dir.path().join("state.json");
+        std::fs::write(&bad, "{ not json").unwrap();
+
+        refresh_state_cache(&app_state, &bad);
+
+        let slot = app_state.project.lock().unwrap();
+        let entry = slot
+            .as_ref()
+            .unwrap()
+            .registry
+            .state
+            .controls
+            .get("aa-weekly-audit-review")
+            .unwrap();
+        // Untouched: the parse error logged but we kept what we had.
+        assert_eq!(entry.last_run_id.as_deref(), Some("2026-04-26-run-013"));
+    }
+
+    #[test]
     fn integration_new_manifest_emits_sealed() {
         let dir = tempfile::tempdir().unwrap();
         let run = dir
@@ -401,12 +539,14 @@ mod tests {
         std::fs::write(run.join("manifest.json"), "{}").unwrap();
 
         settle(&sink, |evs| {
-            evs.iter().any(|e| matches!(
-                e,
-                WatcherEvent::RunStateChanged { change, control_id, .. }
-                    if *change == RunChange::Sealed
-                    && control_id == "sca-weekly-dependency-scan"
-            ))
+            evs.iter().any(|e| {
+                matches!(
+                    e,
+                    WatcherEvent::RunStateChanged { change, control_id, .. }
+                        if *change == RunChange::Sealed
+                        && control_id == "sca-weekly-dependency-scan"
+                )
+            })
         });
     }
 }

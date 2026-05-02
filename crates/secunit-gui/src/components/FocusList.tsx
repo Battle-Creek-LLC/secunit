@@ -1,11 +1,14 @@
 import { Link } from "react-router-dom";
 import { Badge, type BadgeVariant } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import type { ControlSummary, DueRowView, RunRow } from "@/lib/ipc";
-import { daysFromNow } from "@/lib/time";
+import type {
+  ControlSummary,
+  CurrentPeriodStatus,
+  DueRowView,
+  RunRow,
+} from "@/lib/ipc";
 
 const STALLED_DAYS = 3;
-const DUE_HORIZON_DAYS = 7;
 
 type FocusKind = "overdue" | "due" | "stalled";
 
@@ -24,6 +27,7 @@ interface FocusItem {
 interface FocusListProps {
   controls: Map<string, ControlSummary>;
   due: Map<string, DueRowView>;
+  periods: Map<string, CurrentPeriodStatus>;
   runs: RunRow[];
   now?: number;
   limit?: number;
@@ -32,11 +36,12 @@ interface FocusListProps {
 export function FocusList({
   controls,
   due,
+  periods,
   runs,
   now = Date.now(),
   limit = 8,
 }: FocusListProps) {
-  const items = buildFocusItems({ controls, due, runs, now });
+  const items = buildFocusItems({ controls, due, periods, runs, now });
   const top = items.slice(0, limit);
   if (top.length === 0) {
     return (
@@ -80,47 +85,56 @@ export function FocusList({
 interface BuildArgs {
   controls: Map<string, ControlSummary>;
   due: Map<string, DueRowView>;
+  periods: Map<string, CurrentPeriodStatus>;
   runs: RunRow[];
   now: number;
 }
 
-function buildFocusItems({ controls, due, runs, now }: BuildArgs): FocusItem[] {
+function buildFocusItems({
+  controls,
+  periods,
+  runs,
+  now,
+}: BuildArgs): FocusItem[] {
   const items: FocusItem[] = [];
   const seen = new Set<string>();
 
-  controls.forEach((c) => {
-    if (!c.overdue) return;
-    const days = daysFromNow(c.next_due, now);
-    const overdueBy = days != null && days < 0 ? Math.abs(days) : null;
-    items.push({
-      key: `overdue:${c.id}`,
-      controlId: c.id,
-      cadence: c.cadence,
-      kind: "overdue",
-      badge: { label: "Overdue", tone: "error" },
-      detail: overdueBy != null ? `overdue by ${overdueBy}d` : "past grace window",
-      rank: overdueBy != null ? -1000 - overdueBy : -500,
-      to: `/controls?id=${encodeURIComponent(c.id)}`,
-    });
-    seen.add(c.id);
-  });
-
-  due.forEach((d) => {
-    if (d.overdue || !d.next_due) return;
-    if (seen.has(d.control_id)) return;
-    const days = daysFromNow(d.next_due, now);
-    if (days == null || days < 0 || days > DUE_HORIZON_DAYS) return;
-    items.push({
-      key: `due:${d.control_id}`,
-      controlId: d.control_id,
-      cadence: d.cadence,
-      kind: "due",
-      badge: { label: days === 0 ? "Due today" : `Due in ${days}d`, tone: "warn" },
-      detail: `next due ${d.next_due}`,
-      rank: days,
-      to: `/controls?id=${encodeURIComponent(d.control_id)}`,
-    });
-    seen.add(d.control_id);
+  // Period-driven Open / Overdue. A "gap" is a current period that ended
+  // without a satisfying run; "open" is the current period still inside
+  // its window. The legacy 7-day horizon is gone — period coverage IS the
+  // signal, so a control completed this period stays quiet until the
+  // next period rolls.
+  periods.forEach((p) => {
+    const c = controls.get(p.control_id);
+    if (p.status === "gap") {
+      items.push({
+        key: `overdue:${p.control_id}`,
+        controlId: p.control_id,
+        cadence: c?.cadence ?? p.cadence,
+        kind: "overdue",
+        badge: { label: "Overdue", tone: "error" },
+        detail: p.period_id ? `gap on ${p.period_id}` : "uncovered period",
+        rank: -1000,
+        to: `/controls?id=${encodeURIComponent(p.control_id)}`,
+      });
+      seen.add(p.control_id);
+    } else if (p.status === "open") {
+      items.push({
+        key: `due:${p.control_id}`,
+        controlId: p.control_id,
+        cadence: c?.cadence ?? p.cadence,
+        kind: "due",
+        badge: { label: "Open", tone: "warn" },
+        detail: p.period_id
+          ? `current period ${p.period_id}${
+              p.period_end ? ` ends ${p.period_end}` : ""
+            }`
+          : "current period",
+        rank: 0,
+        to: `/controls?id=${encodeURIComponent(p.control_id)}`,
+      });
+      seen.add(p.control_id);
+    }
   });
 
   const dayMs = 24 * 60 * 60 * 1000;

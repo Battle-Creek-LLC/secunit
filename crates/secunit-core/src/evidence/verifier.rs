@@ -18,7 +18,6 @@ const MANIFEST_FILE: &str = "manifest.json";
 const PREPARE_FILE: &str = "prepare.json";
 const RESULT_FILE: &str = "result.json";
 const PENDING_SENTINEL: &str = ".run-pending";
-const ABORT_FILE: &str = "abort.json";
 
 /// One verified run.
 #[derive(Debug, Clone)]
@@ -249,13 +248,7 @@ pub fn verify(root: &Path, control_id: Option<&str>) -> Result<VerifyReport> {
 /// failed — caller turns that into a `FailureKind::Unreadable` for this
 /// run rather than aborting the whole verify pass.
 fn recompute_and_compare(run_dir: &Path, manifest: &Manifest) -> Result<Vec<String>, String> {
-    let exclude = [
-        PREPARE_FILE,
-        RESULT_FILE,
-        MANIFEST_FILE,
-        ABORT_FILE,
-        PENDING_SENTINEL,
-    ];
+    let exclude = [PREPARE_FILE, RESULT_FILE, MANIFEST_FILE, PENDING_SENTINEL];
     let on_disk = hash_tree(run_dir, &exclude).map_err(|e| format!("hash_tree: {e}"))?;
     let mut by_path: BTreeMap<&str, &super::hasher::HashedArtifact> = BTreeMap::new();
     for h in &on_disk {

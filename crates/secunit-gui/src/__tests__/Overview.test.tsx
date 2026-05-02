@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 interface ControlSummaryFixture {
-  status?: "sealed" | "overdue" | "due-soon" | "in-progress" | "aborted" | "never-run" | "idle";
+  status?: "sealed" | "overdue" | "due-soon" | "in-progress" | "failed" | "never-run" | "idle";
   next_due?: string | null;
 }
 
@@ -46,6 +46,39 @@ describe("Overview", () => {
       if (cmd === "due_rows")
         return [
           { control_id: "b", cadence: "weekly", next_due: "2026-05-04", overdue: false },
+        ];
+      if (cmd === "current_period_status")
+        return [
+          {
+            control_id: "a",
+            cadence: "weekly",
+            period_id: "2026-W17",
+            period_start: "2026-04-20",
+            period_end: "2026-04-26",
+            status: "gap",
+            satisfied_by_run_id: null,
+            late: false,
+          },
+          {
+            control_id: "b",
+            cadence: "weekly",
+            period_id: "2026-W18",
+            period_start: "2026-04-27",
+            period_end: "2026-05-03",
+            status: "open",
+            satisfied_by_run_id: null,
+            late: false,
+          },
+          {
+            control_id: "c",
+            cadence: "weekly",
+            period_id: "2026-W18",
+            period_start: "2026-04-27",
+            period_end: "2026-05-03",
+            status: "satisfied",
+            satisfied_by_run_id: "r1",
+            late: false,
+          },
         ];
       if (cmd === "get_inventory") return { kinds: [] };
       if (cmd === "recent_runs")
@@ -114,6 +147,7 @@ describe("Overview", () => {
     mockedInvoke.mockImplementation(async (cmd) => {
       if (cmd === "list_controls") return [mkControl("ok")];
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "get_inventory") return { kinds: [] };
       if (cmd === "recent_runs") return [];
       throw new Error(`unexpected: ${cmd}`);

@@ -30,6 +30,7 @@ describe("store", () => {
         return [
           { control_id: "a", cadence: "weekly", next_due: null, overdue: false },
         ];
+      if (cmd === "current_period_status") return [];
       if (cmd === "get_inventory") return { kinds: [] };
       if (cmd === "recent_runs") return [];
       throw new Error(`unexpected ${cmd}`);
@@ -47,6 +48,7 @@ describe("store", () => {
     mockedInvoke.mockImplementation(async (cmd) => {
       if (cmd === "list_controls") return [mkControl("a", titleA)];
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "get_inventory") return { kinds: [] };
       if (cmd === "recent_runs") return [];
       throw new Error(`unexpected ${cmd}`);
@@ -64,6 +66,7 @@ describe("store", () => {
     mockedInvoke.mockImplementation(async (cmd) => {
       if (cmd === "list_controls") return [mkControl("a")];
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "get_inventory") return { kinds: [] };
       if (cmd === "recent_runs") return [];
       throw new Error(`unexpected ${cmd}`);
@@ -89,6 +92,7 @@ describe("store", () => {
     mockedInvoke.mockImplementation(async (cmd) => {
       if (cmd === "list_controls") return [mkControl("a")];
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "get_inventory") return inv;
       if (cmd === "recent_runs") return [];
       throw new Error(`unexpected ${cmd}`);

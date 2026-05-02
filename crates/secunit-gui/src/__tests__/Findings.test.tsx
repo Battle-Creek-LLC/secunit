@@ -31,6 +31,7 @@ describe("Findings", () => {
           },
         ];
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "get_inventory") return { kinds: [] };
       if (cmd === "recent_runs") return [];
       if (cmd === "list_findings")
@@ -79,6 +80,7 @@ describe("Findings", () => {
     mockedInvoke.mockImplementation(async (cmd) => {
       if (cmd === "list_controls") return [];
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "get_inventory") return { kinds: [] };
       if (cmd === "recent_runs") return [];
       if (cmd === "list_findings")

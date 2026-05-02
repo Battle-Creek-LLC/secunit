@@ -1,13 +1,16 @@
 //! Registry-backed read commands. Every entry point loads or reads from
 //! the cached `LoadedProject` in `AppState`; the cache is populated by
-//! `load_project` and rebuilt by the watcher on disk events (JOB-04).
+//! `load_project`. The watcher refreshes the `state.json` slice on disk
+//! changes (so finalize / abort flips through immediately); edits to
+//! controls, inventory, schedule, or config still require a project
+//! reload to surface.
 
 use std::path::{Path, PathBuf};
 
 use chrono::{Local, NaiveDate};
-use secunit_core::evidence::manifest::{AbortRecord, Manifest, PrepareContext};
+use secunit_core::evidence::manifest::{Manifest, PrepareContext};
 use secunit_core::model::{Cadence, Control, RunStatus};
-use secunit_core::registry::{self, loader, resolver};
+use secunit_core::registry::{self, coverage as core_coverage, loader, period, resolver};
 use tauri::{AppHandle, State};
 
 use crate::api::types::*;
@@ -76,8 +79,7 @@ pub fn load_project(
         root: root.display().to_string(),
         controls_count: registry.controls.len(),
         inventory_count: registry.inventory.iter().count(),
-        has_state: !registry.state.controls.is_empty()
-            || registry.state.updated_at.is_some(),
+        has_state: !registry.state.controls.is_empty() || registry.state.updated_at.is_some(),
         has_config: registry.config.org.is_some()
             || !registry.config.owners.is_empty()
             || !registry.config.integrations.is_empty(),
@@ -190,7 +192,6 @@ fn summarise_control(
         last_status: state_entry.map(|s| match s.last_status {
             RunStatus::Complete => "complete".into(),
             RunStatus::InProgress => "in-progress".into(),
-            RunStatus::Aborted => "aborted".into(),
             RunStatus::Failed => "failed".into(),
             RunStatus::NeverRun => "never-run".into(),
         }),
@@ -210,7 +211,7 @@ fn derive_status(
     match state {
         Some(s) => match s.last_status {
             RunStatus::InProgress => ControlStatus::InProgress,
-            RunStatus::Aborted | RunStatus::Failed => ControlStatus::Aborted,
+            RunStatus::Failed => ControlStatus::Failed,
             RunStatus::NeverRun => ControlStatus::NeverRun,
             RunStatus::Complete => match next_due {
                 Some(d) if d <= today + chrono::Duration::days(7) => ControlStatus::DueSoon,
@@ -294,6 +295,140 @@ pub fn due_rows(
             overdue: r.overdue,
         })
         .collect())
+}
+
+#[tauri::command]
+pub fn current_period_status(
+    today: Option<NaiveDate>,
+    state: State<'_, AppState>,
+) -> Result<Vec<CurrentPeriodStatus>, String> {
+    let project = state.project.lock().expect("AppState.project poisoned");
+    let project = require_loaded(&project)?;
+    let today = today_or(today);
+
+    let mut out: Vec<CurrentPeriodStatus> = Vec::with_capacity(project.registry.controls.len());
+    for ctrl in project.registry.controls.values() {
+        let cadence = cadence_str(ctrl.cadence);
+        if matches!(ctrl.cadence, secunit_core::model::Cadence::Continuous) {
+            out.push(CurrentPeriodStatus {
+                control_id: ctrl.id.clone(),
+                cadence,
+                period_id: None,
+                period_start: None,
+                period_end: None,
+                status: PeriodStatusView::Future, // unused; UIs hide continuous
+                satisfied_by_run_id: None,
+                late: false,
+            });
+            continue;
+        }
+        let pid = period::derive(ctrl.cadence, today);
+        let bounds = pid.as_deref().and_then(|p| period::bounds(ctrl.cadence, p));
+        let (period_start, period_end) = match bounds {
+            Some((s, e)) => (Some(s), Some(e)),
+            None => (None, None),
+        };
+
+        // Walk evidence once per control. If the report has zero
+        // expected periods (continuous), short-circuit.
+        let report = match (period_start, period_end) {
+            (Some(s), Some(e)) => {
+                core_coverage::coverage(&project.registry, &ctrl.id, s, e, today).ok()
+            }
+            _ => None,
+        };
+        let current = report.as_ref().and_then(|r| r.periods.first().cloned());
+        let (status, satisfied_by, late) = match current {
+            Some(p) => (
+                PeriodStatusView::from(p.status),
+                p.satisfied_by.map(|r| r.run_id),
+                p.late,
+            ),
+            None => (PeriodStatusView::Future, None, false),
+        };
+
+        out.push(CurrentPeriodStatus {
+            control_id: ctrl.id.clone(),
+            cadence,
+            period_id: pid,
+            period_start,
+            period_end,
+            status,
+            satisfied_by_run_id: satisfied_by,
+            late,
+        });
+    }
+    out.sort_by(|a, b| a.control_id.cmp(&b.control_id));
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn coverage(
+    control_id: String,
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+    today: Option<NaiveDate>,
+    state: State<'_, AppState>,
+) -> Result<CoverageReportView, String> {
+    let project = state.project.lock().expect("AppState.project poisoned");
+    let project = require_loaded(&project)?;
+    let today = today_or(today);
+    let (start, end) = window_or_default_quarter(today, from, to);
+    let report = core_coverage::coverage(&project.registry, &control_id, start, end, today)
+        .map_err(|e| format!("coverage: {e:#}"))?;
+
+    Ok(CoverageReportView {
+        control_id: report.control_id,
+        window_start: report.window_start,
+        window_end: report.window_end,
+        periods: report
+            .periods
+            .into_iter()
+            .map(|p| PeriodCoverageView {
+                period_id: p.period_id,
+                period_start: p.period_start,
+                period_end: p.period_end,
+                status: p.status.into(),
+                satisfied_by_run_id: p.satisfied_by.map(|r| r.run_id),
+                late: p.late,
+                skipped_reason: p.skipped_reason,
+            })
+            .collect(),
+        unclassified_runs: report
+            .unclassified_runs
+            .into_iter()
+            .map(|u| UnclassifiedRunView {
+                run_id: u.run_id,
+                period_id: u.period_id,
+                completed_at: u.completed_at,
+                reason: u.reason,
+            })
+            .collect(),
+    })
+}
+
+fn window_or_default_quarter(
+    today: NaiveDate,
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+) -> (NaiveDate, NaiveDate) {
+    use chrono::Datelike;
+    let q_first_month = match today.month() {
+        1..=3 => 1,
+        4..=6 => 4,
+        7..=9 => 7,
+        _ => 10,
+    };
+    let default_start = NaiveDate::from_ymd_opt(today.year(), q_first_month, 1).unwrap();
+    let default_end = if q_first_month == 10 {
+        NaiveDate::from_ymd_opt(today.year(), 12, 31).unwrap()
+    } else {
+        NaiveDate::from_ymd_opt(today.year(), q_first_month + 3, 1)
+            .unwrap()
+            .pred_opt()
+            .unwrap()
+    };
+    (from.unwrap_or(default_start), to.unwrap_or(default_end))
 }
 
 #[tauri::command]
@@ -450,10 +585,7 @@ pub fn list_runs(
 }
 
 #[tauri::command]
-pub fn recent_runs(
-    limit: usize,
-    state: State<'_, AppState>,
-) -> Result<Vec<RunRow>, String> {
+pub fn recent_runs(limit: usize, state: State<'_, AppState>) -> Result<Vec<RunRow>, String> {
     let project = state.project.lock().expect("AppState.project poisoned");
     let project = require_loaded(&project)?;
     let mut rows = walk_runs(&project.root);
@@ -464,10 +596,7 @@ pub fn recent_runs(
 const ARTIFACT_PREVIEW_CAP: u64 = 2 * 1024 * 1024; // 2 MiB
 
 #[tauri::command]
-pub fn read_artifact(
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<ArtifactView, String> {
+pub fn read_artifact(path: String, state: State<'_, AppState>) -> Result<ArtifactView, String> {
     let project_root = {
         let project = state.project.lock().expect("AppState.project poisoned");
         let project = require_loaded(&project)?;
@@ -485,8 +614,8 @@ pub fn read_artifact(
         return Err("artifact path escapes project root".into());
     }
 
-    let metadata = std::fs::metadata(&canonical)
-        .map_err(|e| format!("stat {}: {e}", canonical.display()))?;
+    let metadata =
+        std::fs::metadata(&canonical).map_err(|e| format!("stat {}: {e}", canonical.display()))?;
     let bytes = metadata.len();
 
     let ext = canonical
@@ -508,9 +637,7 @@ pub fn read_artifact(
         "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" => ArtifactKind::Image,
         _ => match basename.as_str() {
             "findings.md" => ArtifactKind::Markdown,
-            "manifest.json" | "prepare.json" | "abort.json" | "result.json" => {
-                ArtifactKind::Json
-            }
+            "manifest.json" | "prepare.json" | "result.json" => ArtifactKind::Json,
             _ => ArtifactKind::Binary,
         },
     };
@@ -581,7 +708,11 @@ pub fn list_findings(
             Ok(n) => n,
             Err(_) => continue,
         };
-        for q_entry in std::fs::read_dir(&year_path).into_iter().flatten().flatten() {
+        for q_entry in std::fs::read_dir(&year_path)
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
             let q_path = q_entry.path();
             if !q_path.is_dir() {
                 continue;
@@ -607,7 +738,11 @@ pub fn list_findings(
                 if !ctrl_path.is_dir() {
                     continue;
                 }
-                for run_entry in std::fs::read_dir(&ctrl_path).into_iter().flatten().flatten() {
+                for run_entry in std::fs::read_dir(&ctrl_path)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                {
                     let run_path = run_entry.path();
                     if !run_path.is_dir() {
                         continue;
@@ -624,13 +759,10 @@ pub fn list_findings(
                             let metadata = f.metadata().ok();
                             let bytes = metadata.as_ref().map(|m| m.len()).unwrap_or(0);
                             let manifest_path = run_path.join("manifest.json");
-                            let abort_path = run_path.join("abort.json");
-                            let completed_at = read_manifest(&manifest_path)
-                                .map(|m| m.completed_at);
+                            let completed_at =
+                                read_manifest(&manifest_path).map(|m| m.completed_at);
                             let run_state = if manifest_path.exists() {
                                 RunState::Sealed
-                            } else if abort_path.exists() {
-                                RunState::Aborted
                             } else {
                                 RunState::Pending
                             };
@@ -691,9 +823,7 @@ pub fn read_findings(
             break;
         }
     }
-    let path = found.ok_or_else(|| {
-        format!("findings.md not found for {control_id}/{run_id}")
-    })?;
+    let path = found.ok_or_else(|| format!("findings.md not found for {control_id}/{run_id}"))?;
     let canonical = path
         .canonicalize()
         .map_err(|e| format!("canonicalise {}: {e}", path.display()))?;
@@ -745,8 +875,6 @@ pub fn get_run(
         .map(|m: Manifest| serde_json::to_value(m).expect("manifest serialisable"));
     let prepare = read_json_if_present(&canonical.join("prepare.json"))?
         .map(|p: PrepareContext| serde_json::to_value(p).expect("prepare serialisable"));
-    let abort = read_json_if_present(&canonical.join("abort.json"))?
-        .map(|a: AbortRecord| serde_json::to_value(a).expect("abort serialisable"));
 
     let tree = build_run_tree(&canonical, &canonical)?;
 
@@ -754,21 +882,17 @@ pub fn get_run(
         row,
         manifest,
         prepare,
-        abort,
         tree,
     })
 }
 
-fn read_json_if_present<T: serde::de::DeserializeOwned>(
-    path: &Path,
-) -> Result<Option<T>, String> {
+fn read_json_if_present<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
     if !path.exists() {
         return Ok(None);
     }
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
-    let v = serde_json::from_str(&text)
-        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let v = serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
     Ok(Some(v))
 }
 
@@ -807,8 +931,8 @@ fn build_run_tree(_root: &Path, dir: &Path) -> Result<Vec<RunTreeNode>, String> 
 }
 
 /// Walk `<root>/evidence/<y>/<q>/<control>/<run>/` and produce one row
-/// per run directory we find. Sealed / aborted / pending derived from
-/// the presence of `manifest.json`, `abort.json`, `.run-pending`.
+/// per run directory we find. Sealed / pending derived from the presence
+/// of `manifest.json` (or `.run-pending`).
 fn walk_runs(root: &Path) -> Vec<RunRow> {
     let evidence = root.join("evidence");
     if !evidence.exists() {
@@ -828,7 +952,11 @@ fn walk_runs(root: &Path) -> Vec<RunRow> {
             Ok(n) => n,
             Err(_) => continue,
         };
-        for q in std::fs::read_dir(&year_path).into_iter().flatten().flatten() {
+        for q in std::fs::read_dir(&year_path)
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
             let q_path = q.path();
             if !q_path.is_dir() {
                 continue;
@@ -844,7 +972,11 @@ fn walk_runs(root: &Path) -> Vec<RunRow> {
                     continue;
                 }
                 let control_id = ctrl.file_name().to_string_lossy().into_owned();
-                for run in std::fs::read_dir(&ctrl_path).into_iter().flatten().flatten() {
+                for run in std::fs::read_dir(&ctrl_path)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                {
                     let run_path = run.path();
                     if !run_path.is_dir() {
                         continue;
@@ -878,18 +1010,19 @@ fn row_from_run_dir(
     run_dir: &Path,
 ) -> RunRow {
     let manifest_path = run_dir.join("manifest.json");
-    let abort_path = run_dir.join("abort.json");
     let pending_path = run_dir.join(".run-pending");
 
     let (state, started_at, completed_at, manifest_sha) =
         if let Some(m) = read_manifest(&manifest_path) {
             let sha = sha256_of_file(&manifest_path);
-            (RunState::Sealed, Some(m.started_at), Some(m.completed_at), sha)
-        } else if let Some(a) = read_abort(&abort_path) {
-            (RunState::Aborted, Some(a.aborted_at), Some(a.aborted_at), None)
+            (
+                RunState::Sealed,
+                Some(m.started_at),
+                Some(m.completed_at),
+                sha,
+            )
         } else if pending_path.exists() {
-            let started = read_prepare(&run_dir.join("prepare.json"))
-                .map(|p| p.started_at);
+            let started = read_prepare(&run_dir.join("prepare.json")).map(|p| p.started_at);
             (RunState::Pending, started, None, None)
         } else {
             (RunState::Pending, None, None, None)
@@ -914,11 +1047,6 @@ fn read_manifest(path: &Path) -> Option<Manifest> {
 }
 
 fn read_prepare(path: &Path) -> Option<PrepareContext> {
-    let text = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&text).ok()
-}
-
-fn read_abort(path: &Path) -> Option<AbortRecord> {
     let text = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()
 }
@@ -1031,5 +1159,4 @@ mod tests {
         let names: Vec<_> = tree.iter().map(|n| n.name.as_str()).collect();
         assert_eq!(names, vec!["a.txt", "sub", "z.txt"]);
     }
-
 }

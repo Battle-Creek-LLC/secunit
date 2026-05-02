@@ -11,8 +11,7 @@ interface RunSummaryProps {
 
 export function RunSummary({ detail, selectedPath, onSelectArtifact }: RunSummaryProps) {
   const r = detail.row;
-  const stateTone =
-    r.state === "sealed" ? "ok" : r.state === "aborted" ? "error" : "warn";
+  const stateTone = r.state === "sealed" ? "ok" : "warn";
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto p-4">

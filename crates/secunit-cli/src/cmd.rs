@@ -10,6 +10,7 @@ use secunit_core::model::LoadedRegistry;
 use secunit_core::registry::loader::{self, LoadReport};
 
 pub mod capture;
+pub mod coverage;
 pub mod due;
 pub mod features;
 pub mod inventory;

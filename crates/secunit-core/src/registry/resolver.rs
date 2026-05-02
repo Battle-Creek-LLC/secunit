@@ -60,8 +60,7 @@ pub fn next_due(
     today: NaiveDate,
     config_default_weekday: Option<Weekday>,
 ) -> Option<NaiveDate> {
-    next_due_with_reason(control, schedule, state, today, config_default_weekday)
-        .map(|r| r.date)
+    next_due_with_reason(control, schedule, state, today, config_default_weekday).map(|r| r.date)
 }
 
 /// Like [`next_due`] but returns the date together with the
@@ -150,8 +149,8 @@ pub fn next_due_with_reason(
         .iter()
         .find(|o| o.control_id == control.id && o.weekday.is_some());
     let weekday_override = weekday_override_entry.and_then(|o| o.weekday);
-    let weekday_note = weekday_override_entry
-        .and_then(|o| o.note.clone().or_else(|| o.reason.clone()));
+    let weekday_note =
+        weekday_override_entry.and_then(|o| o.note.clone().or_else(|| o.reason.clone()));
 
     // Cadence-derived date, accounting for any weekday override that
     // applies to a weekly cadence.
@@ -175,8 +174,8 @@ pub fn next_due_with_reason(
     };
 
     if let Some(d) = cadence_due {
-        let weekday_active = matches!(control.cadence, Cadence::Weekly)
-            && weekday_override.is_some();
+        let weekday_active =
+            matches!(control.cadence, Cadence::Weekly) && weekday_override.is_some();
         let (reason, note, precedence) = if weekday_active {
             (DueReason::OverrideWeekday, weekday_note.clone(), 2u8)
         } else {

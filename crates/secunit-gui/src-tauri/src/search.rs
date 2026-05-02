@@ -23,7 +23,10 @@ use secunit_core::model::LoadedRegistry;
 use serde::Serialize;
 use tantivy::collector::TopDocs;
 use tantivy::query::{BooleanQuery, Occur, Query, QueryParser};
-use tantivy::schema::{Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value, FAST, INDEXED, STORED, STRING, TEXT};
+use tantivy::schema::{
+    Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value, FAST, INDEXED, STORED,
+    STRING, TEXT,
+};
 use tantivy::{doc, Index, IndexWriter, TantivyDocument};
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -177,18 +180,15 @@ impl SearchIndex {
                     .ok()
                     .and_then(|m| m.modified().ok())
                     .map(|t| {
-                        let dur = t
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default();
+                        let dur = t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
                         dur.as_secs() as i64
                     })
                     .unwrap_or(0);
 
-                if name == "manifest.json" || name == "abort.json" || name == "prepare.json" {
+                if name == "manifest.json" || name == "prepare.json" {
                     if let (Some(c), Some(r)) = (parts.get(2), parts.get(3)) {
                         let status = match name.as_ref() {
                             "manifest.json" => "sealed",
-                            "abort.json" => "aborted",
                             _ => "pending",
                         };
                         writer.add_document(doc!(
@@ -231,9 +231,7 @@ impl SearchIndex {
                     count += 1;
                 }
 
-                if !["manifest.json", "abort.json", "prepare.json", "findings.md"]
-                    .contains(&name.as_ref())
-                {
+                if !["manifest.json", "prepare.json", "findings.md"].contains(&name.as_ref()) {
                     writer.add_document(doc!(
                         self.fields.kind => "artifact",
                         self.fields.id => path_str.clone(),
@@ -257,13 +255,23 @@ impl SearchIndex {
 
     /// BM25 search with field boosts. `kinds` filters the result set if
     /// non-empty.
-    pub fn search(&self, query: &str, limit: usize, kinds: &[String]) -> tantivy::Result<Vec<SearchHit>> {
+    pub fn search(
+        &self,
+        query: &str,
+        limit: usize,
+        kinds: &[String],
+    ) -> tantivy::Result<Vec<SearchHit>> {
         let reader = self.index.reader()?;
         let searcher = reader.searcher();
 
         let mut parser = QueryParser::for_index(
             &self.index,
-            vec![self.fields.title, self.fields.tags, self.fields.body, self.fields.id],
+            vec![
+                self.fields.title,
+                self.fields.tags,
+                self.fields.body,
+                self.fields.id,
+            ],
         );
         parser.set_field_boost(self.fields.title, 4.0);
         parser.set_field_boost(self.fields.tags, 3.0);
@@ -380,9 +388,7 @@ mod tests {
         let (reg, _) = loader::load(&root);
         let mut idx = SearchIndex::new().unwrap();
         idx.rebuild(&reg, &root).unwrap();
-        let hits = idx
-            .search("audit", 10, &["control".into()])
-            .unwrap();
+        let hits = idx.search("audit", 10, &["control".into()]).unwrap();
         assert!(hits.iter().all(|h| h.kind == "control"));
     }
 

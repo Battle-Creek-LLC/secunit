@@ -6,7 +6,7 @@ const tones: Record<ControlStatus, BadgeVariant> = {
   "due-soon": "warn",
   "in-progress": "info",
   sealed: "ok",
-  aborted: "error",
+  failed: "error",
   "never-run": "neutral",
   idle: "neutral",
 };
@@ -16,7 +16,7 @@ const labels: Record<ControlStatus, string> = {
   "due-soon": "due soon",
   "in-progress": "in progress",
   sealed: "sealed",
-  aborted: "aborted",
+  failed: "failed",
   "never-run": "never run",
   idle: "idle",
 };

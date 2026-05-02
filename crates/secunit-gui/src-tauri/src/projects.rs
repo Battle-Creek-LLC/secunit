@@ -186,7 +186,11 @@ pub fn save_state(path: &Path, state: &PersistedState) -> Result<(), ProjectsErr
 }
 
 /// Compose the `ProjectsView` returned to the frontend.
-pub fn view_for(config: &ProjectsConfig, persisted: &PersistedState, source: &Path) -> ProjectsView {
+pub fn view_for(
+    config: &ProjectsConfig,
+    persisted: &PersistedState,
+    source: &Path,
+) -> ProjectsView {
     let projects = config
         .projects
         .iter()

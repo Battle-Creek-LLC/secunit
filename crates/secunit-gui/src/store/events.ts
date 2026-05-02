@@ -4,7 +4,7 @@
 // `#[serde(tag="kind")]` enum shape but topics are dispatched per-name
 // rather than reading the discriminator twice.
 
-export type RunChange = "sealed" | "aborted" | "prepared-or-modified";
+export type RunChange = "sealed" | "prepared-or-modified";
 
 export interface ControlChanged {
   kind: "control_changed";

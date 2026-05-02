@@ -29,6 +29,8 @@ const ALLOWLIST: &[&str] = &[
     "list_controls",
     "get_control",
     "due_rows",
+    "current_period_status",
+    "coverage",
     "get_inventory",
     "list_runs",
     "recent_runs",
@@ -115,8 +117,8 @@ fn no_command_name_smells_like_a_write() {
     // when the implementation is in a separate file. Update the deny
     // list as new vocabulary surfaces.
     const DENY: &[&str] = &[
-        "write_", "create_", "delete_", "remove_", "edit_", "save_", "set_", "update_",
-        "patch_", "mutate_", "commit_", "push_",
+        "write_", "create_", "delete_", "remove_", "edit_", "save_", "set_", "update_", "patch_",
+        "mutate_", "commit_", "push_",
     ];
     for name in ALLOWLIST {
         for bad in DENY {
@@ -139,8 +141,7 @@ fn csp_does_not_relax_style_src_with_unsafe_inline() {
     // -elem/-attr split and reverts to the broad form.
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
     let body = fs::read_to_string(&path).expect("read tauri.conf.json");
-    let csp: serde_json::Value =
-        serde_json::from_str(&body).expect("tauri.conf.json parses");
+    let csp: serde_json::Value = serde_json::from_str(&body).expect("tauri.conf.json parses");
     let csp_str = csp
         .pointer("/app/security/csp")
         .and_then(|v| v.as_str())
@@ -176,8 +177,7 @@ fn csp_does_not_relax_style_src_with_unsafe_inline() {
 
 #[test]
 fn capabilities_grant_no_fs_write() {
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("capabilities/default.json");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("capabilities/default.json");
     let body = fs::read_to_string(&path).expect("read capabilities/default.json");
     // Spot-check the obvious banned permissions. Tauri 2's permission
     // names follow `<plugin>:<verb>` for plugin-defined permissions and

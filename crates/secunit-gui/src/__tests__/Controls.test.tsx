@@ -30,6 +30,7 @@ describe("Controls", () => {
     mockedInvoke.mockImplementation(async (cmd) => {
       if (cmd === "list_controls") return controls;
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "get_inventory") return { kinds: [] };
       if (cmd === "recent_runs") return [];
       throw new Error(`unexpected: ${cmd}`);
@@ -84,6 +85,7 @@ describe("Controls", () => {
       if (cmd === "list_controls")
         return [mkControl("aa-weekly-audit-review", "sealed", "Audit log review")];
       if (cmd === "due_rows") return [];
+      if (cmd === "current_period_status") return [];
       if (cmd === "get_inventory") return { kinds: [] };
       if (cmd === "recent_runs") return [];
       if (cmd === "get_control") {
