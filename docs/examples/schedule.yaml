@@ -1,9 +1,5 @@
 overrides:
-  - control_id: ra-2026-03-vuln-audit
-    due: 2026-03-15
-    note: "Pinned to mid-March per the engagement's risk-assessment-procedure schedule."
-
-  - control_id: ra-2026-12-pentest
+  - control_id: ra-pentest
     due: 2026-12-01
     note: "Vendor engagement booked; window opens Dec 1."
 

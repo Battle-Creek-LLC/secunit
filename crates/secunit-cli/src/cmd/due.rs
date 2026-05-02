@@ -94,6 +94,5 @@ fn cadence_str(c: secunit_core::model::Cadence) -> &'static str {
         Quarterly => "quarterly",
         SemiAnnual => "semi-annual",
         Annual => "annual",
-        Scheduled => "scheduled",
     }
 }

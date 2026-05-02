@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use chrono::NaiveDate;
 use proptest::prelude::*;
 use secunit_core::model::{
-    Cadence, Control, DueField, EvidenceRequirement, InventoryEntry, ResolvedSystem, Schedule,
+    Cadence, Control, EvidenceRequirement, InventoryEntry, ResolvedSystem, Schedule,
     ScheduleEntry, ScheduleInsert, ScheduleSkip, Scope, State, Weekday,
 };
 use secunit_core::registry::{
@@ -36,7 +36,6 @@ fn skeleton(id: &str, cadence: Cadence) -> Control {
         owner: "cto".into(),
         cadence,
         weekday: None,
-        due: None,
         due_by: None,
         skill: id.into(),
         skill_args: None,
@@ -84,14 +83,6 @@ fn annual_with_due_by_december_31() {
     // After the deadline, rolls to next year.
     let next = resolver::next_due(&c, &Default::default(), None, d("2027-01-15"), None);
     assert_eq!(next, Some(d("2027-12-31")));
-}
-
-#[test]
-fn scheduled_uses_due_field() {
-    let mut c = skeleton("c", Cadence::Scheduled);
-    c.due = Some(DueField::Single("2026-03-15".into()));
-    let next = resolver::next_due(&c, &Default::default(), None, d("2026-01-01"), None);
-    assert_eq!(next, Some(d("2026-03-15")));
 }
 
 #[test]

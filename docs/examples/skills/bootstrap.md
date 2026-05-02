@@ -48,7 +48,7 @@ The skill reads the directory rooted at `org.wisp_repo` (relative to the secunit
    - **added** — id does not exist; emit a draft under `raw/controls/<id>.yaml`.
    - **orphaned** — control exists in the live registry but no obligation in the current WISP scan maps to it; record in `bootstrap-report.md` for operator review. Do not delete.
 6. **Emit draft controls.** For each "added" obligation, write `raw/controls/<id>.yaml` with the schema-required fields:
-   - `id`, `title`, `policy` (relative path back into the WISP repo), `nist`, `owner` (from `_config.yaml` `owners` map by family, falling back to `owner`), `cadence`, `weekday` (for weekly), `due_by` (for annual), `due` (for scheduled), `skill` (matches the proposed control id unless a shared skill applies, e.g. `policy-annual-review`).
+   - `id`, `title`, `policy` (relative path back into the WISP repo), `nist`, `owner` (from `_config.yaml` `owners` map by family, falling back to `owner`), `cadence`, `weekday` (for weekly), `due_by` (for annual), `skill` (matches the proposed control id unless a shared skill applies, e.g. `policy-annual-review`).
    - `scope` — best guess based on the obligation. If the policy mentions "every source repo", emit `kind: source_repo, has_tags: [has-<family>]`. If "every cloud account in production", emit `kind: cloud_account, has_tags: [production]`. Otherwise omit (org-wide) and flag in the report for operator review.
    - `evidence_required` — derive from the obligation text (e.g. "scan output", "attestation", "summary"). Always include a `kind: summary` entry.
    - `references` — at minimum, the source policy/procedure file the obligation came from.

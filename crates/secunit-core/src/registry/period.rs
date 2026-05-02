@@ -38,7 +38,6 @@ pub fn derive(cadence: Cadence, target_date: NaiveDate) -> Option<String> {
             Some(format!("{:04}-H{}", target_date.year(), h))
         }
         Cadence::Annual => Some(format!("{:04}", target_date.year())),
-        Cadence::Scheduled => Some(format!("scheduled-{}", target_date.format("%Y-%m-%d"))),
     }
 }
 
@@ -54,7 +53,6 @@ pub fn bounds(cadence: Cadence, period_id: &str) -> Option<(NaiveDate, NaiveDate
         Cadence::Quarterly => parse_quarter(period_id),
         Cadence::SemiAnnual => parse_half(period_id),
         Cadence::Annual => parse_year(period_id),
-        Cadence::Scheduled => parse_scheduled(period_id),
     }
 }
 
@@ -123,12 +121,6 @@ fn parse_year(s: &str) -> Option<(NaiveDate, NaiveDate)> {
     let start = NaiveDate::from_ymd_opt(year, 1, 1)?;
     let end = NaiveDate::from_ymd_opt(year, 12, 31)?;
     Some((start, end))
-}
-
-fn parse_scheduled(s: &str) -> Option<(NaiveDate, NaiveDate)> {
-    let date_str = s.strip_prefix("scheduled-")?;
-    let d = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").ok()?;
-    Some((d, d))
 }
 
 fn next_month_start(year: i32, month: u32) -> Option<NaiveDate> {
@@ -214,14 +206,6 @@ mod tests {
     }
 
     #[test]
-    fn derive_scheduled_uses_target_date() {
-        assert_eq!(
-            derive(Cadence::Scheduled, d(2026, 5, 4)),
-            Some("scheduled-2026-05-04".into())
-        );
-    }
-
-    #[test]
     fn derive_continuous_is_none() {
         assert_eq!(derive(Cadence::Continuous, d(2026, 5, 4)), None);
     }
@@ -268,14 +252,6 @@ mod tests {
     }
 
     #[test]
-    fn bounds_scheduled_is_single_day() {
-        assert_eq!(
-            bounds(Cadence::Scheduled, "scheduled-2026-05-04"),
-            Some((d(2026, 5, 4), d(2026, 5, 4)))
-        );
-    }
-
-    #[test]
     fn bounds_continuous_is_none() {
         assert_eq!(bounds(Cadence::Continuous, "anything"), None);
     }
@@ -288,7 +264,6 @@ mod tests {
         assert_eq!(bounds(Cadence::Quarterly, "2026-q5"), None);
         assert_eq!(bounds(Cadence::SemiAnnual, "2026-H3"), None);
         assert_eq!(bounds(Cadence::Annual, "26"), None);
-        assert_eq!(bounds(Cadence::Scheduled, "2026-05-04"), None);
     }
 
     #[test]
@@ -300,7 +275,6 @@ mod tests {
             (Cadence::Quarterly, d(2026, 5, 4)),
             (Cadence::SemiAnnual, d(2026, 7, 1)),
             (Cadence::Annual, d(2026, 5, 4)),
-            (Cadence::Scheduled, d(2026, 5, 4)),
         ];
         for (cad, date) in cases {
             let id = derive(cad, date).expect("derive should produce a period id");

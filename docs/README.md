@@ -16,7 +16,7 @@ Specification and reference shapes for `secunit`, the operational layer that dri
 Under [`examples/`](examples/):
 
 - [`inventory.yaml`](examples/inventory.yaml) — in-scope systems, organized by kind with tags and lifecycle dates.
-- `controls/` — six reference control YAMLs spanning weekly, quarterly, annual, scheduled, multi-system, and policy-review cadences:
+- `controls/` — reference control YAMLs spanning weekly, quarterly, annual, multi-system, and policy-review cadences:
   - [`aa-weekly-audit-review.yaml`](examples/controls/aa-weekly-audit-review.yaml) — single-system (resolves to one cloud account)
   - [`sca-weekly-dependency-scan.yaml`](examples/controls/sca-weekly-dependency-scan.yaml) — multi-system, iterates source repos
   - [`ca-quarterly-vuln-scan.yaml`](examples/controls/ca-quarterly-vuln-scan.yaml) — scope by cloud-account tag

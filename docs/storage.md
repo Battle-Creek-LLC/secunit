@@ -169,7 +169,6 @@ A control's `cadence` resolves to a target date as follows. `schedule.yaml` over
 | `quarterly` | First business day of Q1/Q2/Q3/Q4 (Jan, Apr, Jul, Oct). |
 | `semi-annual` | First business day of January and July. |
 | `annual` | The control may declare `due_by` (e.g. `december-31`); default is the policy's effective-date anniversary. |
-| `scheduled` | Explicit date(s) in the control's `due:` field, expressed as ISO `YYYY-MM-DD` or `YYYY-MM`. |
 
 A control is **due** from its target date forward; it becomes **overdue** after a per-cadence grace period:
 
@@ -180,7 +179,6 @@ A control is **due** from its target date forward; it becomes **overdue** after 
 | `quarterly` | 14 days |
 | `semi-annual` | 21 days |
 | `annual` | 30 days |
-| `scheduled` | 7 days |
 
 ## `state.json`
 
