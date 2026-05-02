@@ -65,8 +65,8 @@ describe("App — bootstrap", () => {
 
     render(<App />);
 
-    const select = (await screen.findByRole("combobox")) as HTMLSelectElement;
-    expect(select.value).toBe("widgets");
+    const trigger = await screen.findByRole("combobox");
+    expect(trigger).toHaveTextContent("widgets");
     expect(calls.some((c) => c.cmd === "select_project" && c.args?.name === "widgets")).toBe(
       true,
     );
@@ -89,8 +89,8 @@ describe("App — bootstrap", () => {
     });
 
     render(<App />);
-    const select = (await screen.findByRole("combobox")) as HTMLSelectElement;
-    expect(select.value).toBe("b");
+    const trigger = await screen.findByRole("combobox");
+    expect(trigger).toHaveTextContent("b");
   });
 
   it("invokes select_project when the user picks another project", async () => {
@@ -115,10 +115,11 @@ describe("App — bootstrap", () => {
     });
 
     render(<App />);
-    const select = (await screen.findByRole("combobox")) as HTMLSelectElement;
-    await waitFor(() => expect(select.value).toBe("a"));
-    fireEvent.change(select, { target: { value: "b" } });
-    await waitFor(() => expect(select.value).toBe("b"));
+    const trigger = await screen.findByRole("combobox");
+    await waitFor(() => expect(trigger).toHaveTextContent("a"));
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole("option", { name: /^b/ }));
+    await waitFor(() => expect(trigger).toHaveTextContent("b"));
     expect(select_calls).toEqual(["a", "b"]);
   });
 
@@ -150,7 +151,10 @@ describe("App — bootstrap", () => {
       throw new Error(`unexpected: ${cmd}`);
     });
     render(<App />);
-    expect(await screen.findByRole("combobox")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "ghost (missing)" })).toBeInTheDocument();
+    const trigger = await screen.findByRole("combobox");
+    fireEvent.click(trigger);
+    expect(
+      await screen.findByRole("option", { name: /ghost.*missing/i }),
+    ).toBeInTheDocument();
   });
 });

@@ -12,12 +12,18 @@ edits remain the only paths that mutate state.
 
 ```
 crates/secunit-gui/
-  Cargo.toml          # workspace member; the Tauri shell crate
-  src/                # Rust shell (lib + bin)
-  capabilities/       # Tauri 2 permission set
-  tauri.conf.json
-  icons/              # bundle icon (placeholder; replace before release)
-  web/                # frontend: Vite + React + TypeScript + Tailwind
+  package.json        # frontend at the crate root (Vite + React + TS + Tailwind)
+  vite.config.ts
+  tsconfig.json
+  index.html
+  src/                # frontend source
+  src-tauri/          # Tauri Rust shell + config
+    Cargo.toml        # workspace member; the Tauri shell crate
+    src/              # Rust shell (lib + bin)
+    capabilities/     # Tauri 2 permission set
+    tauri.conf.json
+    icons/            # bundle icon (placeholder; replace before release)
+    tests/
   jobs/               # one JOB-XX-*.md per atomic commit
   PLAN.md
 ```
@@ -27,19 +33,19 @@ crates/secunit-gui/
 Frontend deps:
 
 ```sh
-pnpm --dir crates/secunit-gui/web install
+pnpm --dir crates/secunit-gui install
 ```
 
 Run the app in dev mode (Tauri spawns Vite via `beforeDevCommand`):
 
 ```sh
 cd crates/secunit-gui
-cargo tauri dev
+pnpm tauri:dev
 ```
 
-If you don't have `cargo-tauri` installed, `cargo install tauri-cli`
-fixes that. The Rust shell can be type-checked without launching the
-window:
+The Tauri CLI ships as a devDependency, so `pnpm install` is enough to
+provision it — no `cargo install` step required. The Rust shell can be
+type-checked without launching the window:
 
 ```sh
 cargo check -p secunit-gui
@@ -48,14 +54,14 @@ cargo check -p secunit-gui
 Frontend type-check and tests:
 
 ```sh
-pnpm --dir crates/secunit-gui/web typecheck
-pnpm --dir crates/secunit-gui/web test
+pnpm --dir crates/secunit-gui typecheck
+pnpm --dir crates/secunit-gui test
 ```
 
 ## Build
 
 ```sh
-pnpm --dir crates/secunit-gui/web build
+pnpm --dir crates/secunit-gui build
 cd crates/secunit-gui && cargo build --release
 ```
 

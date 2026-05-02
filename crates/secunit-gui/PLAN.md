@@ -9,12 +9,18 @@ The GUI is **read-only**. The CLI and direct git edits remain the only paths tha
 ```
 crates/
   secunit-gui/
-    Cargo.toml                # workspace member
     PLAN.md                   # this file
     jobs/JOB-XX-*.md          # one file per atomic commit
-    src/                      # Rust shell (Tauri)
-    src-tauri/ or tauri.conf  # Tauri config (depending on Tauri 2 layout)
-    web/                      # frontend (Vite + React + TS + Tailwind)
+    package.json              # frontend (Vite + React + TS + Tailwind) at crate root
+    vite.config.ts
+    tsconfig.json
+    index.html
+    src/                      # frontend source
+    src-tauri/                # Tauri Rust shell + config (workspace member)
+      Cargo.toml
+      src/                    # Rust shell (lib + bin)
+      tauri.conf.json
+      capabilities/
 ```
 
 The crate name is `secunit-gui`. The binary built by Tauri is also `secunit-gui`. It is gated behind a default-off cargo feature on the workspace so headless CI (which already builds `secunit-cli`) is unaffected by Tauri/WebKit deps until the GUI is opted into explicitly.

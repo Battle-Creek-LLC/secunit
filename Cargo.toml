@@ -4,7 +4,7 @@ members = [
     "crates/secunit-core",
     "crates/secunit-cli",
     "crates/secunit-capture",
-    "crates/secunit-gui",
+    "crates/secunit-gui/src-tauri",
 ]
 # secunit-gui pulls Tauri/WebKit native deps; keep it out of the default
 # `cargo build` so headless CI and core development stay fast. Build

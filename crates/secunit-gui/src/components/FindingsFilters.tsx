@@ -1,4 +1,4 @@
-import { Input, Label } from "@/components/ui";
+import { Input, Label, Select } from "@/components/ui";
 
 export interface FindingsFiltersProps {
   controlOptions: string[];
@@ -30,35 +30,29 @@ export function FindingsFilters({
       </div>
       <div>
         <Label htmlFor="ff-c">control</Label>
-        <select
+        <Select
           id="ff-c"
-          className="mt-0.5 h-8 w-full rounded-md border bg-background px-2 text-sm"
+          className="mt-0.5 w-full"
           value={controlId}
-          onChange={(e) => onChange({ control_id: e.target.value })}
-        >
-          <option value="">all</option>
-          {controlOptions.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => onChange({ control_id: v })}
+          options={[
+            { value: "", label: "all" },
+            ...controlOptions.map((c) => ({ value: c, label: c })),
+          ]}
+        />
       </div>
       <div>
         <Label htmlFor="ff-quarter">quarter</Label>
-        <select
+        <Select
           id="ff-quarter"
-          className="mt-0.5 h-8 w-full rounded-md border bg-background px-2 text-sm"
+          className="mt-0.5 w-full"
           value={quarter}
-          onChange={(e) => onChange({ quarter: e.target.value })}
-        >
-          <option value="">all</option>
-          {quarterOptions.map((q) => (
-            <option key={q} value={q}>
-              {q}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => onChange({ quarter: v })}
+          options={[
+            { value: "", label: "all" },
+            ...quarterOptions.map((q) => ({ value: q, label: q })),
+          ]}
+        />
       </div>
     </aside>
   );

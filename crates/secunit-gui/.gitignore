@@ -1,2 +1,6 @@
 target/
-gen/
+node_modules/
+dist/
+.vite/
+*.log
+tsconfig.tsbuildinfo

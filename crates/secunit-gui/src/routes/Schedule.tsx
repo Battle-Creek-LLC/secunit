@@ -63,7 +63,7 @@ export function Schedule() {
           </div>
         </header>
 
-        <Tabs defaultValue="calendar">
+        <Tabs defaultValue="list">
           <TabsList>
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
             <TabsTrigger value="list">List</TabsTrigger>

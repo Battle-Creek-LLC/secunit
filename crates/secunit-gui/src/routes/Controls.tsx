@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useStore } from "@/store";
 import { ControlsTable } from "@/components/ControlsTable";
 import { ControlDetailPane } from "@/components/ControlDetail";
-import { Input, Label } from "@/components/ui";
+import { Input, Label, Select } from "@/components/ui";
 import type { ControlStatus } from "@/lib/ipc";
 
 const STATUSES: Array<{ key: string; label: string; match: (s: ControlStatus) => boolean }> = [
@@ -101,33 +101,23 @@ export function Controls() {
           </div>
           <div>
             <Label htmlFor="status">status</Label>
-            <select
+            <Select
               id="status"
+              className="w-36"
               value={status}
-              onChange={(e) => updateParam("status", e.target.value)}
-              className="h-8 rounded-md border bg-background px-2 text-sm"
-            >
-              {STATUSES.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => updateParam("status", v)}
+              options={STATUSES.map((s) => ({ value: s.key, label: s.label }))}
+            />
           </div>
           <div>
             <Label htmlFor="cadence">cadence</Label>
-            <select
+            <Select
               id="cadence"
+              className="w-36"
               value={cadence}
-              onChange={(e) => updateParam("cadence", e.target.value)}
-              className="h-8 rounded-md border bg-background px-2 text-sm"
-            >
-              {CADENCES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => updateParam("cadence", v)}
+              options={CADENCES.map((c) => ({ value: c, label: c }))}
+            />
           </div>
           <div className="text-xs text-muted-foreground">
             {filtered.length} of {snapshot.controls.size}

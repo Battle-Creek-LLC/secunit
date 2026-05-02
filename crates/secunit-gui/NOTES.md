@@ -17,7 +17,7 @@ Decisions made while implementing the spec, plus questions for review at the end
 
 **Context.** The spec says "Tauri shell embeds `secunit-core`". Tauri 2.x (current, GA since late 2024) reorganised the per-app crate to live under `src-tauri/` with its own `Cargo.toml`. The workspace member is the outer crate.
 
-**Decision.** Use Tauri 2.x. Crate root is `crates/secunit-gui/`. Frontend lives under `web/`. The Tauri Rust shell lives under `src-tauri/` inside the crate. The workspace member declared in the root `Cargo.toml` is `crates/secunit-gui` (which delegates to the inner shell crate).
+**Decision.** Use Tauri 2.x. Crate root is `crates/secunit-gui/`. Frontend lives at the crate root (canonical Tauri 2 layout). The Tauri Rust shell lives under `src-tauri/` inside the crate. The workspace member declared in the root `Cargo.toml` is `crates/secunit-gui` (which delegates to the inner shell crate).
 
 **Why.** Tauri 2's API surface is closer to what the spec implies; backporting to v1 buys nothing.
 

@@ -25,8 +25,8 @@ describe("AppShell", () => {
 
     for (const label of [
       "Overview",
-      "Controls",
       "Schedule",
+      "Controls",
       "Findings",
       "Evidence",
       "Inventory",
