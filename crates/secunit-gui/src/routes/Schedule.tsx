@@ -74,7 +74,7 @@ export function Schedule() {
             </Card>
           </TabsContent>
           <TabsContent value="list">
-            <ScheduleList entries={entries} />
+            <ScheduleList entries={entries} periods={snapshot.periods} />
           </TabsContent>
         </Tabs>
       </div>
