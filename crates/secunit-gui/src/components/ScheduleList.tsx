@@ -1,7 +1,12 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Badge, type BadgeVariant } from "@/components/ui";
-import type { ScheduleEntryView, ScheduleReason } from "@/lib/ipc";
+import type {
+  CurrentPeriodStatus,
+  PeriodStatus,
+  ScheduleEntryView,
+  ScheduleReason,
+} from "@/lib/ipc";
 import { daysFromNow } from "@/lib/time";
 import { cn } from "@/lib/cn";
 
@@ -19,7 +24,20 @@ const overrideLabel: Record<Exclude<ScheduleReason, "cadence">, string> = {
   "override-skip": "pinned · skip",
 };
 
-export function ScheduleList({ entries }: { entries: ScheduleEntryView[] }) {
+const statusBadge: Partial<Record<PeriodStatus, { label: string; tone: BadgeVariant }>> = {
+  gap: { label: "Overdue", tone: "error" },
+  open: { label: "Open", tone: "warn" },
+  satisfied: { label: "Done", tone: "ok" },
+  skipped: { label: "Skipped", tone: "info" },
+};
+
+export function ScheduleList({
+  entries,
+  periods,
+}: {
+  entries: ScheduleEntryView[];
+  periods?: Map<string, CurrentPeriodStatus>;
+}) {
   const sorted = useMemo(() => {
     return [...entries].sort((a, b) => {
       if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
@@ -40,8 +58,9 @@ export function ScheduleList({ entries }: { entries: ScheduleEntryView[] }) {
       {sorted.map((e) => {
         const days = daysFromNow(e.date);
         const relative = relativeLabel(days, e.overdue);
-        const tone = urgencyTone(days, e.overdue);
         const override = e.reason !== "cadence" ? e.reason : null;
+        const period = periods?.get(e.control_id);
+        const status = period ? statusBadge[period.status] : undefined;
         const cid = encodeURIComponent(e.control_id);
         return (
           <li key={`${e.control_id}/${e.date}`}>
@@ -62,9 +81,17 @@ export function ScheduleList({ entries }: { entries: ScheduleEntryView[] }) {
                 </span>
               </div>
               {relative && (
-                <span className={cn("shrink-0 tabular-nums text-xs", tone)}>
+                <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
                   {relative}
                 </span>
+              )}
+              {status && (
+                <Badge
+                  variant={status.tone}
+                  title={periodTitle(period!)}
+                >
+                  {status.label}
+                </Badge>
               )}
               {override && (
                 <Badge
@@ -90,8 +117,16 @@ function relativeLabel(days: number | null, overdue: boolean): string {
   return overdue ? `${ago}d overdue` : `${ago}d ago`;
 }
 
-function urgencyTone(days: number | null, overdue: boolean): string {
-  if (overdue) return "font-medium text-error";
-  if (days === 0) return "font-medium text-warn";
-  return "text-muted-foreground";
+function periodTitle(p: CurrentPeriodStatus): string {
+  const parts: string[] = [];
+  if (p.period_start && p.period_end) {
+    parts.push(`period ${p.period_start} → ${p.period_end}`);
+  } else if (p.period_end) {
+    parts.push(`period ends ${p.period_end}`);
+  }
+  if (p.satisfied_by_run_id) {
+    parts.push(`satisfied by ${p.satisfied_by_run_id}`);
+  }
+  if (p.late) parts.push("late");
+  return parts.join(" · ");
 }
