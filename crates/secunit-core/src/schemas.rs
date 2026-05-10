@@ -1,6 +1,6 @@
 //! Compile-time embedded JSON Schemas. The schemas live in
-//! `schemas/*.schema.json` at repo root and are baked into the binary so
-//! validation does not depend on the install location.
+//! `crates/secunit-core/schemas/*.schema.json` and are baked into
+//! the binary so validation does not depend on the install location.
 
 use std::sync::OnceLock;
 
@@ -11,7 +11,7 @@ macro_rules! schema {
     ($name:literal, $path:literal) => {{
         static CELL: OnceLock<JSONSchema> = OnceLock::new();
         CELL.get_or_init(|| {
-            let raw = include_str!(concat!("../../../schemas/", $path));
+            let raw = include_str!(concat!("../schemas/", $path));
             let json: Value = serde_json::from_str(raw)
                 .unwrap_or_else(|e| panic!("schema {}: invalid JSON: {e}", $name));
             JSONSchema::options()
