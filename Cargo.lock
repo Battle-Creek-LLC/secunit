@@ -361,6 +361,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "bcl-secunit"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "chrono",
+ "clap",
+ "insta",
+ "predicates",
+ "secunit-capture",
+ "secunit-core",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5868,7 +5889,7 @@ dependencies = [
 
 [[package]]
 name = "secunit-capture"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5887,29 +5908,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "secunit-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "chrono",
- "clap",
- "insta",
- "predicates",
- "secunit-capture",
- "secunit-core",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "secunit-core"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5932,7 +5932,7 @@ dependencies = [
 
 [[package]]
 name = "secunit-gui"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "ammonia",
  "anyhow",

@@ -1,6 +1,6 @@
 //! Embedded JSON schemas for every capturer envelope. Schemas live in
-//! `schemas/capture-*.schema.json` at repo root and are baked into the
-//! binary via `include_str!`.
+//! `crates/secunit-capture/schemas/capture-*.schema.json` and are baked
+//! into the binary via `include_str!`.
 //!
 //! Capturers route output through [`validate`] before writing so the
 //! schema is the single source of truth for what a valid envelope
@@ -19,7 +19,7 @@ macro_rules! compiled {
     ($name:literal) => {{
         static CELL: OnceLock<JSONSchema> = OnceLock::new();
         CELL.get_or_init(|| {
-            let raw = include_str!(concat!("../../../schemas/", $name));
+            let raw = include_str!(concat!("../schemas/", $name));
             let json: Value = serde_json::from_str(raw)
                 .unwrap_or_else(|e| panic!("schema {}: invalid JSON: {e}", $name));
             JSONSchema::options()

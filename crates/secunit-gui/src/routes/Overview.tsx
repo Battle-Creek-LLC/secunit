@@ -1,9 +1,7 @@
 import { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { useStore } from "@/store";
 import { AlertStrip } from "@/components/AlertStrip";
 import { FocusList } from "@/components/FocusList";
-import { HowAmIDoing } from "@/components/HowAmIDoing";
 import { RunTimeline } from "@/components/RunTimeline";
 
 const STALLED_DAYS = 3;
@@ -79,19 +77,10 @@ export function Overview() {
 
         <section className="flex flex-col gap-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            How am I doing
+            Recent runs
           </h2>
-          <HowAmIDoing controls={snapshot.controls} runs={snapshot.runs} />
+          <RunTimeline runs={recent} emptyHint="no runs in evidence/ yet" />
         </section>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent runs</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <RunTimeline runs={recent} emptyHint="no runs in evidence/ yet" />
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

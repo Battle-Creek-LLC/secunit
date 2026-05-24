@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   Tabs,
   TabsContent,
   TabsList,
@@ -76,14 +74,7 @@ export function Schedule() {
             </Card>
           </TabsContent>
           <TabsContent value="list">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upcoming</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScheduleList entries={entries} />
-              </CardContent>
-            </Card>
+            <ScheduleList entries={entries} periods={snapshot.periods} />
           </TabsContent>
         </Tabs>
       </div>

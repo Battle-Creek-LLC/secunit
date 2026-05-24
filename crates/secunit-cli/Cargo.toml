@@ -1,11 +1,18 @@
 [package]
-name = "secunit-cli"
+name = "bcl-secunit"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+categories.workspace = true
 description = "secunit binary — agent helper for registry inspection, run orchestration, and capture."
+keywords = ["security", "registry", "verification", "cli", "secunit"]
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/secunit-{ target }.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "secunit{ binary-ext }"
 
 [[bin]]
 name = "secunit"

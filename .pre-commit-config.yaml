@@ -20,4 +20,4 @@ repos:
         entry: cargo test -p secunit-core --test schema_examples
         language: system
         pass_filenames: false
-        files: ^(schemas/|docs/examples/)
+        files: ^(crates/secunit-core/schemas/|crates/secunit-capture/schemas/|docs/examples/)
