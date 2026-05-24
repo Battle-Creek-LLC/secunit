@@ -12,6 +12,33 @@ A skill is a single markdown file using the [Claude Code Skills](https://docs.cl
 
 Skills are the only place that knows how to interpret captures, contact humans, or compose narrative. The control YAML is declarative metadata; the skill is the procedure; `secunit` provides deterministic primitives.
 
+## Where skills live: bundled vs local
+
+The reusable runbooks ship **bundled into the `secunit` binary** — they are the standard library, released with the tool. An org needs no install step: a fresh registry whose controls name `capture-sweep` or `policy-annual-review` works against the bundled copies out of the box, and a `secunit` upgrade ships updated runbooks with it.
+
+An org customizes by **override**: drop `<root>/skills/<name>.md` and it shadows the bundled skill of that name. A skill with no bundled counterpart (a bespoke per-control runbook) lives the same way — as a local file.
+
+Every place a skill is named resolves through **one order — local first, then bundled**:
+
+| Names a skill | Resolved by |
+|---|---|
+| a control's `skill:` | local → bundled |
+| a runbook's `skill_args.extend:` (fragment) | local → bundled |
+| `secunit validate` (cross-ref + `requires_features`) | local → bundled |
+| `secunit run prepare` (emits `skill: {name, source, sha256}`) | local → bundled |
+| `secunit skills show <name>` / `skills path <name>` | local → bundled |
+
+`run prepare` puts the resolved skill into the prepare context, so the agent loads the runbook by name (`secunit skills show <name>`) without caring whether it is bundled or local. The run manifest pins `skill_sha256`, so an assessor can always tell which exact runbook — and which source — produced a run.
+
+## Spine and fragment: compose, don't repeat
+
+Two roles, not two types — both are just skills, both resolve the same way:
+
+- A **spine** is the runbook a control names (`skill:`). The bundled standard-library runbooks are spines.
+- A **fragment** is a small, control-specific skill a spine *calls* for a step it can't express declaratively. A control points at one with `skill_args.extend: <name>`; the spine resolves it (local → bundled) at its hook points and folds the result in.
+
+The rule is **compose, never fork**: when a control mostly fits a shared runbook but needs a twist, add a fragment with only the delta — don't copy the spine and edit it. A control whose logic fits no spine at all names its own bespoke skill directly; that's the rare exception, the local-file escape hatch.
+
 ## Skill responsibilities
 
 A skill MUST:
@@ -34,13 +61,18 @@ A skill MUST NOT:
 - File external issues directly. Draft the body; let the agent or operator file.
 - Mutate `state.json`, `manifest.json`, or any sibling control's evidence.
 
-## Skill families
+## The bundled standard library
 
-Most controls map 1:1 to a skill. A few share:
+Six generic runbooks ship in the binary; most controls name one of these and pass their specifics through `skill_args`, so many controls share one runbook:
 
-- **`policy-annual-review`** — reused across all 16 policy review controls. The control YAML differs only by `policy` path; the skill walks the policy, checks last review date, opens an editing session for the operator, captures the diff as evidence.
-- **`backup-verify`** — used by both `cp-weekly-full-backup` and `cp-monthly-full-backup` with a `scope` parameter passed from the control.
-- **`report-quarterly` / `report-annual`** — read-only skills that aggregate prior run evidence into a report under `reports/`.
+- **`capture-sweep`** — the capture→diff→flag engine for automated controls. Runs the `captures[]` / `commands[]` from `skill_args` across the resolved scope, diffs against the prior run, emits findings. Read-only.
+- **`attestation-review`** — the runbook for human-judgment controls: walk `skill_args.checklist[]` with the operator, capture their attestation, draft follow-ups.
+- **`policy-annual-review`** — reused across every policy-review control. The control supplies only `skill_args.policy_path`; the skill walks the policy, captures the diff and attestation, and surfaces policy/procedure drift.
+- **`report`** — read-only; aggregates a period's evidence (`secunit report data`) into a leadership report under `reports/`. `skill_args.kind` selects quarterly/annual.
+- **`bootstrap`** — derives draft controls from the WISP under `security/`.
+- **`inventory-seed`** — proposes `inventory.yaml` entries from the org's GitHub/cloud/SaaS sources.
+
+These are org-agnostic: every org-specific input arrives via `skill_args` and `_config.yaml`, never baked into the skill text. An org tweaks one by overriding it locally; it adds bespoke behavior with a `skill_args.extend` fragment (see *Spine and fragment* above).
 
 ## Inputs the agent passes to a skill
 
@@ -110,4 +142,4 @@ When `resolved_scope` is empty (control has no `scope` block), the skill runs on
 - Keep procedural detail in the body, not the description.
 - If a skill grows past ~200 lines, split it. Reuse via composition (one skill `include`s commands from another by reference, not by import).
 
-See `examples/skills/aa-weekly-audit-review.md` for the canonical shape.
+See the bundled runbooks (`secunit skills show capture-sweep`) for the canonical shape of a shared skill, and `examples/skills/sca-weekly-dependency-scan.md` for a bespoke per-control skill.

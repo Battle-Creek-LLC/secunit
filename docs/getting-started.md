@@ -24,15 +24,14 @@ Create the directory tree:
   controls/
     bootstrap.yaml          # copy from docs/examples/controls/bootstrap.yaml
     inventory-seed.yaml     # copy from docs/examples/controls/inventory-seed.yaml
-  skills/
-    bootstrap.md            # copy from docs/examples/skills/bootstrap.md
-    inventory-seed.md       # copy from docs/examples/skills/inventory-seed.md
   inventory.yaml            # empty doc: `{}` or kind keys with empty lists
   _config.yaml              # see below
   .gitignore                # ignore target/, .DS_Store, etc.
 ```
 
-The `bootstrap` and `inventory-seed` controls have `cadence: continuous`, so they never fire on schedule — they're invoked on demand to prepare runs. The skills are what the agent reads to actually walk the WISP and the upstream sources.
+No `skills/` directory is needed to start: `bootstrap` and `inventory-seed` — like every standard-library runbook — ship **bundled in the `secunit` binary**, so the controls resolve their skills out of the box (`secunit skills show bootstrap`). You only add a `skills/<name>.md` file later if you want to override a bundled runbook or author a bespoke one; it then takes precedence (see `docs/skills.md`).
+
+The `bootstrap` and `inventory-seed` controls have `cadence: continuous`, so they never fire on schedule — they're invoked on demand to prepare runs. The bundled skills are what the agent reads to actually walk the WISP and the upstream sources.
 
 `_config.yaml` declares integration handles — what your GitHub org is called, which AWS profiles back which cloud accounts, where the WISP source lives. The schema is `schemas/_config.schema.json`. Treat this file as the only place you hand-author secrets-adjacent identifiers; everything downstream resolves through it. The `bootstrap` skill needs `org.wisp_repo` set.
 

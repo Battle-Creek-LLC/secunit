@@ -88,6 +88,11 @@ enum Command {
     Verify { control_id: Option<String> },
     /// Show which integrations are compiled in.
     Features,
+    /// List, show, or locate runbook skills (bundled + local overrides).
+    Skills {
+        #[command(subcommand)]
+        sub: SkillsCmd,
+    },
     /// Manage controls and the schedule.
     Registry {
         #[command(subcommand)]
@@ -103,6 +108,16 @@ enum Command {
         #[command(subcommand)]
         sub: cmd::capture::CaptureCmd,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum SkillsCmd {
+    /// List available skills (bundled standard library + local overrides).
+    List,
+    /// Print a resolved skill's markdown to stdout (local wins over bundled).
+    Show { name: String },
+    /// Print a filesystem path to a skill (materialises bundled skills to a cache).
+    Path { name: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -224,6 +239,11 @@ fn main() -> ExitCode {
         },
         Command::Verify { control_id } => cmd::verify::run(&ctx, control_id.as_deref()),
         Command::Features => cmd::features::run(&ctx),
+        Command::Skills { sub } => match sub {
+            SkillsCmd::List => cmd::skills::list(&ctx),
+            SkillsCmd::Show { name } => cmd::skills::show(&ctx, &name),
+            SkillsCmd::Path { name } => cmd::skills::path(&ctx, &name),
+        },
         Command::Registry { sub } => match sub {
             RegistryCmd::Import { bootstrap_dir } => cmd::registry::import(&ctx, &bootstrap_dir),
         },

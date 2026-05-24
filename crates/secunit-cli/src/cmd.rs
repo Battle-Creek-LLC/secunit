@@ -18,6 +18,7 @@ pub mod registry;
 pub mod run;
 pub mod scope;
 pub mod show;
+pub mod skills;
 pub mod status;
 pub mod validate;
 pub mod verify;

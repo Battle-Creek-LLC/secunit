@@ -6,6 +6,12 @@ requires_features: [github, deps]
 
 # Weekly software composition analysis
 
+> **Example: a bespoke per-control skill.** In practice this exact job is done by
+> the bundled `capture-sweep` runbook driven from the control's `skill_args` — see
+> `secunit skills show capture-sweep`. This file is kept as the canonical shape for
+> the rare control whose logic fits no bundled runbook and so names its own local
+> skill (the override / escape-hatch path described in `docs/skills.md`).
+
 This skill executes the weekly dependency-vulnerability sweep across every source repo flagged for SCA. It is read-only — never modify repo state or open PRs.
 
 ## Inputs

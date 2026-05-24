@@ -23,6 +23,7 @@ COMMANDS:
     scope        Preview resolved scope for a control
     history      List runs for a control
     features     Show which integrations are compiled in
+    skills       List, show, or locate runbook skills
 
     run          Allocate / finalize / abort runs
     capture      Capture evidence via native integrations
@@ -69,6 +70,7 @@ secunit run list --pending
 - Resolves `scope` against `inventory.yaml`, filtered by run date against `in_scope_since` / `retired_on`.
 - Allocates `evidence/<y>/<q>/<id>/<run-id>/`, creates `by-system/<name>/raw/` per resolved entry, drops a `.run-pending` sentinel.
 - Captures `registry_git_sha` (the repo's HEAD; pins inventory.yaml too since it lives in the same repo).
+- Resolves the control's `skill` (local-first, then bundled — see **Skills**) and embeds it in the context as `skill: { name, source, sha256 }`, so the agent loads the runbook without knowing where it lives. Fails if the skill resolves to nothing.
 - Writes `prepare.json` into the run dir.
 - Prints the prepare context to stdout (JSON by default; `--human` for tables).
 
@@ -126,7 +128,7 @@ secunit verify [<CONTROL_ID>] [--from <DATE>] [--json]
 `validate` checks:
 
 - Every YAML parses against its JSON schema.
-- Every `control.skill` resolves to a file in `skills/`.
+- Every `control.skill` resolves — local `skills/<name>.md` or a bundled skill.
 - Every `control.policy` path exists.
 - Every `scope.kind` matches an inventory section.
 - No `id` collisions across controls; no `name` collisions within an inventory kind.
@@ -136,6 +138,33 @@ secunit verify [<CONTROL_ID>] [--from <DATE>] [--json]
 Run as a pre-commit hook. `--strict` adds opinionated checks (NIST id format, descriptive title length, scope minimum-tag rules).
 
 `verify` walks every run for a control (or all controls) in chronological order, recomputes every artifact hash, and checks each `prior_run.manifest_sha256` against the recomputed sha of the prior manifest. Single point of integrity for an assessor.
+
+## Skills
+
+```
+secunit skills list [--json]
+secunit skills show <NAME>
+secunit skills path <NAME>
+```
+
+Skills are runbook markdown files. The standard-library runbooks
+(`capture-sweep`, `attestation-review`, `policy-annual-review`, `report`,
+`bootstrap`, `inventory-seed`) are **bundled into the binary** and ship with each
+release — no install step. An org overrides any of them, or adds its own, by
+dropping `<root>/skills/<name>.md`.
+
+Every skill reference — a control's `skill:`, a runbook's `skill_args.extend:`,
+`validate`, `run prepare`, and `skills show/path` — resolves through **one order:
+local `<root>/skills/<name>.md` first, then bundled.** That uniform lookup is what
+lets `run prepare` hand the agent a runbook by name and lets a release update the
+standard library without touching any org repo.
+
+- `skills list` — every skill available to this root (bundled ∪ local), each
+  tagged `bundled` or `local`. `--json` adds `requires_features` and `description`.
+- `skills show <name>` — print the resolved skill markdown to stdout. This is the
+  call the agent / `/ciso` front door uses to load a runbook.
+- `skills path <name>` — print a filesystem path; bundled skills are materialised
+  into a per-version cache dir so tools that need a real path can read them.
 
 ## Reports
 

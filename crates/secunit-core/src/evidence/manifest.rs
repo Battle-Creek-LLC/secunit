@@ -34,6 +34,18 @@ pub enum SystemOutcome {
 
 // ---------- prepare context -------------------------------------------------
 
+/// The skill `run prepare` resolved for this control, so the agent can
+/// load it without knowing whether it ships in the binary or lives under
+/// `skills/`. Resolution is local-first, then bundled.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillRef {
+    pub name: String,
+    /// `"local"` (a file under `skills/`) or `"bundled"` (shipped in the
+    /// binary; load it with `secunit skills show <name>`).
+    pub source: String,
+    pub sha256: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrepareContext {
     pub schema_version: u32,
@@ -41,6 +53,8 @@ pub struct PrepareContext {
     pub run_id: String,
     pub run_dir: PathBuf,
     pub started_at: DateTime<Utc>,
+    /// The resolved runbook to follow for this run.
+    pub skill: SkillRef,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operator: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
