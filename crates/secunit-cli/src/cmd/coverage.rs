@@ -47,6 +47,7 @@ pub fn run(
     let mut satisfied = 0;
     let mut gaps = 0;
     let mut open = 0;
+    let mut failed = 0;
     for p in &report.periods {
         let status_label = match p.status {
             PeriodStatus::Satisfied => {
@@ -56,6 +57,10 @@ pub fn run(
                 } else {
                     "satisfied"
                 }
+            }
+            PeriodStatus::Failed => {
+                failed += 1;
+                "failed"
             }
             PeriodStatus::Gap => {
                 gaps += 1;
@@ -87,7 +92,7 @@ pub fn run(
     }
     println!();
     println!(
-        "summary: {satisfied} satisfied, {gaps} gap(s), {open} open / {} total period(s)",
+        "summary: {satisfied} satisfied, {failed} failed, {gaps} gap(s), {open} open / {} total period(s)",
         report.periods.len()
     );
 

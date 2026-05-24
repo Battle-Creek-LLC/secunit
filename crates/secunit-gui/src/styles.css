@@ -69,3 +69,208 @@
     font-feature-settings: "cv11", "ss01", "ss03";
   }
 }
+
+/*
+ * Findings markdown. Server renders `findings.md` to sanitised HTML
+ * (see `src-tauri/src/sanitiser.rs`); this is the only place those
+ * tags get styled, since we don't ship `@tailwindcss/typography`.
+ *
+ * Tone: tight, data-dense, monospaced for identifiers — matches the
+ * rest of the GUI (cards, mono badges) rather than editorial prose.
+ */
+@layer components {
+  .prose-findings {
+    color: hsl(var(--foreground));
+    line-height: 1.5;
+  }
+
+  .prose-findings > :first-child {
+    margin-top: 0;
+  }
+  .prose-findings > :last-child {
+    margin-bottom: 0;
+  }
+
+  .prose-findings h1,
+  .prose-findings h2,
+  .prose-findings h3,
+  .prose-findings h4,
+  .prose-findings h5,
+  .prose-findings h6 {
+    font-weight: 600;
+    line-height: 1.25;
+    color: hsl(var(--foreground));
+  }
+  .prose-findings h1 {
+    font-size: 1.125rem;
+    margin: 0 0 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .prose-findings h2 {
+    font-size: 1rem;
+    margin: 1.5rem 0 0.5rem;
+  }
+  .prose-findings h3 {
+    font-size: 0.9375rem;
+    margin: 1.25rem 0 0.375rem;
+    font-family: theme("fontFamily.mono");
+    font-weight: 500;
+    color: hsl(var(--muted-foreground));
+  }
+  .prose-findings h4,
+  .prose-findings h5,
+  .prose-findings h6 {
+    font-size: 0.875rem;
+    margin: 1rem 0 0.25rem;
+  }
+
+  .prose-findings p {
+    margin: 0 0 0.75rem;
+  }
+
+  .prose-findings a {
+    color: hsl(var(--info));
+    text-decoration: none;
+  }
+  .prose-findings a:hover {
+    text-decoration: underline;
+  }
+
+  .prose-findings strong {
+    font-weight: 600;
+  }
+  .prose-findings em {
+    font-style: italic;
+  }
+  .prose-findings del,
+  .prose-findings s {
+    text-decoration: line-through;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .prose-findings ul,
+  .prose-findings ol {
+    margin: 0 0 0.75rem;
+    padding-left: 1.25rem;
+  }
+  .prose-findings ul {
+    list-style: disc;
+  }
+  .prose-findings ol {
+    list-style: decimal;
+  }
+  .prose-findings li {
+    margin: 0.125rem 0;
+  }
+  .prose-findings li > ul,
+  .prose-findings li > ol {
+    margin: 0.125rem 0 0.25rem;
+  }
+
+  /* GFM tasklists: drop the bullet, align the checkbox. */
+  .prose-findings li:has(> input[type="checkbox"]) {
+    list-style: none;
+    margin-left: -1.25rem;
+    padding-left: 0;
+  }
+  .prose-findings input[type="checkbox"] {
+    margin-right: 0.375rem;
+    transform: translateY(1px);
+    accent-color: hsl(var(--info));
+  }
+
+  .prose-findings code {
+    font-family: theme("fontFamily.mono");
+    font-size: 0.8125em;
+    background: hsl(var(--muted));
+    color: hsl(var(--foreground));
+    padding: 0.0625rem 0.25rem;
+    border-radius: calc(var(--radius) - 4px);
+  }
+  .prose-findings pre {
+    margin: 0 0 0.75rem;
+    padding: 0.625rem 0.75rem;
+    background: hsl(var(--muted) / 0.6);
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) - 2px);
+    overflow-x: auto;
+  }
+  .prose-findings pre code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: 0.8125rem;
+  }
+
+  .prose-findings blockquote {
+    margin: 0 0 0.75rem;
+    padding: 0.25rem 0 0.25rem 0.75rem;
+    border-left: 2px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+  }
+
+  .prose-findings hr {
+    margin: 1.25rem 0;
+    border: 0;
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  .prose-findings table {
+    width: 100%;
+    margin: 0 0 0.75rem;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8125rem;
+  }
+  .prose-findings thead {
+    background: hsl(var(--muted) / 0.5);
+  }
+  .prose-findings th,
+  .prose-findings td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.375rem 0.625rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .prose-findings th {
+    font-weight: 600;
+    color: hsl(var(--foreground));
+  }
+  .prose-findings tbody tr:nth-child(even) {
+    background: hsl(var(--muted) / 0.25);
+  }
+
+  .prose-findings kbd {
+    font-family: theme("fontFamily.mono");
+    font-size: 0.75rem;
+    padding: 0.0625rem 0.3125rem;
+    border: 1px solid hsl(var(--border));
+    border-bottom-width: 2px;
+    border-radius: calc(var(--radius) - 4px);
+    background: hsl(var(--background));
+  }
+
+  .prose-findings details {
+    margin: 0 0 0.75rem;
+    padding: 0.375rem 0.625rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) - 2px);
+  }
+  .prose-findings summary {
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  /* Footnote definitions. pulldown-cmark wraps each in a div. */
+  .prose-findings .footnote-definition {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid hsl(var(--border));
+    font-size: 0.8125rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .prose-findings sup {
+    font-size: 0.75em;
+  }
+}

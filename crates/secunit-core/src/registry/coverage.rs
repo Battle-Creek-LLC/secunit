@@ -30,6 +30,11 @@ pub struct RunRef {
 pub enum PeriodStatus {
     /// At least one `complete` run claims this period.
     Satisfied,
+    /// A `failed` run sealed in this period and no `complete` run
+    /// supersedes it. Terminal: the activity ran to a verdict, the
+    /// verdict was negative, and remediation moves to findings rather
+    /// than a retry of this period.
+    Failed,
     /// Period has ended without a satisfying run.
     Gap,
     /// `schedule.yaml` skip directive removed this period.
@@ -168,10 +173,24 @@ pub fn coverage(
                 .min_by_key(|r| r.completed_at)
                 .cloned()
         });
+        // No complete run, but a sealed failed run is a terminal verdict
+        // for the period — Failed, not Open/Gap. Partial runs stay
+        // non-terminal: the operator is expected to follow up.
+        let failed = if satisfier.is_none() {
+            runs_here.and_then(|rs| {
+                rs.iter()
+                    .filter(|r| matches!(r.status, RunOutcome::Failed))
+                    .min_by_key(|r| r.completed_at)
+                    .cloned()
+            })
+        } else {
+            None
+        };
 
-        let (status, late) = match &satisfier {
-            Some(r) => (PeriodStatus::Satisfied, r.completed_at.date_naive() > *end),
-            None => {
+        let (status, late) = match (&satisfier, &failed) {
+            (Some(r), _) => (PeriodStatus::Satisfied, r.completed_at.date_naive() > *end),
+            (None, Some(_)) => (PeriodStatus::Failed, false),
+            (None, None) => {
                 if today < *start {
                     (PeriodStatus::Future, false)
                 } else if today >= *start && today <= *end {

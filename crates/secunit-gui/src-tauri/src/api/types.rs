@@ -111,6 +111,7 @@ pub struct DueRowView {
 #[serde(rename_all = "kebab-case")]
 pub enum PeriodStatusView {
     Satisfied,
+    Failed,
     Gap,
     Skipped,
     Future,
@@ -122,6 +123,7 @@ impl From<secunit_core::registry::coverage::PeriodStatus> for PeriodStatusView {
         use secunit_core::registry::coverage::PeriodStatus as Core;
         match s {
             Core::Satisfied => PeriodStatusView::Satisfied,
+            Core::Failed => PeriodStatusView::Failed,
             Core::Gap => PeriodStatusView::Gap,
             Core::Skipped => PeriodStatusView::Skipped,
             Core::Future => PeriodStatusView::Future,

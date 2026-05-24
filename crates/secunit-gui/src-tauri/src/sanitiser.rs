@@ -5,13 +5,17 @@
 //! output, but the same render path is used for any operator-authored
 //! note inside an evidence dir, so XSS hardening is non-negotiable.
 
-use ammonia::Builder;
+use ammonia::{Builder, UrlRelative};
 use pulldown_cmark::{html as md_html, Options, Parser};
 
 /// Allowed tags. No `<script>`, `<iframe>`, `<object>`, no inline event
 /// handlers, no `javascript:` URLs, no nested forms. `<img>` is dropped
 /// outright — operators open artifacts via the editor IPC, not via
 /// inline images, so the attribute surface is one less thing to police.
+///
+/// `div` is allowed because pulldown-cmark wraps footnote definitions
+/// in `<div class="footnote-definition">`. `input` is allowed only with
+/// `type="checkbox"` (disabled) so GFM tasklists render as checkboxes.
 fn allowed_tags() -> std::collections::HashSet<&'static str> {
     [
         "a",
@@ -22,6 +26,7 @@ fn allowed_tags() -> std::collections::HashSet<&'static str> {
         "code",
         "del",
         "details",
+        "div",
         "em",
         "h1",
         "h2",
@@ -31,6 +36,7 @@ fn allowed_tags() -> std::collections::HashSet<&'static str> {
         "h6",
         "hr",
         "i",
+        "input",
         "ins",
         "kbd",
         "li",
@@ -73,8 +79,13 @@ pub fn render_findings(markdown: &str) -> String {
     Builder::new()
         .tags(allowed_tags())
         .url_schemes(["http", "https", "mailto"].into_iter().collect())
-        .add_generic_attributes(["class"])
+        // Footnote back-references (`href="#fn1"`) are fragment-only
+        // relative URLs. Default `Deny` strips them; pass-through keeps
+        // anchors working without expanding the absolute-URL surface.
+        .url_relative(UrlRelative::PassThrough)
+        .add_generic_attributes(["class", "id"])
         .add_tag_attributes("a", ["href", "title"])
+        .add_tag_attributes("input", ["type", "checked", "disabled"])
         .add_tag_attributes("td", ["align"])
         .add_tag_attributes("th", ["align"])
         .clean(&raw)
@@ -142,5 +153,37 @@ mod tests {
         assert!(html.contains("<pre>"));
         assert!(html.contains("<code>"));
         assert!(html.contains("rm -rf /tmp"));
+    }
+
+    #[test]
+    fn preserves_tasklist_checkboxes() {
+        // GFM tasklist items render as `<li><input type="checkbox" .../>`.
+        // Without `input` in the allowlist the checkbox is silently
+        // stripped and the list renders as a plain bullet, which makes
+        // tasklists in evidence look like ordinary bullets.
+        let html = render_findings("- [x] done\n- [ ] pending\n");
+        assert!(html.contains("<input"));
+        assert!(html.contains("type=\"checkbox\""));
+        assert!(html.contains("disabled"));
+        assert!(html.contains("checked"));
+    }
+
+    #[test]
+    fn preserves_footnote_anchors() {
+        // pulldown-cmark emits `<sup><a href="#fn1">` for references
+        // and `<div id="fn1">` for definitions. Without `id` allowed
+        // and `UrlRelative::PassThrough`, the cross-links break.
+        let html = render_findings("See[^1]\n\n[^1]: the note\n");
+        assert!(html.contains("href=\"#1\"") || html.contains("href=\"#fn1\""));
+        assert!(html.contains("id=\"1\"") || html.contains("id=\"fn1\""));
+    }
+
+    #[test]
+    fn rejects_javascript_urls_even_with_relative_passthrough() {
+        // Regression guard: enabling `UrlRelative::PassThrough` for
+        // footnote anchors must not loosen the absolute-URL scheme
+        // allowlist. `javascript:` is an absolute URL, not relative.
+        let html = render_findings("[click](javascript:alert(1))");
+        assert!(!html.contains("javascript:"));
     }
 }
