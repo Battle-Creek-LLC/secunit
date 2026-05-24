@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::evidence::hasher::{sha256_bytes, sha256_file};
+use crate::evidence::hasher::sha256_bytes;
 
 /// A skill embedded into the binary at compile time.
 pub struct BundledSkill {
@@ -80,17 +80,28 @@ pub struct ResolvedSkill {
 pub fn resolve(root: &Path, name: &str) -> Option<ResolvedSkill> {
     let local = root.join("skills").join(format!("{name}.md"));
     if local.is_file() {
-        // Hash the raw file bytes so the sha matches the manifest's
-        // artifact-hashing convention (and any chain sealed before
-        // bundling existed).
-        if let Ok(sha) = sha256_file(&local) {
-            return Some(ResolvedSkill {
-                name: name.to_string(),
-                body: std::fs::read_to_string(&local).unwrap_or_default(),
-                source: SkillSource::Local,
-                path: Some(local),
-                sha256: sha,
-            });
+        // Read once: the sha is over the raw bytes (matching the manifest's
+        // artifact-hashing convention and any chain sealed before bundling),
+        // and the body is decoded from those same bytes. If the file can't be
+        // read, warn and fall through to bundled rather than returning a
+        // skill with a silently-empty body.
+        match std::fs::read(&local) {
+            Ok(bytes) => {
+                return Some(ResolvedSkill {
+                    name: name.to_string(),
+                    sha256: sha256_bytes(&bytes),
+                    body: String::from_utf8_lossy(&bytes).into_owned(),
+                    source: SkillSource::Local,
+                    path: Some(local),
+                });
+            }
+            Err(e) => {
+                tracing::warn!(
+                    path = %local.display(),
+                    error = %e,
+                    "skill `{name}` exists locally but could not be read; falling back to bundled"
+                );
+            }
         }
     }
     BUNDLED
@@ -169,17 +180,32 @@ mod tests {
 
     #[test]
     fn resolve_falls_back_to_bundled() {
-        // An empty temp dir has no skills/, so resolution must hit the bundle.
-        let tmp = std::env::temp_dir();
-        let r = resolve(&tmp, "capture-sweep").expect("capture-sweep is bundled");
+        // A fresh temp dir has no skills/, so resolution must hit the bundle.
+        let tmp = tempfile::tempdir().unwrap();
+        let r = resolve(tmp.path(), "capture-sweep").expect("capture-sweep is bundled");
         assert_eq!(r.source, SkillSource::Bundled);
         assert!(!r.sha256.is_empty());
         assert!(r.body.contains("# Capture sweep"));
     }
 
     #[test]
+    fn resolve_local_overrides_bundled() {
+        // A local file shadows the bundled skill of the same name, and its
+        // sha is over the file's raw bytes.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("skills")).unwrap();
+        let body = "---\nname: capture-sweep\n---\n# local override\n";
+        std::fs::write(tmp.path().join("skills/capture-sweep.md"), body).unwrap();
+        let r = resolve(tmp.path(), "capture-sweep").expect("resolves locally");
+        assert_eq!(r.source, SkillSource::Local);
+        assert_eq!(r.body, body);
+        assert_eq!(r.sha256, sha256_bytes(body.as_bytes()));
+    }
+
+    #[test]
     fn resolve_unknown_is_none() {
-        assert!(resolve(&std::env::temp_dir(), "no-such-skill").is_none());
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(resolve(tmp.path(), "no-such-skill").is_none());
     }
 
     #[test]
