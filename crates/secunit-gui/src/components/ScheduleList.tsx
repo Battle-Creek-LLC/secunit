@@ -27,7 +27,8 @@ const overrideLabel: Record<Exclude<ScheduleReason, "cadence">, string> = {
 const statusBadge: Partial<Record<PeriodStatus, { label: string; tone: BadgeVariant }>> = {
   gap: { label: "Overdue", tone: "error" },
   open: { label: "Open", tone: "warn" },
-  satisfied: { label: "Done", tone: "ok" },
+  satisfied: { label: "Passed", tone: "ok" },
+  failed: { label: "Failed", tone: "error" },
   skipped: { label: "Skipped", tone: "info" },
 };
 

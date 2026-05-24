@@ -81,6 +81,15 @@ fn copy_tree(src: &Path, dst: &Path) {
 /// stamped at `today`. Returns the resulting prepare context plus the
 /// sealed manifest path.
 fn run_one(root: &Path, today: NaiveDate) -> (PrepareContext, PathBuf) {
+    run_one_with_status(root, today, RunOutcome::Complete, SystemOutcome::Complete)
+}
+
+fn run_one_with_status(
+    root: &Path,
+    today: NaiveDate,
+    run_status: RunOutcome,
+    system_status: SystemOutcome,
+) -> (PrepareContext, PathBuf) {
     let (reg, report) = loader::load(root);
     assert!(report.errors.is_empty(), "load errors: {:?}", report.errors);
 
@@ -106,13 +115,13 @@ fn run_one(root: &Path, today: NaiveDate) -> (PrepareContext, PathBuf) {
         schema_version: SCHEMA_VERSION,
         control_id: ctx.control_id.clone(),
         run_id: ctx.run_id.clone(),
-        status: RunOutcome::Complete,
+        status: run_status,
         by_system: ctx
             .resolved_scope
             .iter()
             .map(|s| SystemResult {
                 name: s.name.clone(),
-                status: SystemOutcome::Complete,
+                status: system_status,
                 note: None,
             })
             .collect(),
@@ -123,7 +132,11 @@ fn run_one(root: &Path, today: NaiveDate) -> (PrepareContext, PathBuf) {
     let result_bytes = serde_json::to_vec_pretty(&result).unwrap();
     fs::write(ctx.run_dir.join("result.json"), &result_bytes).unwrap();
 
-    let manifest = runner::finalize(&reg, &ctx.run_dir).expect("finalize");
+    // Pin completion to noon of the run's own day so coverage's
+    // on-time/late math is deterministic instead of drifting with the
+    // wall clock as the calendar moves past the fixture dates.
+    let completed_at = today.and_hms_opt(12, 0, 0).unwrap().and_utc();
+    let manifest = runner::finalize_at(&reg, &ctx.run_dir, completed_at).expect("finalize");
     let manifest_path = ctx.run_dir.join("manifest.json");
     assert_eq!(manifest.run_id, ctx.run_id);
     (ctx, manifest_path)
@@ -594,6 +607,76 @@ fn coverage_buckets_periods_after_two_runs() {
         .unwrap();
     assert!(w19.satisfied_by.is_some());
     assert!(!w19.late);
+}
+
+#[test]
+fn coverage_marks_period_failed_when_only_failed_run_seals_it() {
+    // A sealed `failed` run is a terminal verdict for the period: the
+    // activity ran, the verdict was negative, and remediation moves to
+    // findings — not a retry of this period. The period must not be
+    // Open (still pending) nor Satisfied (passed); it's Failed.
+    let (_tmp, root) = staged_fixture();
+    run_one_with_status(
+        &root,
+        NaiveDate::from_ymd_opt(2026, 5, 4).unwrap(),
+        RunOutcome::Failed,
+        SystemOutcome::Failed,
+    );
+
+    let (reg, _) = loader::load(&root);
+    let report = coverage::coverage(
+        &reg,
+        CONTROL,
+        NaiveDate::from_ymd_opt(2026, 5, 4).unwrap(),
+        NaiveDate::from_ymd_opt(2026, 5, 10).unwrap(),
+        NaiveDate::from_ymd_opt(2026, 5, 6).unwrap(),
+    )
+    .expect("coverage");
+    let w19 = report
+        .periods
+        .iter()
+        .find(|p| p.period_id == "2026-W19")
+        .expect("W19 in report");
+    assert_eq!(w19.status, PeriodStatus::Failed);
+    // Failed periods don't carry a `satisfied_by` — the field name
+    // implies a passing run, and consumers branch on `status` anyway.
+    assert!(w19.satisfied_by.is_none());
+}
+
+#[test]
+fn coverage_complete_run_supersedes_earlier_failed_run() {
+    // If the operator re-runs after a failure and the second run passes,
+    // the period flips back to Satisfied. The failed run is still on
+    // disk but no longer drives the period status.
+    let (_tmp, root) = staged_fixture();
+    run_one_with_status(
+        &root,
+        NaiveDate::from_ymd_opt(2026, 5, 4).unwrap(),
+        RunOutcome::Failed,
+        SystemOutcome::Failed,
+    );
+    run_one_with_status(
+        &root,
+        NaiveDate::from_ymd_opt(2026, 5, 5).unwrap(),
+        RunOutcome::Complete,
+        SystemOutcome::Complete,
+    );
+
+    let (reg, _) = loader::load(&root);
+    let report = coverage::coverage(
+        &reg,
+        CONTROL,
+        NaiveDate::from_ymd_opt(2026, 5, 4).unwrap(),
+        NaiveDate::from_ymd_opt(2026, 5, 10).unwrap(),
+        NaiveDate::from_ymd_opt(2026, 5, 6).unwrap(),
+    )
+    .expect("coverage");
+    let w19 = report
+        .periods
+        .iter()
+        .find(|p| p.period_id == "2026-W19")
+        .expect("W19 in report");
+    assert_eq!(w19.status, PeriodStatus::Satisfied);
 }
 
 #[test]

@@ -96,3 +96,23 @@ jobs:
         run: |
           ./target/release/secunit --version
           ./target/release/secunit features --json
+
+  gui:
+    name: gui (typecheck + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/secunit-gui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: crates/secunit-gui/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test

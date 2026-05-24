@@ -250,6 +250,18 @@ pub fn abort(reg: &LoadedRegistry, run_dir: &Path, reason: &str) -> Result<Manif
 /// write `manifest.json`, update `state.json`, and remove the pending
 /// sentinel. Returns the sealed manifest.
 pub fn finalize(reg: &LoadedRegistry, run_dir: &Path) -> Result<Manifest> {
+    finalize_at(reg, run_dir, Utc::now())
+}
+
+/// Like [`finalize`], but with an injectable completion clock. The CLI
+/// path uses [`finalize`] (wall-clock); tests pin `completed_at` so the
+/// coverage math (on-time vs late) is deterministic instead of drifting
+/// with the calendar.
+pub fn finalize_at(
+    reg: &LoadedRegistry,
+    run_dir: &Path,
+    completed_at: DateTime<Utc>,
+) -> Result<Manifest> {
     let _lock = RootLock::acquire(&reg.root).context("acquire root lock")?;
 
     let prepare: PrepareContext = read_json(&run_dir.join(PREPARE_FILE))?;
@@ -323,7 +335,7 @@ pub fn finalize(reg: &LoadedRegistry, run_dir: &Path) -> Result<Manifest> {
         control_id: prepare.control_id.clone(),
         run_id: prepare.run_id.clone(),
         started_at: prepare.started_at,
-        completed_at: Utc::now(),
+        completed_at,
         operator: prepare.operator.clone(),
         agent: AgentInfo {
             model: std::env::var("SECUNIT_AGENT_MODEL").unwrap_or_else(|_| "unknown".into()),
