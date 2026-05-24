@@ -67,3 +67,7 @@ pretty_assertions = "1"
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
+
+[profile.dev]
+# Keep enough debug info for backtraces without bloating target/ with full symbols.
+debug = "line-tables-only"
