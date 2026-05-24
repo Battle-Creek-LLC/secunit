@@ -4,14 +4,16 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::Result;
+use secunit_core::model::LoadedRegistry;
 use secunit_core::registry::loader::{Diagnostic, LoadReport};
+use secunit_core::skills;
 
 use super::Ctx;
 
 pub fn run(ctx: &Ctx, _strict: bool) -> Result<ExitCode> {
     let (reg, mut report) = ctx.load()?;
 
-    check_requires_features(&reg.root, &mut report);
+    check_skills(&reg, &mut report);
 
     if ctx.json {
         let payload = serde_json::json!({
@@ -56,84 +58,72 @@ pub fn run(ctx: &Ctx, _strict: bool) -> Result<ExitCode> {
     }
 }
 
-/// Parse `requires_features:` from each skill's YAML frontmatter and
-/// flag any feature the running binary does not advertise via
-/// `secunit_capture::enabled_features()`.
-fn check_requires_features(root: &Path, report: &mut LoadReport) {
-    let enabled: HashSet<&str> = secunit_capture::enabled_features()
-        .iter()
-        .copied()
-        .collect();
+/// Skill-level checks: (a) every local skill's frontmatter parses as
+/// YAML, and (b) every skill a control names — local or bundled — has
+/// the `requires_features:` it declares compiled into this binary.
+fn check_skills(reg: &LoadedRegistry, report: &mut LoadReport) {
+    check_local_frontmatter(&reg.root, report);
+    check_requires_features(reg, report);
+}
+
+/// Flag any local skill whose frontmatter is not valid YAML.
+fn check_local_frontmatter(root: &Path, report: &mut LoadReport) {
     let skills_dir = root.join("skills");
-    let entries = match fs::read_dir(&skills_dir) {
-        Ok(e) => e,
-        Err(_) => return,
+    let Ok(entries) = fs::read_dir(&skills_dir) else {
+        return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) != Some("md") {
             continue;
         }
-        let body = match fs::read_to_string(&path) {
-            Ok(b) => b,
-            Err(_) => continue,
-        };
-        let Some(fm) = extract_frontmatter(&body) else {
+        let Ok(body) = fs::read_to_string(&path) else {
             continue;
         };
-        let parsed: serde_yaml::Value = match serde_yaml::from_str(fm) {
-            Ok(v) => v,
-            Err(e) => {
-                report.errors.push(Diagnostic {
-                    path: path.clone(),
-                    message: format!("frontmatter not valid YAML: {e}"),
-                });
-                continue;
-            }
-        };
-        let Some(seq) = parsed
-            .get("requires_features")
-            .and_then(|v| v.as_sequence())
-        else {
+        let Some(fm) = skills::frontmatter(&body) else {
             continue;
         };
-        for item in seq {
-            let Some(name) = item.as_str() else { continue };
-            if !enabled.contains(name) {
+        if let Err(e) = serde_yaml::from_str::<serde_yaml::Value>(fm) {
+            report.errors.push(Diagnostic {
+                path: path.clone(),
+                message: format!("frontmatter not valid YAML: {e}"),
+            });
+        }
+    }
+}
+
+/// For every distinct skill a control names, resolve it (local-first,
+/// then bundled) and flag any `requires_features:` the binary lacks.
+/// A skill that resolves to nothing is reported by the loader's
+/// cross-check, not here.
+fn check_requires_features(reg: &LoadedRegistry, report: &mut LoadReport) {
+    let enabled: HashSet<&str> = secunit_capture::enabled_features()
+        .iter()
+        .copied()
+        .collect();
+    let mut checked: HashSet<&str> = HashSet::new();
+    for ctrl in reg.controls.values() {
+        if !checked.insert(ctrl.skill.as_str()) {
+            continue;
+        }
+        let Some(resolved) = skills::resolve(&reg.root, &ctrl.skill) else {
+            continue;
+        };
+        for feat in skills::requires_features(&resolved.body) {
+            if !enabled.contains(feat.as_str()) {
+                let path = resolved
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| PathBuf::from(format!("<bundled>/{}.md", ctrl.skill)));
                 report.errors.push(Diagnostic {
-                    path: path.clone(),
+                    path,
                     message: format!(
-                        "skill declares `requires_features: [{name}]` but \
-                         this binary was built without the `{name}` feature"
+                        "skill `{}` declares `requires_features: [{feat}]` but \
+                         this binary was built without the `{feat}` feature",
+                        ctrl.skill
                     ),
                 });
             }
         }
-    }
-    let _ = PathBuf::new(); // silence unused-import lints in stripped builds
-}
-
-/// Pull the YAML frontmatter block out of a markdown file. Returns
-/// `None` if the file does not start with `---\n`.
-fn extract_frontmatter(body: &str) -> Option<&str> {
-    let rest = body.strip_prefix("---\n")?;
-    let end = rest.find("\n---")?;
-    Some(&rest[..end])
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn frontmatter_extract_basic() {
-        let body = "---\nname: x\nrequires_features: [a, b]\n---\n# body";
-        let fm = extract_frontmatter(body).unwrap();
-        assert!(fm.contains("requires_features"));
-    }
-
-    #[test]
-    fn frontmatter_returns_none_when_absent() {
-        assert!(extract_frontmatter("# just markdown").is_none());
     }
 }

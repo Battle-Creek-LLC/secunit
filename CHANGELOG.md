@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Bundled skill standard library + `secunit skills` subcommand. The six
+  reusable runbooks (`capture-sweep`, `attestation-review`,
+  `policy-annual-review`, `report`, `bootstrap`, `inventory-seed`) now
+  ship embedded in the binary, so an org needs no install/copy step to
+  use them. `secunit skills list|show|path` inspect and resolve skills;
+  `show` is the call the agent front door uses to load a runbook by name.
+- One uniform skill resolver (`secunit_core::skills`): every skill
+  reference — a control's `skill:`, a runbook's `skill_args.extend:`,
+  `validate`, `run prepare`, and `skills show/path` — resolves
+  local `<root>/skills/<name>.md` first, then bundled. An org overrides
+  any runbook (or adds a bespoke one) by dropping a same-named local file.
+
+### Changed
+
+- `run prepare` now embeds the resolved skill in the prepare context as
+  `skill: { name, source, sha256 }` (and `prepare.schema.json` with it),
+  so the agent loads the runbook without knowing whether it is bundled or
+  local. `prepare` fails fast if the skill resolves to nothing.
+- `validate` resolves `control.skill` and its `requires_features:` through
+  the bundled∪local resolver instead of requiring a file under `skills/`.
+- `docs/examples/skills/` no longer duplicates the bundled runbooks; it
+  keeps one bespoke per-control example (`sca-weekly-dependency-scan.md`)
+  plus a README. `getting-started.md` drops the skill-copy step.
+
 ## [0.1.0] — 2026-05-01
 
 First tagged release. Covers Phases 0–4 of `PLAN.md`: a working

@@ -236,16 +236,16 @@ fn cross_check(
     schedule: &Schedule,
     report: &mut LoadReport,
 ) {
-    let skills_dir = root.join("skills");
     for (id, ctrl) in controls {
-        let skill_path = skills_dir.join(format!("{}.md", ctrl.skill));
-        if !skill_path.exists() {
+        // A control's skill resolves local-first, then bundled — so a
+        // control naming a standard-library runbook is valid with no
+        // file under skills/.
+        if !crate::skills::exists(root, &ctrl.skill) {
             report.warn(
                 root.join("controls").join(format!("{id}.yaml")),
                 format!(
-                    "skill `{}` not found at {}",
-                    ctrl.skill,
-                    skill_path.display()
+                    "skill `{}` not found (no local skills/{}.md and not bundled)",
+                    ctrl.skill, ctrl.skill,
                 ),
             );
         }

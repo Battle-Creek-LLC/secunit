@@ -6,6 +6,7 @@ pub mod evidence;
 pub mod model;
 pub mod registry;
 pub mod schemas;
+pub mod skills;
 
 /// Schema version implemented by this crate. Bumped only on breaking
 /// on-disk changes; reads of older versions remain best-effort.

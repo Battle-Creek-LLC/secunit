@@ -15,7 +15,7 @@ use super::hasher::{self, atomic_write, sha256_bytes, sha256_file};
 use super::lock::RootLock;
 use super::manifest::{
     AgentInfo, Artifact, BySystemBlock, Manifest, PrepareContext, PriorRun, RunOutcome, RunResult,
-    ScopeLayout, SystemOutcome,
+    ScopeLayout, SkillRef, SystemOutcome,
 };
 use crate::model::{Cadence, LoadedRegistry, RunStatus, StateEntry};
 use crate::registry::{period, resolver};
@@ -143,12 +143,31 @@ pub fn prepare(
         )
     })?;
 
+    // Resolve the runbook now (local-first, then bundled) so the prepare
+    // context can point the agent straight at it and pin its sha. Fail
+    // here rather than at finalize if the skill resolves to nothing.
+    let skill = {
+        let r = crate::skills::resolve(&reg.root, &ctrl.skill).ok_or_else(|| {
+            anyhow!(
+                "skill `{}` not found (no local skills/{}.md and not bundled)",
+                ctrl.skill,
+                ctrl.skill
+            )
+        })?;
+        SkillRef {
+            name: r.name,
+            source: r.source.as_str().to_string(),
+            sha256: r.sha256,
+        }
+    };
+
     let ctx = PrepareContext {
         schema_version: SCHEMA_VERSION,
         control_id: control_id.to_string(),
         run_id: run_id_from_dir(&run_dir)?,
         run_dir: run_dir.clone(),
         started_at: now,
+        skill,
         operator: opts.operator.clone(),
         note: opts.note.clone(),
         scope_layout,
@@ -478,8 +497,11 @@ fn sha256_for_control(root: &Path, control_id: &str) -> Result<String> {
 }
 
 fn sha256_for_skill(root: &Path, skill: &str) -> Result<String> {
-    let path = root.join("skills").join(format!("{skill}.md"));
-    sha256_file(&path).with_context(|| format!("hash skill {}", path.display()))
+    crate::skills::resolve(root, skill)
+        .map(|r| r.sha256)
+        .ok_or_else(|| {
+            anyhow!("skill `{skill}` not found (no local skills/{skill}.md and not bundled)")
+        })
 }
 
 /// Resolve the registry repo's HEAD commit hex via gix. Errors when

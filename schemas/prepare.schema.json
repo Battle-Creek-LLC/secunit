@@ -10,6 +10,7 @@
     "run_id",
     "run_dir",
     "started_at",
+    "skill",
     "scope_layout",
     "resolved_scope",
     "registry_git_sha"
@@ -21,6 +22,16 @@
     "run_id": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-run-[0-9]{3}$" },
     "run_dir": { "type": "string" },
     "started_at": { "type": "string", "format": "date-time" },
+    "skill": {
+      "type": "object",
+      "required": ["name", "source", "sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+        "source": { "type": "string", "enum": ["local", "bundled"] },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
     "operator": { "type": "string" },
     "note": { "type": "string" },
     "scope_layout": { "type": "string", "enum": ["by-system", "flat"] },
