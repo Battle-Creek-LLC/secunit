@@ -18,6 +18,7 @@ import { Schedule } from "@/routes/Schedule";
 import { Findings } from "@/routes/Findings";
 import { Evidence } from "@/routes/Evidence";
 import { Inventory } from "@/routes/Inventory";
+import { Risks } from "@/routes/Risks";
 
 declare const __APP_VERSION__: string;
 
@@ -169,6 +170,7 @@ function AppWithPalette({
           <Route path="/controls" element={<Controls />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route path="/findings" element={<Findings />} />
+          <Route path="/risks" element={<Risks />} />
           <Route path="/evidence" element={<Evidence />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="*" element={<Navigate to="/overview" replace />} />

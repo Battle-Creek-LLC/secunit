@@ -323,3 +323,88 @@ export const searchPalette = (
 ) => invoke<SearchHit[]>("search_palette", { query, limit, kinds });
 
 export const indexStatus = () => invoke<IndexStatus>("index_status");
+
+// ---------------------------------------------------------------------------
+// Risk register (read-only viewer)
+// ---------------------------------------------------------------------------
+
+export type RiskSeverity = "critical" | "high" | "medium" | "low" | "info";
+
+export type RiskStatus =
+  | "open"
+  | "in-progress"
+  | "remediated"
+  | "reopened"
+  | "accepted-exception"
+  | "false-positive";
+
+export interface RiskExternalView {
+  system: string;
+  id: string;
+  url: string;
+}
+
+export interface RiskRow {
+  id: string;
+  title: string;
+  fingerprint: string;
+  severity: RiskSeverity;
+  status: RiskStatus;
+  owner: string | null;
+  due_at: string | null;
+  source_control: string;
+  first_run_id: string;
+  external: RiskExternalView[];
+  log_head_sha256: string;
+}
+
+export interface RiskAgentView {
+  model: string;
+  skill: string;
+}
+
+export interface RiskEventView {
+  seq: number;
+  ts: string;
+  actor: string;
+  agent: RiskAgentView | null;
+  type: string;
+  /** Type-specific payload; shape depends on `type` (see docs/risks.md). */
+  data: Record<string, unknown>;
+}
+
+export interface RiskFindingRefView {
+  control_id: string;
+  run_id: string;
+  manifest_sha256: string;
+  finding_id: string;
+  body_path: string | null;
+  /** true = recomputed sha matched; false = mismatch; null = not verifiable. */
+  verified: boolean | null;
+}
+
+export interface RiskDetail {
+  id: string;
+  title: string;
+  severity: RiskSeverity;
+  status: RiskStatus;
+  impact: number;
+  likelihood: number;
+  owner: string | null;
+  due_at: string | null;
+  sla_days: number | null;
+  affected_systems: string[];
+  source_control: string | null;
+  first_run_id: string | null;
+  fingerprint: string | null;
+  resolved_at: string | null;
+  exception_expires_at: string | null;
+  external: RiskExternalView[];
+  external_status: Record<string, string>;
+  finding_refs: RiskFindingRefView[];
+  events: RiskEventView[];
+}
+
+export const listRisks = () => invoke<RiskRow[]>("list_risks");
+
+export const getRisk = (id: string) => invoke<RiskDetail>("get_risk", { id });

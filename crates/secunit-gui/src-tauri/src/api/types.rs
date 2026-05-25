@@ -295,3 +295,97 @@ pub struct ArtifactView {
     /// path as `read_findings`.
     pub html: Option<String>,
 }
+
+// ---------- risk register (read-only viewer) --------------------------------
+
+/// One row of the register table, projected from `risks/index.json` (the
+/// `RiskIndexEntry` fold). Mirrors `secunit_core::risks::RiskIndexEntry`
+/// with the risk id attached and the severity/status flattened to their
+/// on-disk spellings.
+#[derive(Debug, Clone, Serialize)]
+pub struct RiskRow {
+    pub id: String,
+    pub title: String,
+    pub fingerprint: String,
+    /// On-disk lowercase spelling: critical/high/medium/low/info.
+    pub severity: String,
+    /// On-disk kebab-case spelling: open/in-progress/remediated/…
+    pub status: String,
+    pub owner: Option<String>,
+    pub due_at: Option<NaiveDate>,
+    pub source_control: String,
+    pub first_run_id: String,
+    pub external: Vec<RiskExternalView>,
+    pub log_head_sha256: String,
+}
+
+/// External tracker mirror as shown in the register (`{system, id, url}`).
+#[derive(Debug, Clone, Serialize)]
+pub struct RiskExternalView {
+    pub system: String,
+    pub id: String,
+    pub url: String,
+}
+
+/// One event of a risk's log, projected for the timeline. `type` is the
+/// on-disk kebab-case discriminant; `data` is the raw payload so the
+/// webview can render the type-specific fields without a per-type wire
+/// type on the Rust side.
+#[derive(Debug, Clone, Serialize)]
+pub struct RiskEventView {
+    pub seq: u64,
+    pub ts: DateTime<Utc>,
+    pub actor: String,
+    pub agent: Option<RiskAgentView>,
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub data: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RiskAgentView {
+    pub model: String,
+    pub skill: String,
+}
+
+/// A finding ref bound to the risk, with the verification result of its
+/// pinned manifest sha recomputed against disk (the detail view's ✓/✗
+/// badge). Still read-only — verification only hashes the file.
+#[derive(Debug, Clone, Serialize)]
+pub struct RiskFindingRefView {
+    pub control_id: String,
+    pub run_id: String,
+    pub manifest_sha256: String,
+    pub finding_id: String,
+    pub body_path: Option<String>,
+    /// `Some(true)` if the run's manifest.json exists and its recomputed
+    /// sha matches `manifest_sha256`; `Some(false)` on mismatch; `None`
+    /// when the manifest could not be found to verify against.
+    pub verified: Option<bool>,
+}
+
+/// Full detail for one risk: the folded current state plus the raw event
+/// log (chronological) and the bound finding refs with verification.
+#[derive(Debug, Clone, Serialize)]
+pub struct RiskDetail {
+    pub id: String,
+    pub title: String,
+    pub severity: String,
+    pub status: String,
+    pub impact: u8,
+    pub likelihood: u8,
+    pub owner: Option<String>,
+    pub due_at: Option<NaiveDate>,
+    pub sla_days: Option<u32>,
+    pub affected_systems: Vec<String>,
+    pub source_control: Option<String>,
+    pub first_run_id: Option<String>,
+    pub fingerprint: Option<String>,
+    pub resolved_at: Option<DateTime<Utc>>,
+    pub exception_expires_at: Option<NaiveDate>,
+    pub external: Vec<RiskExternalView>,
+    /// Latest advisory status per external system (never authoritative).
+    pub external_status: BTreeMap<String, String>,
+    pub finding_refs: Vec<RiskFindingRefView>,
+    pub events: Vec<RiskEventView>,
+}

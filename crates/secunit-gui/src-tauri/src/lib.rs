@@ -43,6 +43,8 @@ pub fn run() {
             api::read_artifact,
             api::search_palette,
             api::index_status,
+            api::list_risks,
+            api::get_risk,
         ])
         .run(tauri::generate_context!())
         .expect("error while running secunit-gui");

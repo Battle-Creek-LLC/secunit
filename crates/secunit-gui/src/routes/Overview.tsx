@@ -1,8 +1,11 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useStore } from "@/store";
 import { AlertStrip } from "@/components/AlertStrip";
 import { FocusList } from "@/components/FocusList";
 import { RunTimeline } from "@/components/RunTimeline";
+import { cn } from "@/lib/cn";
+import { slaCountdown } from "@/lib/risks";
 
 const STALLED_DAYS = 3;
 const DUE_HORIZON_DAYS = 7;
@@ -40,6 +43,19 @@ export function Overview() {
     return { overdue, dueSoon, stalled };
   }, [snapshot]);
 
+  const riskCounts = useMemo(() => {
+    // "Open" = still actionable (not remediated / false-positive). Past SLA
+    // counts those whose due date has lapsed while actionable.
+    let open = 0;
+    let pastSla = 0;
+    snapshot.risks.forEach((r) => {
+      if (r.status === "remediated" || r.status === "false-positive") return;
+      open += 1;
+      if (slaCountdown(r.due_at, r.status).overdue) pastSla += 1;
+    });
+    return { open, pastSla };
+  }, [snapshot.risks]);
+
   const recent = useMemo(() => snapshot.runs.slice(0, 25), [snapshot.runs]);
 
   if (snapshot.revision === 0) {
@@ -63,6 +79,7 @@ export function Overview() {
             dueSoon={counts.dueSoon}
             stalled={counts.stalled}
           />
+          <RiskTile open={riskCounts.open} pastSla={riskCounts.pastSla} />
           <div className="flex flex-col gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Focus now
@@ -83,5 +100,34 @@ export function Overview() {
         </section>
       </div>
     </div>
+  );
+}
+
+function RiskTile({ open, pastSla }: { open: number; pastSla: number }) {
+  const to = pastSla > 0 ? "/risks?status=past-sla" : "/risks?status=open";
+  const tone = pastSla > 0 ? "error" : open > 0 ? "warn" : "ok";
+  const dot: Record<"error" | "warn" | "ok", string> = {
+    error: "bg-error",
+    warn: "bg-warn",
+    ok: "bg-ok",
+  };
+  return (
+    <Link
+      to={to}
+      aria-label={`${open} open risks, ${pastSla} past SLA`}
+      className={cn(
+        "group inline-flex w-fit items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+    >
+      <span className={cn("h-2 w-2 rounded-full", dot[tone])} aria-hidden="true" />
+      <span className="font-semibold tabular-nums">{open}</span>
+      <span className="text-muted-foreground group-hover:text-foreground">
+        open risk{open === 1 ? "" : "s"}
+      </span>
+      {pastSla > 0 && (
+        <span className="font-medium text-error">({pastSla} past SLA)</span>
+      )}
+    </Link>
   );
 }

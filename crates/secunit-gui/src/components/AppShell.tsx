@@ -59,6 +59,12 @@ const EvidenceIcon = (p: IconProps) => (
     <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
   </Icon>
 );
+const RisksIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v4M12 16h.01" />
+  </Icon>
+);
 const InventoryIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="m7.5 4.27 9 5.15" />
@@ -83,6 +89,7 @@ const NAV: Array<{ to: string; label: string; icon: ComponentType<IconProps> }> 
   { to: "/schedule", label: "Schedule", icon: ScheduleIcon },
   { to: "/controls", label: "Controls", icon: ControlsIcon },
   { to: "/findings", label: "Findings", icon: FindingsIcon },
+  { to: "/risks", label: "Risks", icon: RisksIcon },
   { to: "/evidence", label: "Evidence", icon: EvidenceIcon },
   { to: "/inventory", label: "Inventory", icon: InventoryIcon },
 ];

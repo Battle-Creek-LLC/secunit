@@ -45,6 +45,9 @@ const ALLOWLIST: &[&str] = &[
     // Search (JOB-12)
     "search_palette",
     "index_status",
+    // Risk register read-only viewer (Phase 8)
+    "list_risks",
+    "get_risk",
 ];
 
 fn api_dir() -> PathBuf {
