@@ -39,7 +39,10 @@ hex = "0.4"
 jsonschema = { version = "0.18", default-features = false, features = ["draft202012"] }
 walkdir = "2"
 fs2 = "0.4"
-gix = { version = "0.66", default-features = false, features = ["max-performance-safe"] }
+# gix 0.83 split the hash backend into a dedicated `sha1` feature; 0.66's
+# `max-performance-safe` bundled it. Add `sha1` explicitly so gix-hash gets a
+# backend (without it: "set either the `sha1` or `sha256` feature flag").
+gix = { version = "0.83", default-features = false, features = ["max-performance-safe", "sha1"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
