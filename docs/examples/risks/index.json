@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "risks": {
+    "R-0001": {
+      "title": "Werkzeug 2.x — CVE-2024-XXXXX (request smuggling)",
+      "fingerprint": "sca-weekly-dependency-scan:risk-1",
+      "severity": "high",
+      "status": "remediated",
+      "owner": "cto",
+      "due_at": "2026-08-02",
+      "source_control": "sca-weekly-dependency-scan",
+      "first_run_id": "2026-05-04-run-001",
+      "external": [
+        {
+          "system": "linear",
+          "id": "SEC-412",
+          "url": "https://linear.app/bcl/issue/SEC-412"
+        }
+      ],
+      "log_head_sha256": "52a02cfdd449ad0328a6fc21635dea86b12f0b83e4997cb59403790dca590eea"
+    }
+  },
+  "updated_at": "2026-05-25T18:21:05.707609Z"
+}

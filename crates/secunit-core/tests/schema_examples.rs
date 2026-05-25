@@ -81,3 +81,30 @@ fn manifests_validate() {
     }
     assert!(count > 0, "no manifest examples found under {root:?}");
 }
+
+#[test]
+fn risk_index_validates() {
+    let path = examples_root().join("risks/index.json");
+    assert_valid(Schema::RiskIndex, &path, &read_json(&path));
+}
+
+#[test]
+fn risk_event_logs_validate() {
+    let root = examples_root().join("risks");
+    let mut lines = 0;
+    for entry in walkdir::WalkDir::new(&root) {
+        let entry = entry.unwrap();
+        if entry.file_name() != "events.jsonl" {
+            continue;
+        }
+        let text = std::fs::read_to_string(entry.path())
+            .unwrap_or_else(|e| panic!("read {:?}: {e}", entry.path()));
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            let value: Value = serde_json::from_str(line)
+                .unwrap_or_else(|e| panic!("parse event in {:?}: {e}", entry.path()));
+            assert_valid(Schema::RiskEvent, entry.path(), &value);
+            lines += 1;
+        }
+    }
+    assert!(lines > 0, "no risk event examples found under {root:?}");
+}
