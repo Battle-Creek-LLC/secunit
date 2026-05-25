@@ -14,7 +14,8 @@ Pick the archive for your platform — `secunit-<target>.tar.gz`, with a matchin
 
 ```bash
 gh release download --repo Battle-Creek-LLC/secunit \
-  --pattern 'secunit-aarch64-apple-darwin.tar.gz*'
+  --pattern 'secunit-aarch64-apple-darwin.tar.gz' \
+  --pattern 'secunit-aarch64-apple-darwin.sha256'
 shasum -a 256 -c secunit-aarch64-apple-darwin.sha256   # verify
 tar xzf secunit-aarch64-apple-darwin.tar.gz
 sudo mv secunit /usr/local/bin/
