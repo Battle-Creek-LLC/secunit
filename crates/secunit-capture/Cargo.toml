@@ -20,7 +20,7 @@ jsonschema.workspace = true
 # `deps` feature
 tokio = { version = "1", features = ["rt", "macros", "process"], optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
-rustsec = { version = "0.30", default-features = false, features = ["gix-reqwest"], optional = true }
+rustsec = { version = "0.32", default-features = false, features = ["gix-reqwest"], optional = true }
 
 # `github` feature
 octocrab = { version = "0.41", default-features = false, features = ["default-client", "rustls", "rustls-ring"], optional = true }
