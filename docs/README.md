@@ -10,6 +10,7 @@ Specification and reference shapes for `secunit`, the operational layer that dri
 - [`cli.md`](cli.md) — full CLI reference: subcommands, flags, output modes, exit codes, cargo features, end-to-end session.
 - [`skills.md`](skills.md) — how skills work, the skill contract, the multi-system iteration pattern, the input/output structure passed between agent and skill, `requires_features` declaration.
 - [`storage.md`](storage.md) — the on-disk layout, run-dir lifecycle, inventory schema, scope resolution rules, cadence resolution rules, manifest hash chaining, file-naming conventions.
+- [`risks.md`](risks.md) — the risk register: append-only event log per risk, the finding-hash binding, the lifecycle/status machine, CLI management, the read-only viewer, and the sync-out seam.
 
 ## Examples
 

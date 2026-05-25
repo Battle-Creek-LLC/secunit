@@ -19,7 +19,7 @@ It is designed to be **agent-paired**: the agent reads the registry, executes ea
 ## Non-goals
 
 - Replace the WISP. The policies in the org's WISP repo remain the source of truth.
-- Replace the org's existing issue tracker. Risk registers and access tracking continue to live wherever the WISP says they live; `secunit` references those records by URL, not by API.
+- Replace the org's existing issue tracker for general engineering work. Access-change tracking continues to live wherever the WISP says it lives, referenced by URL. The **risk register**, however, is maintained inside `secunit` as authoritative state and synced *out* to the tracker — see [`risks.md`](risks.md). This reverses the original design, in which the register lived externally and was referenced by URL only.
 - Be a daemon, server, or scheduled job. It is a static registry plus an agent that walks it on demand.
 - Ship a custom CLI. A thin convenience wrapper may be added later, but the canonical interface is "an agent reading the registry."
 
@@ -87,9 +87,11 @@ Manifests are hash-chained to the previous run for the same control so an assess
 
 `state.json` records the last completed run per control. The agent uses it to compute "what's overdue" without scanning the entire evidence tree. State is regenerable from manifests if it ever gets out of sync.
 
-### Risk register and access tracking
+### Risk register
 
-Most WISPs locate the risk register and access change log in an issue tracker (typical conventions: a `risk` label on an issue tracker; access changes filed as templated issues). `secunit` does not maintain its own copies. Skills that produce risk entries or access changes write a draft markdown body and link the resulting external issue URL into the run manifest.
+`secunit` maintains the risk register inside the store, under `risks/`, as an append-only event log per risk. Each risk binds to the finding that produced it by content hash (`manifest_sha256` + `finding_id`); its lifecycle — open, re-observation across runs, remediation, documented exceptions — is recorded as appended events. Current state is folded from the log, and `risks/index.json` is a regenerable cache like `state.json`. The register is authoritative; external trackers are mirrors synced out to. Full design in [`risks.md`](risks.md).
+
+Access-change tracking is unchanged: it continues to live in the org's issue tracker per the WISP, referenced from evidence by URL rather than copied into `secunit`.
 
 ## Runtime architecture
 
@@ -131,7 +133,7 @@ When a control needs evidence no capture command covers, the skill instructs the
 ### Validation and verification
 
 - `secunit validate` — schema check on every YAML, cross-references between controls, skills, policies, inventory kinds, schedule overrides, and skill-declared `requires_features`. Run as a pre-commit hook.
-- `secunit verify` — walks every run for a control (or all controls) in chronological order, recomputes artifact hashes, checks each `prior_run.manifest_sha256` against the recomputed sha of the prior manifest. Single point of integrity for an assessor.
+- `secunit verify` — walks every run for a control (or all controls) in chronological order, recomputes artifact hashes, checks each `prior_run.manifest_sha256` against the recomputed sha of the prior manifest. Also walks each risk's `events.jsonl` chain and confirms every `finding_ref` resolves to a sealed manifest whose recomputed sha matches. Single point of integrity for an assessor.
 
 Combined with git history and signed commits, the hash chain provides a tamper-evident audit trail with no proprietary infrastructure.
 
@@ -167,9 +169,9 @@ When per-system divergence is itself the finding (e.g. one repo has SCA, another
 5. Agent runs `secunit run finalize <run-dir>`.
    secunit hashes every artifact, links to the prior run via
    prior_run.manifest_sha256, writes manifest.json, updates state.json.
-6. If findings warrant risk entries, the agent drafts them and asks the
-   operator to file in the org's tracker; the URL is pasted back into the
-   manifest's external_links.
+6. If findings warrant risk entries, the agent promotes each sealed draft risk
+   into the register with `secunit risks open --from <run-dir> --finding <id>`;
+   a later sync step mirrors Critical/High risks out to the org's tracker.
 7. Done.
 ```
 
@@ -197,6 +199,8 @@ When per-system divergence is itself the finding (e.g. one repo has SCA, another
   schedule.yaml                                  # date overrides + one-offs
   state.json                                     # last-run pointer per control
   _config.yaml                                   # owners, thresholds, terminology, integration URLs
+  risks/<risk-id>/events.jsonl                   # append-only risk register (see risks.md)
+  risks/index.json                               # derived register cache
   evidence/<year>/<quarter>/<control-id>/<run-id>/
     manifest.json
     findings.md
@@ -228,6 +232,7 @@ The whole tree is plain files. Versioning the registry under git gives free audi
 | Controls | `controls/*.yaml` + `state.json` | Table of every control with status badge; row → detail + recent runs |
 | Schedule | computed cadence + `schedule.yaml` | Calendar / list of `next_due` per control with overrides pinned |
 | Findings | `evidence/**/findings.md` | Reverse-chron feed of rendered markdown, filterable by control / system / quarter |
+| Risks | `risks/index.json` + `risks/<id>/events.jsonl` | Register table with SLA countdown; detail renders the event log as a timeline. See [`risks.md`](risks.md#read-only-viewer) |
 | Evidence | `evidence/<y>/<q>/<control>/<run>/` | File browser mirroring the on-disk layout, with run-state badges and artifact preview |
 | Inventory | `inventory.yaml` | Read-only table by kind |
 

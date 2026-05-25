@@ -50,8 +50,9 @@ The split into three crates is for testability — `secunit-core` stays library-
 | 5 | AWS captures; first live `aa-weekly` run | 3–4 |
 | 6 | Reports: first quarterly report from real evidence | 2–3 |
 | 7 | Hardening: pre-commit, release packaging, ergonomics | ongoing |
+| 8 | Internal risk register: append-only log, CLI, verify, GUI view | 3–4 |
 
-Total: roughly three weeks of focused work to a useful system, then you mostly write skills.
+Total: roughly three weeks of focused work to a useful system, then you mostly write skills. Phase 8 is an additive feature phase, designed in [`docs/risks.md`](docs/risks.md); it depends on Phases 2 (run lifecycle, root lock, hashing) and 6 (report assembly).
 
 ---
 
@@ -215,7 +216,7 @@ Total: roughly three weeks of focused work to a useful system, then you mostly w
 **Deliverables.**
 
 - `secunit-core::reports::data_assembler`:
-  - Walks `evidence/<y>/<q>/`, summarizes per-control activity, counts on-time vs late, extracts open risks from manifest `external_links`.
+  - Walks `evidence/<y>/<q>/`, summarizes per-control activity, counts on-time vs late, extracts open risks from manifest `external_links` (superseded by the `risks/` register once Phase 8 lands; the assembler then reads open risks from `risks/index.json`).
   - Emits structured JSON.
 - CLI: `secunit report data --quarter <yyyy-qN> --out <path>`, `--year`, `--policy-status`.
 - `skills/report-quarterly.md` — agent-side skill that reads `report-data.json`, composes `reports/<y>-<qN>-quarterly.md` matching the example shape under `docs/examples/reports/`.
@@ -246,6 +247,36 @@ Total: roughly three weeks of focused work to a useful system, then you mostly w
 **Tests.** Ongoing — every new capture follows the test pattern from Phase 4 (recorded fixtures, schema validation, idempotency).
 
 **Exit criteria.** None — this phase is steady-state.
+
+---
+
+## Phase 8 — Internal risk register
+
+**Goal.** `secunit` owns the risk register as an append-only, hash-chained event log under `risks/`. Findings flow into it; `verify` covers it; the GUI shows it read-only. Designed in [`docs/risks.md`](docs/risks.md). Reverses the original "link out to the tracker" non-goal — the register is authoritative, the tracker is a mirror synced out to.
+
+**Deliverables.**
+
+- Schemas: `schemas/risk-event.schema.json` (the `events.jsonl` line envelope + per-`type` `data` payloads) and `schemas/risk-index.schema.json`.
+- `secunit-core::risks`:
+  - Event model + `append(risk_id, event)` — takes the root lock, reads the tail line for `seq` + `prev_sha256`, validates the transition against the status machine and the event schema, writes one line with `O_APPEND`, refreshes the index entry.
+  - `fold(events) -> RiskState` — deterministic left-fold; the single source of "current state".
+  - `index` build / `rebuild` from the logs (the `state.json` rebuild analogue).
+  - `R-NNNN` id allocation under the lock; fingerprint `<control_id>:<finding_id>` for cross-run identity.
+- `secunit-core::evidence::verifier` extended: walk each risk's `prev_sha256` chain, and resolve every `finding_ref` to a sealed manifest whose recomputed sha matches.
+- `secunit-cli`: `risks open | assign | score | status | relink | link | observe | note | remediate | reopen | except` (mutating) and `risks list | show | rebuild` (read). `risks open --from` reads the named `draft_risk` from the sealed manifest and defaults the SLA from the source control's `remediation_thresholds`.
+- `secunit-core::reports::data_assembler` reads open risks from `risks/index.json` instead of manifest `external_links` (supersedes the Phase 6 source).
+- `secunit-gui`: **Risks** register view (table + SLA countdown) and **Risk detail** (fold header + event-log timeline + finding deep-links + verified-sha badge), plus the Overview open-risks tile. All read-only — the view folds the same way `secunit-core` does; no writes.
+
+**Tests.**
+
+- **Unit:** `fold` determinism (events applied in `seq` order reproduce identical state); status-machine rejects every illegal transition; `prev_sha256` chaining is correct across a synthetic event sequence.
+- **Round-trip:** `risks open` from a sealed fixture run → a sequence of mutating verbs → `risks show`/`list` reflect the fold → `risks rebuild` reproduces `index.json` byte-identically.
+- **Tamper detection:** edit or delete a log line → `verify` fails with a precise diagnostic; point a `finding_ref` at a mutated or absent manifest → `verify` fails.
+- **Concurrency:** two appends to the same risk serialize via the root lock; no torn or interleaved lines.
+- **Golden:** `cargo insta` snapshots of `risks list` / `risks show` (human + JSON) against a fixture org carrying risks in every state — new, persisting (multiple `evidence-linked`), remediated, accepted-exception, past-SLA.
+- **GUI parity:** the view's in-memory fold matches `secunit-core::risks::fold` for the fixture logs (snapshot/property).
+
+**Exit criteria.** A real multi-finding run (e.g. the `ra-vuln-audit` Django review — 2 Critical, 16 High) is promoted into the register; `secunit risks list --past-sla` surfaces SLA breaches against control thresholds; `secunit verify` covers the register chain; the GUI renders the register and timeline read-only. The quarterly report's risk section is sourced from `risks/`.
 
 ---
 
@@ -312,3 +343,5 @@ A phase is done when:
 - **Test credentials for live smokes.** Need a read-only AWS role and a fine-grained PAT scoped to one repo for the weekly smoke. Created during Phase 5 setup.
 - **`secunit-capture` as a separate crate or module of `secunit-cli`?** Separate crate makes feature gating cleaner. Costs nothing.
 - **Async runtime for AWS captures.** `tokio` is required by aws-sdk-rust. Either run inside `#[tokio::main]` for the whole binary or just for the capture subcommands. Recommendation: just the capture subcommands — keep core sync.
+- **Risk id scheme (Phase 8).** Global sequential `R-NNNN` vs a content-derived id. Recommendation: global sequential allocated under the root lock at `risks open`, with the fingerprint `<control_id>:<finding_id>` stored inside for cross-run identity — human-friendly and tracker-friendly.
+- **Sync-out tooling (Phase 8).** Ship a bundled `risk-sync` skill or leave the projection to the operator? Recommendation: bundle a thin skill that pushes Critical/High risks to the configured tracker and writes `external-linked` events back; inbound status stays advisory (`external-status-observed`), so there is never a true bidirectional conflict to resolve.
