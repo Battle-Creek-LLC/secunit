@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-05-25
+
 ### Added
 
+- macOS desktop app now ships in GitHub Releases: the `secunit-gui` Tauri
+  viewer is built for Apple Silicon and Intel and attached as a `.dmg`
+  alongside the CLI archives on every tagged release. The bundle is
+  unsigned — see `getting-started.md` for the one-time Gatekeeper step.
 - Bundled skill standard library + `secunit skills` subcommand. The six
   reusable runbooks (`capture-sweep`, `attestation-review`,
   `policy-annual-review`, `report`, `bootstrap`, `inventory-seed`) now

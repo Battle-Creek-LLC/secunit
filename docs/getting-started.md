@@ -4,6 +4,37 @@ How to take an organization with an existing Written Information Security Progra
 
 > **Status.** Phases 0–3 of `PLAN.md` are landed: registry math, run lifecycle, the `bootstrap` and `inventory-seed` skills, `secunit registry import`, and the `inventory` subcommands. Native captures (Phase 4+) are next; until they ship, the capture step in any control's skill is the operator running `gh`/`aws` by hand and writing the canonical JSON output into the run dir.
 
+## Install
+
+Each tagged release on [GitHub Releases](https://github.com/Battle-Creek-LLC/secunit/releases/latest) carries both the `secunit` CLI (macOS + Linux) and an unsigned macOS build of the `secunit-gui` desktop viewer.
+
+### CLI
+
+Pick the archive for your platform — `secunit-<target>.tar.gz`, with a matching `.sha256`. On Apple Silicon macOS:
+
+```bash
+gh release download --repo Battle-Creek-LLC/secunit \
+  --pattern 'secunit-aarch64-apple-darwin.tar.gz*'
+shasum -a 256 -c secunit-aarch64-apple-darwin.sha256   # verify
+tar xzf secunit-aarch64-apple-darwin.tar.gz
+sudo mv secunit /usr/local/bin/
+secunit --version
+```
+
+Substitute `x86_64-apple-darwin` (Intel mac) or `*-unknown-linux-gnu` (Linux) as needed. No `gh`? Download the same files from the Releases page in a browser.
+
+### Desktop app (macOS)
+
+Download the `.dmg` for your architecture — `secunit-aarch64-apple-darwin.dmg` (Apple Silicon) or `secunit-x86_64-apple-darwin.dmg` (Intel) — open it, and drag **secunit.app** into `/Applications`.
+
+The app is **not code-signed**, so on first launch macOS Gatekeeper will refuse it. Either right-click the app → **Open** → **Open** to approve it once, or clear the quarantine flag from the terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/secunit.app
+```
+
+The GUI is read-only — it never writes inside a project tree; the CLI remains the only path that mutates registry state.
+
 ## What you need before starting
 
 - **An existing WISP** as files in a git repo — typically `<org>-docs/security/` containing policy markdown/PDF, procedures, and access dictionaries. `secunit` does not replace this; it operationalizes it.
