@@ -65,35 +65,40 @@ pub fn run(ctx: &Ctx, control_id: Option<&str>) -> Result<ExitCode> {
     let has_runs = !report.verified.is_empty() || !report.failures.is_empty();
     let has_risks = !report.verified_risks.is_empty() || !report.risk_failures.is_empty();
 
-    if report.is_clean() {
-        if has_runs {
+    // Runs and the register each report their own verdict independently, so a
+    // clean register is still acknowledged when some runs fail (and vice versa).
+    if has_runs {
+        if report.failures.is_empty() {
             println!(
                 "✓ {} run(s) verified, hash chain intact",
                 report.verified.len()
             );
-        }
-        if has_risks {
-            println!(
-                "✓ {} risk log(s) verified, chains intact",
-                report.verified_risks.len()
-            );
-        }
-        Ok(ExitCode::SUCCESS)
-    } else {
-        if has_runs {
+        } else {
             println!(
                 "✗ {} of {} run(s) failed verification",
                 report.failures.len(),
                 report.verified.len() + report.failures.len()
             );
         }
-        if has_risks && !report.risk_failures.is_empty() {
+    }
+    if has_risks {
+        if report.risk_failures.is_empty() {
+            println!(
+                "✓ {} risk log(s) verified, chains intact",
+                report.verified_risks.len()
+            );
+        } else {
             println!(
                 "✗ {} of {} risk log(s) failed verification",
                 report.risk_failures.len(),
                 report.verified_risks.len() + report.risk_failures.len()
             );
         }
-        Ok(ExitCode::from(1))
     }
+
+    Ok(if report.is_clean() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    })
 }
