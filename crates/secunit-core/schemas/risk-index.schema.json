@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/risk-index.schema.json",
+  "title": "RiskIndex",
+  "description": "Derived register cache at risks/index.json — regenerable from the per-risk event logs, same role as state.json. See docs/storage.md.",
+  "type": "object",
+  "required": ["schema_version", "risks"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "risks": {
+      "type": "object",
+      "propertyNames": { "pattern": "^R-[0-9]{4}$" },
+      "additionalProperties": { "$ref": "#/$defs/entry" }
+    },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "entry": {
+      "type": "object",
+      "required": [
+        "title",
+        "fingerprint",
+        "severity",
+        "status",
+        "source_control",
+        "first_run_id",
+        "log_head_sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string" },
+        "fingerprint": { "type": "string" },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low", "info"]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "in-progress",
+            "remediated",
+            "reopened",
+            "accepted-exception",
+            "false-positive"
+          ]
+        },
+        "owner": { "type": ["string", "null"] },
+        "due_at": { "type": ["string", "null"], "format": "date" },
+        "source_control": { "type": "string" },
+        "first_run_id": { "type": "string" },
+        "external": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["system", "id", "url"],
+            "additionalProperties": false,
+            "properties": {
+              "system": { "type": "string" },
+              "id": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        },
+        "log_head_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

@@ -32,6 +32,8 @@ pub enum Schema {
     Prepare,
     Result,
     Config,
+    RiskEvent,
+    RiskIndex,
 }
 
 impl Schema {
@@ -45,6 +47,8 @@ impl Schema {
             Schema::Prepare => schema!("prepare", "prepare.schema.json"),
             Schema::Result => schema!("result", "result.schema.json"),
             Schema::Config => schema!("_config", "_config.schema.json"),
+            Schema::RiskEvent => schema!("risk-event", "risk-event.schema.json"),
+            Schema::RiskIndex => schema!("risk-index", "risk-index.schema.json"),
         }
     }
 

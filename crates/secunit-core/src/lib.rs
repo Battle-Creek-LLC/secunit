@@ -5,6 +5,7 @@
 pub mod evidence;
 pub mod model;
 pub mod registry;
+pub mod risks;
 pub mod schemas;
 pub mod skills;
 

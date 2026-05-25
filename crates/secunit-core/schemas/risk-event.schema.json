@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/risk-event.schema.json",
+  "title": "RiskEvent",
+  "description": "One line of a risk's events.jsonl: an immutable, hash-chained event envelope with a per-type data payload. See docs/risks.md.",
+  "type": "object",
+  "required": ["seq", "ts", "actor", "type", "prev_sha256", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "seq": { "type": "integer", "minimum": 1 },
+    "ts": { "type": "string", "format": "date-time" },
+    "actor": { "type": "string", "minLength": 1 },
+    "agent": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["model", "skill"],
+          "properties": {
+            "model": { "type": "string" },
+            "skill": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "opened",
+        "owner-assigned",
+        "score-changed",
+        "sla-set",
+        "status-changed",
+        "evidence-linked",
+        "external-linked",
+        "external-status-observed",
+        "note",
+        "remediated",
+        "reopened",
+        "exception-documented"
+      ]
+    },
+    "prev_sha256": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/sha256" }
+      ]
+    },
+    "data": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "opened" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": [
+              "finding_ref",
+              "title",
+              "severity",
+              "impact",
+              "likelihood",
+              "affected_systems",
+              "sla_days",
+              "due_at"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "finding_ref": { "$ref": "#/$defs/findingRef" },
+              "title": { "type": "string", "minLength": 1 },
+              "severity": { "$ref": "#/$defs/severity" },
+              "impact": { "$ref": "#/$defs/score" },
+              "likelihood": { "$ref": "#/$defs/score" },
+              "affected_systems": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "sla_days": { "type": "integer", "minimum": 0 },
+              "due_at": { "$ref": "#/$defs/date" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "owner-assigned" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["owner"],
+            "additionalProperties": false,
+            "properties": {
+              "owner": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "score-changed" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["impact", "likelihood", "severity", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "impact": { "$ref": "#/$defs/score" },
+              "likelihood": { "$ref": "#/$defs/score" },
+              "severity": { "$ref": "#/$defs/severity" },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "sla-set" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["due_at", "basis"],
+            "additionalProperties": false,
+            "properties": {
+              "due_at": { "$ref": "#/$defs/date" },
+              "basis": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "status-changed" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["from", "to", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "from": { "$ref": "#/$defs/status" },
+              "to": { "$ref": "#/$defs/status" },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "evidence-linked" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["finding_ref"],
+            "additionalProperties": false,
+            "properties": {
+              "finding_ref": { "$ref": "#/$defs/findingRef" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "external-linked" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["system", "external_id", "url"],
+            "additionalProperties": false,
+            "properties": {
+              "system": { "type": "string", "minLength": 1 },
+              "external_id": { "type": "string", "minLength": 1 },
+              "url": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "external-status-observed" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["system", "status", "observed_at"],
+            "additionalProperties": false,
+            "properties": {
+              "system": { "type": "string", "minLength": 1 },
+              "status": { "type": "string" },
+              "observed_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "note" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["text"],
+            "additionalProperties": false,
+            "properties": {
+              "text": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "remediated" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["note"],
+            "additionalProperties": false,
+            "properties": {
+              "resolved_run_ref": { "$ref": "#/$defs/findingRef" },
+              "note": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "reopened" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["reason"],
+            "additionalProperties": false,
+            "properties": {
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "exception-documented" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["rationale", "approved_by", "expires_at"],
+            "additionalProperties": false,
+            "properties": {
+              "rationale": { "type": "string" },
+              "approved_by": { "type": "string", "minLength": 1 },
+              "expires_at": { "$ref": "#/$defs/date" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "date": { "type": "string", "format": "date" },
+    "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low", "info"]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "in-progress",
+        "remediated",
+        "reopened",
+        "accepted-exception",
+        "false-positive"
+      ]
+    },
+    "findingRef": {
+      "type": "object",
+      "required": ["control_id", "run_id", "manifest_sha256", "finding_id"],
+      "additionalProperties": false,
+      "properties": {
+        "control_id": { "type": "string", "minLength": 1 },
+        "run_id": { "type": "string", "minLength": 1 },
+        "manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "finding_id": { "type": "string", "minLength": 1 },
+        "body_path": { "type": "string" }
+      }
+    }
+  }
+}
