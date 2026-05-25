@@ -12,6 +12,9 @@
   schedule.yaml              # date overrides and one-off insertions
   _config.yaml               # owners, thresholds, terminology, integration URLs
   state.json                 # last-run pointer per control
+  risks/
+    index.json               # derived register cache (regenerable from the logs)
+    <risk-id>/events.jsonl   # append-only risk event log
   evidence/
     <year>/
       <quarter>/             # q1, q2, q3, q4
@@ -259,6 +262,55 @@ Notes:
 - `prior_run.manifest_sha256` chains the manifests, so any retroactive edit of an earlier run breaks verification of every later run for that control.
 - `by_system` mirrors the run's evidence layout. For `flat` runs, `artifacts` lives at the top level only.
 
+## Risk register (`risks/`)
+
+The risk register is authoritative state held in the store as an append-only event
+log per risk. It reuses two patterns already defined above: the manifest hash
+chain (here applied per risk via `prev_sha256`) and the regenerable `state.json`
+cache (here `risks/index.json`). Full design and CLI/UI surface in
+[`risks.md`](risks.md); the on-disk contract is below.
+
+Each `risks/<risk-id>/events.jsonl` is JSON Lines, one immutable event per line:
+
+```json
+{"seq":1,"ts":"2026-05-25T14:40:00Z","actor":"jstockdi","agent":null,"type":"opened","prev_sha256":null,"data":{"finding_ref":{"control_id":"ra-vuln-audit","run_id":"2026-05-25-run-001","manifest_sha256":"<hex>","finding_id":"S032","body_path":"findings.md#risk-1"},"title":"S032 — pickle deserialization RCE (CWE-502)","severity":"critical","impact":3,"likelihood":3,"affected_systems":["app-api"],"sla_days":30,"due_at":"2026-06-24"}}
+{"seq":2,"ts":"2026-05-25T14:41:00Z","actor":"jstockdi","agent":null,"type":"owner-assigned","prev_sha256":"<hex>","data":{"owner":"cto"}}
+{"seq":3,"ts":"2026-06-02T16:00:00Z","actor":"jstockdi","agent":null,"type":"status-changed","prev_sha256":"<hex>","data":{"from":"open","to":"remediated","reason":"pickle replaced; verified in 2026-06-02-run-003"}}
+```
+
+Notes:
+
+- `prev_sha256` is the SHA-256 of the previous canonicalised line; `null` on `seq: 1`. Lines are only ever appended — corrections are new events, never edits. `secunit verify` walks this chain.
+- `finding_ref` binds the risk to immutable evidence by content hash. The fingerprint `<control_id>:<finding_id>` is the risk's cross-run identity; a re-observation in a later run appends `evidence-linked` rather than opening a new risk.
+- Current state is folded from the events; nothing stores "the current status" mutably.
+
+`risks/index.json` is the derived cache — same role as `state.json`:
+
+```json
+{
+  "schema_version": 1,
+  "risks": {
+    "R-0007": {
+      "title": "S032 — pickle deserialization RCE (CWE-502)",
+      "fingerprint": "ra-vuln-audit:S032",
+      "severity": "critical",
+      "status": "open",
+      "owner": "cto",
+      "due_at": "2026-06-24",
+      "source_control": "ra-vuln-audit",
+      "first_run_id": "2026-05-25-run-001",
+      "external": [{ "system": "linear", "id": "SEC-412", "url": "https://…" }],
+      "log_head_sha256": "<hex>"
+    }
+  },
+  "updated_at": "2026-05-25T14:41:00Z"
+}
+```
+
+Rebuilt from the logs with `secunit risks rebuild` whenever it drifts.
+`log_head_sha256` pins the event each entry was built from, so readers can detect
+staleness without re-folding.
+
 ## `findings.md` template
 
 Every skill emits findings in this shape. Fixed headings let `report-quarterly` aggregate across runs.
@@ -338,5 +390,6 @@ overrides:
 - Control YAML: `<id>.yaml` (kebab-case, prefixed with the policy family — `aa-`, `ca-`, `ac-`, `cp-`, `ir-`, `pe-`, `at-`, `si-`, `sc-`, `sa-`, `ra-`, `sca-`, `sast-`, `policy-`).
 - Skill markdown: `<skill-name>.md`. Skill name matches `control.skill` exactly.
 - Run id: `<YYYY-MM-DD>-run-<NNN>`. The `NNN` counter is per control per day; `001` in almost all cases.
+- Risk id: `R-<NNNN>`, globally sequential, allocated at `secunit risks open`. The log lives at `risks/<risk-id>/events.jsonl`.
 - Inventory `name`: kebab-case, stable. Used directly as `by-system/<name>/` path.
 - Evidence artifacts under `raw/` or `by-system/<name>/raw/`: descriptive kebab-case, with extension matching format. No timestamps in filenames — they live in `manifest.json`.

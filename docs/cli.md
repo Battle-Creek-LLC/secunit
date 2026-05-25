@@ -34,6 +34,7 @@ COMMANDS:
     report       Assemble report data
     registry     Manage controls and schedule
     inventory    Manage the inventory
+    risks        Manage the risk register
 ```
 
 ## Inspection
@@ -137,7 +138,39 @@ secunit verify [<CONTROL_ID>] [--from <DATE>] [--json]
 
 Run as a pre-commit hook. `--strict` adds opinionated checks (NIST id format, descriptive title length, scope minimum-tag rules).
 
-`verify` walks every run for a control (or all controls) in chronological order, recomputes every artifact hash, and checks each `prior_run.manifest_sha256` against the recomputed sha of the prior manifest. Single point of integrity for an assessor.
+`verify` walks every run for a control (or all controls) in chronological order, recomputes every artifact hash, and checks each `prior_run.manifest_sha256` against the recomputed sha of the prior manifest. It also walks each risk's `events.jsonl` chain and confirms every `finding_ref` resolves to a sealed manifest whose recomputed sha matches. Single point of integrity for an assessor.
+
+## Risk register
+
+The risk register is authoritative state held under `risks/` as an append-only
+event log per risk; see [`risks.md`](risks.md) for the model. Mutating verbs each
+append one event under the root lock and refresh `risks/index.json`; read verbs
+are pure folds.
+
+```
+secunit risks open <CONTROL_ID> --from <RUN_DIR> --finding <ID> [--owner <ROLE>] [--sla-days <N>]
+secunit risks assign <RISK_ID> --owner <ROLE>
+secunit risks score <RISK_ID> --impact <N> --likelihood <N> --reason <STRING>
+secunit risks status <RISK_ID> --to <STATUS> --reason <STRING>
+secunit risks relink <RISK_ID> --from <RUN_DIR> --finding <ID>
+secunit risks link <RISK_ID> --system <NAME> --id <EXT_ID> --url <URL>
+secunit risks observe <RISK_ID> --system <NAME> --status <STATUS>
+secunit risks note <RISK_ID> --text <STRING>
+secunit risks remediate <RISK_ID> [--evidence <RUN_DIR>] --note <STRING>
+secunit risks reopen <RISK_ID> --reason <STRING>
+secunit risks except <RISK_ID> --rationale <STRING> --approved-by <WHO> --expires <DATE>
+
+secunit risks list [--status <S>] [--severity <LIST>] [--owner <ROLE>] [--past-sla] [--json]
+secunit risks show <RISK_ID> [--json]
+secunit risks rebuild
+```
+
+`risks open --from` reads the named `draft_risk` from the sealed manifest,
+allocates the next `R-NNNN`, and verifies the manifest exists with a matching sha
+before writing the `opened` event — a risk cannot be bound to absent or fabricated
+evidence. `status` transitions are validated against the status machine in
+[`risks.md`](risks.md#status-machine). `rebuild` regenerates `index.json` from the
+logs, the way `state.json` rebuilds from manifests.
 
 ## Skills
 
@@ -174,7 +207,7 @@ secunit report data --year <YYYY> --out <PATH>
 secunit report data --policy-status --out <PATH>
 ```
 
-Aggregates manifests, state, and risk-register links into JSON the `report-quarterly` skill renders to markdown. The binary never composes prose.
+Aggregates manifests, state, and the risk register into JSON the `report-quarterly` skill renders to markdown. The binary never composes prose.
 
 ## Registry / inventory management
 
@@ -205,6 +238,7 @@ secunit inventory check
 | `run finalize` | human checklist | structured JSON |
 | `capture *` | writes JSON to `--out`; stderr summary | (no flip — `--out` is the contract) |
 | `validate`, `verify` | human report | structured JSON |
+| `risks list`, `risks show` | human tables | structured JSON |
 | `features` | table | structured JSON |
 
 Exit codes:
