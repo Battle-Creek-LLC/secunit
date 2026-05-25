@@ -598,7 +598,11 @@ mod risk_tests {
             .find(|f| f.risk_id == risk_id)
             .expect("expected a risk failure for the mutated manifest");
         assert_eq!(f.kind, RiskFailureKind::BadFindingRef);
-        assert!(f.detail.contains("ra-vuln-audit:S032"), "detail: {}", f.detail);
+        assert!(
+            f.detail.contains("ra-vuln-audit:S032"),
+            "detail: {}",
+            f.detail
+        );
     }
 
     #[test]

@@ -152,8 +152,13 @@ fn parse_events(text: &str, path: &Path) -> Result<Vec<RiskEvent>> {
         if line.trim().is_empty() {
             continue;
         }
-        let ev: RiskEvent = serde_json::from_str(line)
-            .with_context(|| format!("{}: line {} is not a valid risk event", path.display(), i + 1))?;
+        let ev: RiskEvent = serde_json::from_str(line).with_context(|| {
+            format!(
+                "{}: line {} is not a valid risk event",
+                path.display(),
+                i + 1
+            )
+        })?;
 
         let expected_seq = (events.len() as u64) + 1;
         if ev.seq != expected_seq {
@@ -453,8 +458,8 @@ pub fn verify_finding_ref(run_dir: &Path, finding_ref: &FindingRef) -> Result<()
             run_dir.display()
         );
     }
-    let actual = sha256_file(&manifest_path)
-        .with_context(|| format!("hash {}", manifest_path.display()))?;
+    let actual =
+        sha256_file(&manifest_path).with_context(|| format!("hash {}", manifest_path.display()))?;
     if actual != finding_ref.manifest_sha256 {
         bail!(
             "manifest sha mismatch for {}: finding_ref says {}, recomputed {}",
@@ -523,9 +528,10 @@ fn refresh_index_entry(
         RiskIndex::default()
     };
     let state = fold::fold(events);
-    index
-        .risks
-        .insert(risk_id.to_string(), entry_from_state(&state, log_head_sha256));
+    index.risks.insert(
+        risk_id.to_string(),
+        entry_from_state(&state, log_head_sha256),
+    );
     index.updated_at = Some(Utc::now());
     write_index(&path, &index)
 }
@@ -552,8 +558,7 @@ pub fn build_index(root: &Path) -> Result<RiskIndex> {
         if !events_path(root, &name).exists() {
             continue;
         }
-        let events = load_events(root, &name)
-            .with_context(|| format!("load events for {name}"))?;
+        let events = load_events(root, &name).with_context(|| format!("load events for {name}"))?;
         let head_sha = log_head_sha(root, &name)?;
         let state = fold::fold(&events);
         index
@@ -592,7 +597,10 @@ fn write_index(path: &Path, index: &RiskIndex) -> Result<()> {
     let value = serde_json::to_value(index)?;
     let errs = Schema::RiskIndex.validate(&value);
     if !errs.is_empty() {
-        bail!("risk index fails risk-index.schema.json: {}", errs.join("; "));
+        bail!(
+            "risk index fails risk-index.schema.json: {}",
+            errs.join("; ")
+        );
     }
     // Pretty-printed: the index is a derived cache (not chained), so human
     // readability beats compactness, matching state.json.

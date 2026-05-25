@@ -70,8 +70,8 @@ fn parse_status(s: &str) -> Result<Status> {
 
 /// Load + fold a single risk's log into its current state.
 fn load_state(root: &Path, risk_id: &str) -> Result<(Vec<RiskEvent>, RiskState)> {
-    let events = store::load_events(root, risk_id)
-        .with_context(|| format!("load events for {risk_id}"))?;
+    let events =
+        store::load_events(root, risk_id).with_context(|| format!("load events for {risk_id}"))?;
     let state = fold::fold(&events);
     Ok((events, state))
 }
@@ -97,7 +97,10 @@ struct ResolvedFinding {
 fn resolve_finding(run_dir: &Path, finding_id: &str) -> Result<ResolvedFinding> {
     let manifest_path = run_dir.join("manifest.json");
     if !manifest_path.exists() {
-        bail!("no manifest.json under {} — is the run sealed?", run_dir.display());
+        bail!(
+            "no manifest.json under {} — is the run sealed?",
+            run_dir.display()
+        );
     }
     let bytes = std::fs::read(&manifest_path)
         .with_context(|| format!("read {}", manifest_path.display()))?;
@@ -105,8 +108,8 @@ fn resolve_finding(run_dir: &Path, finding_id: &str) -> Result<ResolvedFinding> 
         .with_context(|| format!("parse {}", manifest_path.display()))?;
     // Recompute the sha exactly as `verify_finding_ref` will, so the ref we
     // build is the one the verifier accepts.
-    let manifest_sha256 = sha256_file(&manifest_path)
-        .with_context(|| format!("hash {}", manifest_path.display()))?;
+    let manifest_sha256 =
+        sha256_file(&manifest_path).with_context(|| format!("hash {}", manifest_path.display()))?;
 
     let draft = manifest
         .draft_risks
@@ -300,10 +303,7 @@ pub fn open(
         });
         println!("{}", serde_json::to_string_pretty(&payload)?);
     } else {
-        println!(
-            "opened {} (due {due_at}, SLA {sla}d)",
-            outcome.risk_id
-        );
+        println!("opened {} (due {due_at}, SLA {sla}d)", outcome.risk_id);
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -622,7 +622,10 @@ pub fn show(ctx: &Ctx, risk_id: &str) -> Result<ExitCode> {
     }
     if !state.external.is_empty() {
         for ext in &state.external {
-            println!("  external:  {} {} ({})", ext.system, ext.external_id, ext.url);
+            println!(
+                "  external:  {} {} ({})",
+                ext.system, ext.external_id, ext.url
+            );
         }
     }
 

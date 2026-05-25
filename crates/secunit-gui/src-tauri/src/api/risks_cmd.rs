@@ -282,7 +282,9 @@ mod tests {
         risks::append(
             root,
             &id,
-            EventData::OwnerAssigned { owner: "cto".into() },
+            EventData::OwnerAssigned {
+                owner: "cto".into(),
+            },
             "jstockdi",
             None,
             Some(Utc.with_ymd_and_hms(2026, 5, 25, 14, 41, 0).unwrap()),

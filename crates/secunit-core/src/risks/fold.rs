@@ -176,9 +176,7 @@ fn apply(state: &mut RiskState, ev: &RiskEvent) {
         }
         EventData::ExternalStatusObserved { system, status, .. } => {
             // Advisory only — recorded, never authoritative over `status`.
-            state
-                .external_status
-                .insert(system.clone(), status.clone());
+            state.external_status.insert(system.clone(), status.clone());
         }
         EventData::Note { .. } => {}
         EventData::Remediated { .. } => {

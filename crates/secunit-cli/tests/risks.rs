@@ -111,7 +111,14 @@ fn open_list_show_round_trip() {
     let (out, stdout, stderr) = run(
         root,
         &[
-            "risks", "open", "ra-vuln-audit", "--from", &rd, "--finding", "S032", "--owner",
+            "risks",
+            "open",
+            "ra-vuln-audit",
+            "--from",
+            &rd,
+            "--finding",
+            "S032",
+            "--owner",
             "cto",
         ],
     );
@@ -162,15 +169,29 @@ fn status_filter_and_past_sla() {
 
     run(
         root,
-        &["risks", "open", "ra-vuln-audit", "--from", &rd, "--finding", "S032"],
+        &[
+            "risks",
+            "open",
+            "ra-vuln-audit",
+            "--from",
+            &rd,
+            "--finding",
+            "S032",
+        ],
     );
 
     // Past SLA: today well after due 2026-06-08.
-    let (_o, stdout, _) = run(root, &["--today", "2026-07-01", "risks", "list", "--past-sla"]);
+    let (_o, stdout, _) = run(
+        root,
+        &["--today", "2026-07-01", "risks", "list", "--past-sla"],
+    );
     assert!(stdout.contains("R-0001"), "expected past-sla hit: {stdout}");
 
     // Before due: no past-sla rows.
-    let (_o, stdout, _) = run(root, &["--today", "2026-05-26", "risks", "list", "--past-sla"]);
+    let (_o, stdout, _) = run(
+        root,
+        &["--today", "2026-05-26", "risks", "list", "--past-sla"],
+    );
     assert!(stdout.contains("No risks match"), "stdout: {stdout}");
 
     // Severity filter that excludes the risk yields no rows.
@@ -190,7 +211,15 @@ fn rebuild_regenerates_index() {
 
     run(
         root,
-        &["risks", "open", "ra-vuln-audit", "--from", &rd, "--finding", "S032"],
+        &[
+            "risks",
+            "open",
+            "ra-vuln-audit",
+            "--from",
+            &rd,
+            "--finding",
+            "S032",
+        ],
     );
     // Drop the derived index and rebuild it from the log.
     fs::remove_file(root.join("risks/index.json")).unwrap();

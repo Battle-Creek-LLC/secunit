@@ -268,9 +268,7 @@ impl RiskState {
 
     /// The control id that produced the risk (from the first finding ref).
     pub fn source_control(&self) -> Option<&str> {
-        self.finding_refs
-            .first()
-            .map(|f| f.control_id.as_str())
+        self.finding_refs.first().map(|f| f.control_id.as_str())
     }
 
     /// The run id the risk was first observed in (from the first finding
