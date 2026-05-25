@@ -44,3 +44,48 @@ jobs:
           checksum: sha256
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || '' }}
+
+  # The GUI is a Tauri app kept out of `default-members`; build it only here,
+  # for macOS, and attach the .dmg to the release the CLI job created. The
+  # bundle is unsigned — install instructions cover the Gatekeeper step.
+  gui-macos:
+    name: gui-${{ matrix.target }}
+    needs: upload-assets
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install frontend dependencies
+        working-directory: crates/secunit-gui
+        run: |
+          corepack enable || sudo corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Build app bundle
+        working-directory: crates/secunit-gui
+        # `pnpm exec`, not the `tauri:build` script: a script + `--` makes pnpm
+        # forward a literal `--` that Tauri hands to cargo, breaking `--bundles`.
+        # The runner's CI=true is what lets bundle_dmg.sh skip Finder styling.
+        run: pnpm exec tauri build --target ${{ matrix.target }} --bundles dmg
+
+      - name: Upload .dmg to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          dmg=$(find . -path "*/${{ matrix.target }}/release/bundle/dmg/*.dmg" -not -path '*/node_modules/*' | head -1)
+          if [ -z "$dmg" ]; then echo "no .dmg produced for ${{ matrix.target }}" >&2; exit 1; fi
+          dest="secunit-${{ matrix.target }}.dmg"
+          cp "$dmg" "$dest"
+          gh release upload "$TAG" "$dest" --clobber
