@@ -60,6 +60,7 @@ export function AlertStrip({ overdue, dueSoon, stalled }: AlertStripProps) {
         <Link
           key={it.key}
           to={it.to}
+          aria-label={`${it.count} ${it.label}`}
           className={cn(
             "group inline-flex items-center gap-2 rounded px-1 -mx-1",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
