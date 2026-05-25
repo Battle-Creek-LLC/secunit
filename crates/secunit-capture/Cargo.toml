@@ -23,7 +23,11 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 rustsec = { version = "0.30", default-features = false, features = ["gix-reqwest"], optional = true }
 
 # `github` feature
-octocrab = { version = "0.41", default-features = false, features = ["default-client", "rustls", "rustls-ring"], optional = true }
+# octocrab 0.51 dropped jsonwebtoken from its default-off feature set; the JWT
+# crypto backend must now be selected explicitly. `jwt-rust-crypto` matches the
+# pure-Rust path octocrab enables by default and keeps us off the C aws-lc-rs
+# backend, consistent with our rustls choice.
+octocrab = { version = "0.51", default-features = false, features = ["default-client", "rustls", "rustls-ring", "jwt-rust-crypto"], optional = true }
 
 [features]
 default = []
