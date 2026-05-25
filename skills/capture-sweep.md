@@ -56,9 +56,9 @@ Run `skill_args.captures` / `commands` once, writing to `run_dir/raw/`. Diff aga
 ### Finish
 
 6. Write `findings.md` (template below).
-7. Draft a risk for every finding at or above `_config.thresholds.draft_risk_at` (default High). SLA = `remediation_thresholds[severity]`; internet-facing High uses 30d, internal High 60d.
-8. Draft an issue for every config gap (repo missing Dependabot/CodeQL, drifted from the repocat baseline, over-broad firewall rule).
-9. Drop `result.json` and return.
+7. Draft a risk for every finding at or above `_config.thresholds.draft_risk_at` (default High). SLA = `remediation_thresholds[severity]`; internet-facing High uses 30d, internal High 60d. Write each as a **structured** `draft_risks[]` entry in `result.json` (shape below) *and* a matching `### Risk` block in `findings.md` — the two are linked by `body_path`.
+8. Draft an issue for every config gap (repo missing Dependabot/CodeQL, drifted from the repocat baseline, over-broad firewall rule) as a `draft_issues[]` entry.
+9. Drop `result.json` (shape below) and return.
 
 ## findings.md template
 
@@ -100,6 +100,45 @@ Run `skill_args.captures` / `commands` once, writing to `run_dir/raw/`. Diff aga
 - Impact: <1-5> · Likelihood: <1-5> · Score: <product>
 - What / Why it matters / Suggested remediation: <…>
 - SLA: <days from thresholds> · Evidence: <paths under run_dir>
+```
+
+## `result.json` shape
+
+Drop a `result.json` at the run-dir root. `draft_risks[]` and `draft_issues[]`
+are **structured** — `secunit risks open --from <run-dir> --finding <id>` promotes
+a draft into the register by matching `--finding` against the entry's `id`, so the
+`id` must be stable and unique within the run (a CVE/GHSA, or a `<system>-<slug>`).
+`impact`/`likelihood` are 1–5 (omit only if unknown — `risks open` will derive them
+from `severity`). `body_path` links to the `### Risk` anchor in `findings.md`.
+
+```json
+{
+  "schema_version": 1,
+  "control_id": "<id>",
+  "run_id": "<YYYY-MM-DD-run-NNN>",
+  "status": "complete",
+  "draft_risks": [
+    {
+      "id": "CVE-2024-XXXXX",
+      "title": "<subject>",
+      "severity": "critical|high|medium|low",
+      "impact": 3,
+      "likelihood": 3,
+      "affected_systems": ["<name>"],
+      "body_path": "findings.md#risk-1",
+      "remediation": "<one line>",
+      "evidence": "by-system/<system>/raw/<file>"
+    }
+  ],
+  "draft_issues": [
+    {
+      "id": "<system>-missing-dependabot",
+      "title": "<config gap>",
+      "affected_systems": ["<name>"],
+      "body_path": "findings.md#issue-1"
+    }
+  ]
+}
 ```
 
 ## Operator-only / failure handling

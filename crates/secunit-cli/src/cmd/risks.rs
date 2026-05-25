@@ -52,10 +52,52 @@ fn now() -> chrono::DateTime<Utc> {
     Utc::now()
 }
 
-/// Parse a `Severity` from its on-disk lowercase spelling.
+/// Parse a `Severity` from its on-disk spelling, case-insensitively, so a
+/// legacy draft carrying `"High"` resolves the same as `"high"`.
 fn parse_severity(s: &str) -> Result<Severity> {
     serde_json::from_value(serde_json::Value::String(s.to_lowercase()))
         .map_err(|_| anyhow!("invalid severity `{s}` (expected critical|high|medium|low|info)"))
+}
+
+/// Default `(impact, likelihood)` for a severity, used to project a legacy
+/// draft that omits an explicit score. The mapping PRESERVES severity
+/// ordering — a more severe finding never derives a lower combined score —
+/// so the auto-opened risk sorts sanely until an operator refines it with
+/// `risks score`. Both values stay within the schema's 1..=5 range.
+///
+/// | severity | impact | likelihood |
+/// |----------|--------|------------|
+/// | critical |   4    |     4      |
+/// | high     |   3    |     3      |
+/// | medium   |   2    |     3      |
+/// | low      |   1    |     2      |
+/// | info     |   1    |     1      |
+fn default_score(severity: Severity) -> (u8, u8) {
+    match severity {
+        Severity::Critical => (4, 4),
+        Severity::High => (3, 3),
+        Severity::Medium => (2, 3),
+        Severity::Low => (1, 2),
+        Severity::Info => (1, 1),
+    }
+}
+
+/// A lowercase, hyphen-joined slug of an arbitrary string, for tolerant
+/// `--finding` matching against a draft's `subject`/`title`. Runs of
+/// non-alphanumeric characters collapse to a single `-`.
+fn slug(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut prev_dash = false;
+    for ch in s.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.extend(ch.to_lowercase());
+            prev_dash = false;
+        } else if !prev_dash {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
 }
 
 /// Parse a `Status` from its on-disk kebab-case spelling.
@@ -91,10 +133,14 @@ struct ResolvedFinding {
 /// Read a sealed run's `manifest.json`, locate the named draft risk, and
 /// build a verified [`FindingRef`] bound to the recomputed manifest sha.
 ///
-/// `finding_id` matches a draft risk by its `id` / `finding_id` field, or by
-/// the trailing `#anchor` of its `body_path` (e.g. `findings.md#risk-1` →
-/// `risk-1`), so older manifests without an explicit id still resolve.
-fn resolve_finding(run_dir: &Path, finding_id: &str) -> Result<ResolvedFinding> {
+/// `--finding` is matched leniently so legacy / hand-written drafts still
+/// promote — see [`draft_matches`] for the precedence. Fields absent on older
+/// drafts are projected with documented fallbacks: `title` ← `subject`,
+/// `affected_systems` ← `affected`, severity defaults to High, and an absent
+/// `impact`/`likelihood` is derived from severity via [`default_score`]. A
+/// one-line note is printed whenever a defaulted score or single-draft
+/// fallback is applied so the operator knows to refine via `risks score`.
+fn resolve_finding(run_dir: &Path, finding: &str) -> Result<ResolvedFinding> {
     let manifest_path = run_dir.join("manifest.json");
     if !manifest_path.exists() {
         bail!(
@@ -111,38 +157,69 @@ fn resolve_finding(run_dir: &Path, finding_id: &str) -> Result<ResolvedFinding> 
     let manifest_sha256 =
         sha256_file(&manifest_path).with_context(|| format!("hash {}", manifest_path.display()))?;
 
-    let draft = manifest
+    // Match `--finding` against each draft in precedence order. If nothing
+    // matches but the run carries exactly one draft, accept it (the operator
+    // clearly means that one) with a clear note.
+    let (draft, resolved_id) = match manifest
         .draft_risks
         .iter()
-        .find(|d| draft_matches(d, finding_id))
-        .ok_or_else(|| {
-            anyhow!(
-                "no draft_risk matching `{finding_id}` in {} ({} draft(s) present)",
-                manifest_path.display(),
-                manifest.draft_risks.len()
-            )
-        })?;
+        .find_map(|d| draft_matches(d, finding).map(|id| (d, id)))
+    {
+        Some(hit) => hit,
+        None if manifest.draft_risks.len() == 1 => {
+            let only = &manifest.draft_risks[0];
+            // Use the draft's own stable id if it has one, else the operator's
+            // `--finding` string, so the FindingRef fingerprint is meaningful.
+            let id = draft_stable_id(only).unwrap_or_else(|| finding.to_string());
+            eprintln!(
+                "note: `--finding {finding}` matched no field, but this run has a single \
+                 draft_risk — promoting it (finding_id `{id}`)."
+            );
+            (only, id)
+        }
+        None => bail!(
+            "no draft_risk matching `{finding}` in {} ({} draft(s) present)",
+            manifest_path.display(),
+            manifest.draft_risks.len()
+        ),
+    };
 
+    // title ← title, else subject, else the resolved finding id.
     let title = draft
         .get("title")
         .and_then(|v| v.as_str())
-        .unwrap_or(finding_id)
+        .or_else(|| draft.get("subject").and_then(|v| v.as_str()))
+        .unwrap_or(&resolved_id)
         .to_string();
     // Severity may be absent on older drafts; default to High, the usual
-    // `draft_risk_at` bar.
+    // `draft_risk_at` bar. Parsed case-insensitively so `"High"` resolves.
     let severity = draft
         .get("severity")
         .and_then(|v| v.as_str())
         .map(parse_severity)
         .transpose()?
         .unwrap_or(Severity::High);
-    let impact = draft.get("impact").and_then(|v| v.as_u64()).unwrap_or(0) as u8;
-    let likelihood = draft
-        .get("likelihood")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u8;
+    // impact/likelihood are optional on legacy drafts. When either is absent
+    // (or out of the schema's 1..=5 range), derive BOTH from severity so the
+    // pair stays consistent, and tell the operator.
+    let raw_impact = draft.get("impact").and_then(|v| v.as_u64());
+    let raw_likelihood = draft.get("likelihood").and_then(|v| v.as_u64());
+    let in_range = |v: Option<u64>| matches!(v, Some(n) if (1..=5).contains(&n));
+    let (impact, likelihood) = if in_range(raw_impact) && in_range(raw_likelihood) {
+        (raw_impact.unwrap() as u8, raw_likelihood.unwrap() as u8)
+    } else {
+        let (i, l) = default_score(severity);
+        eprintln!(
+            "note: draft has no usable impact/likelihood — derived ({i}, {l}) from severity \
+             `{}`; refine with `risks score` if needed.",
+            severity_str(severity)
+        );
+        (i, l)
+    };
+    // affected_systems ← affected_systems, else `affected`.
     let affected_systems = draft
         .get("affected_systems")
+        .or_else(|| draft.get("affected"))
         .and_then(|v| v.as_array())
         .map(|a| {
             a.iter()
@@ -159,7 +236,10 @@ fn resolve_finding(run_dir: &Path, finding_id: &str) -> Result<ResolvedFinding> 
         control_id: manifest.control_id.clone(),
         run_id: manifest.run_id.clone(),
         manifest_sha256,
-        finding_id: finding_id.to_string(),
+        // The recorded finding_id is whatever `--finding` resolved to — a
+        // stable handle (the draft's id/ghsa/cve/anchor), not the raw flag —
+        // so the fingerprint is reproducible across runs.
+        finding_id: resolved_id,
         body_path,
     };
 
@@ -180,24 +260,81 @@ fn resolve_finding(run_dir: &Path, finding_id: &str) -> Result<ResolvedFinding> 
     })
 }
 
-/// Does a draft-risk JSON value identify the finding `id`?
-fn draft_matches(draft: &serde_json::Value, id: &str) -> bool {
+/// The draft's own stable id, if it carries one: `finding_id` / `id`, else
+/// the first value of a `ghsa` / `cve` array, else the trailing `#anchor` of
+/// `body_path`. Used to record a meaningful fingerprint when promotion falls
+/// back to a run's single draft.
+fn draft_stable_id(draft: &serde_json::Value) -> Option<String> {
     for key in ["finding_id", "id"] {
-        if draft.get(key).and_then(|v| v.as_str()) == Some(id) {
-            return true;
+        if let Some(s) = draft.get(key).and_then(|v| v.as_str()) {
+            return Some(s.to_string());
         }
     }
-    // Fall back to the trailing `#anchor` of body_path.
-    if let Some(anchor) = draft
+    for key in ["ghsa", "cve"] {
+        if let Some(first) = draft
+            .get(key)
+            .and_then(|v| v.as_array())
+            .and_then(|a| a.iter().find_map(|v| v.as_str()))
+        {
+            return Some(first.to_string());
+        }
+    }
+    draft
+        .get("body_path")
+        .and_then(|v| v.as_str())
+        .and_then(|p| p.split_once('#').map(|(_, anchor)| anchor.to_string()))
+}
+
+/// Does a draft-risk JSON value identify the finding `flag`? Returns the
+/// stable id to record on the [`FindingRef`] when it does.
+///
+/// Precedence (first hit wins, so the recorded id is the strongest match):
+/// 1. the draft's `finding_id` or `id` equals `flag`;
+/// 2. the trailing `#anchor` of `body_path` equals `flag`
+///    (e.g. `findings.md#risk-1` → `risk-1`);
+/// 3. any value in a `ghsa` / `cve` array equals `flag`;
+/// 4. as a last resort, a case-insensitive slug of `subject`/`title` equals
+///    the slug of `flag`.
+///
+/// For 1–3 the recorded id is the matched value (`flag` itself); for the slug
+/// fallback we record the draft's own stable id when it has one, falling back
+/// to `flag`, so a fuzzy subject match still pins a reproducible fingerprint.
+fn draft_matches(draft: &serde_json::Value, flag: &str) -> Option<String> {
+    // 1. explicit id fields.
+    for key in ["finding_id", "id"] {
+        if draft.get(key).and_then(|v| v.as_str()) == Some(flag) {
+            return Some(flag.to_string());
+        }
+    }
+    // 2. body_path anchor.
+    if draft
         .get("body_path")
         .and_then(|v| v.as_str())
         .and_then(|p| p.rsplit('#').next())
+        == Some(flag)
     {
-        if anchor == id {
-            return true;
+        return Some(flag.to_string());
+    }
+    // 3. ghsa / cve arrays.
+    for key in ["ghsa", "cve"] {
+        if let Some(arr) = draft.get(key).and_then(|v| v.as_array()) {
+            if arr.iter().any(|v| v.as_str() == Some(flag)) {
+                return Some(flag.to_string());
+            }
         }
     }
-    false
+    // 4. fuzzy: slug of subject/title.
+    let want = slug(flag);
+    if !want.is_empty() {
+        for key in ["subject", "title"] {
+            if let Some(text) = draft.get(key).and_then(|v| v.as_str()) {
+                if slug(text) == want {
+                    return Some(draft_stable_id(draft).unwrap_or_else(|| flag.to_string()));
+                }
+            }
+        }
+    }
+    None
 }
 
 /// SLA window (days) for `severity`, from the source control's

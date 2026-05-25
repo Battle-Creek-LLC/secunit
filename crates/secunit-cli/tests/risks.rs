@@ -203,6 +203,192 @@ fn status_filter_and_past_sla() {
     assert!(stdout.contains("R-0001"));
 }
 
+/// A live root whose sealed manifest carries two REAL-WORLD legacy drafts:
+///
+/// - Draft A: has `id`/`severity`/`subject`, but NO impact/likelihood, NO
+///   `title`, NO `body_path`.
+/// - Draft B: NO `id`/`finding_id`; a `ghsa[]` array; `affected` (not
+///   `affected_systems`); capitalised `"High"` severity; `sla_days`; NO
+///   impact/likelihood; NO `body_path`.
+///
+/// Both must promote into the register.
+fn staged_root_legacy_drafts() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join("controls")).unwrap();
+    fs::create_dir_all(root.join("skills")).unwrap();
+    write(
+        &root.join("inventory.yaml"),
+        "source_repos:\n  - name: mdpdf\n    in_scope_since: 2026-01-01\n    tags: [production]\n  - name: brdg\n    in_scope_since: 2026-01-01\n    tags: [production]\n",
+    );
+    write(
+        &root.join("controls/ra-vuln-audit.yaml"),
+        "id: ra-vuln-audit\n\
+         title: Vulnerability audit\n\
+         policy: security/ra.md\n\
+         nist: [RA-5]\n\
+         owner: cto\n\
+         cadence: annual\n\
+         skill: ra-vuln-audit\n\
+         remediation_thresholds:\n  high: 30\n  critical: 14\n\
+         evidence_required:\n  - kind: summary\n    description: Findings\n",
+    );
+    write(&root.join("skills/ra-vuln-audit.md"), "# stub runbook\n");
+
+    let manifest = serde_json::json!({
+        "schema_version": 1,
+        "control_id": "ra-vuln-audit",
+        "run_id": "2026-05-25-run-001",
+        "started_at": "2026-05-25T14:00:00Z",
+        "completed_at": "2026-05-25T14:30:00Z",
+        "agent": {
+            "model": "m",
+            "skill": "s",
+            "skill_sha256": "a".repeat(64),
+            "control_sha256": "b".repeat(64)
+        },
+        "registry_git_sha": "abcdef0",
+        "scope_layout": "flat",
+        "resolved_scope": [],
+        "artifacts": [],
+        "status": "complete",
+        "draft_risks": [
+            // Draft A — id + severity + subject, no impact/likelihood/title/body_path.
+            {
+                "affected_systems": ["mdpdf"],
+                "evidence": "by-system/mdpdf/raw/dependabot-alerts.json",
+                "id": "GHSA-xphw-cqx3-667j",
+                "remediation": "Upgrade thin-vec to >=0.2.16",
+                "severity": "high",
+                "sla_due": "2026-07-22",
+                "subject": "thin-vec use-after-free / double-free"
+            },
+            // Draft B — no id, ghsa[] array, `affected`, capitalised "High", sla_days.
+            {
+                "affected": ["brdg"],
+                "evidence": "by-system/brdg/raw/dependabot-alerts.json",
+                "ghsa": [
+                    "GHSA-752w-5fwx-jx9f",
+                    "GHSA-v92g-xgxw-vvmm",
+                    "GHSA-2h4p-vjrc-8xpq",
+                    "GHSA-qccp-gfcp-xxvc",
+                    "GHSA-mf9v-mfxr-j63j"
+                ],
+                "severity": "High",
+                "sla_days": 60,
+                "subject": "brdg — 5 high-severity dependency vulnerabilities (SCA)"
+            }
+        ]
+    });
+    let run_dir = root.join("evidence/2026/q2/ra-vuln-audit/2026-05-25-run-001");
+    write(
+        &run_dir.join("manifest.json"),
+        &serde_json::to_string_pretty(&manifest).unwrap(),
+    );
+    dir
+}
+
+#[test]
+fn open_promotes_legacy_draft_a() {
+    // Draft A: id match, severity high, no impact/likelihood → derive (3,3),
+    // title from subject, affected_systems present.
+    let dir = staged_root_legacy_drafts();
+    let root = dir.path();
+    let rd = run_dir_arg(root);
+
+    let (out, stdout, stderr) = run(
+        root,
+        &[
+            "risks",
+            "open",
+            "ra-vuln-audit",
+            "--from",
+            &rd,
+            "--finding",
+            "GHSA-xphw-cqx3-667j",
+        ],
+    );
+    assert!(out.status.success(), "open A failed: {stderr}");
+    assert!(stdout.contains("R-0001"), "stdout: {stdout}");
+    // High → SLA 30d from 2026-05-25 → due 2026-06-24.
+    assert!(stdout.contains("2026-06-24"), "due date wrong: {stdout}");
+    // The defaulted-score note is printed.
+    assert!(
+        stderr.contains("derived (3, 3) from severity"),
+        "expected score note: {stderr}"
+    );
+
+    let (out, stdout, _) = run(root, &["--json", "risks", "show", "R-0001"]);
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["state"]["status"], "open");
+    assert_eq!(v["state"]["severity"], "high");
+    // Derived score per the mapping: high = (3, 3).
+    assert_eq!(v["state"]["impact"], 3);
+    assert_eq!(v["state"]["likelihood"], 3);
+    // Title falls back to `subject`.
+    assert_eq!(v["state"]["title"], "thin-vec use-after-free / double-free");
+    // affected_systems carried through.
+    assert_eq!(v["state"]["affected_systems"], serde_json::json!(["mdpdf"]));
+    // The recorded finding_id is the matched id (stable).
+    let fr = &v["events"][0]["data"]["finding_ref"];
+    assert_eq!(fr["finding_id"], "GHSA-xphw-cqx3-667j");
+}
+
+#[test]
+fn open_promotes_legacy_draft_b() {
+    // Draft B: matched via a ghsa[] value; capitalised "High" parsed; no
+    // impact/likelihood → derive (3,3); title from subject; affected_systems
+    // from `affected`. The recorded finding_id is the ghsa value matched.
+    let dir = staged_root_legacy_drafts();
+    let root = dir.path();
+    let rd = run_dir_arg(root);
+
+    let (out, stdout, stderr) = run(
+        root,
+        &[
+            "risks",
+            "open",
+            "ra-vuln-audit",
+            "--from",
+            &rd,
+            "--finding",
+            "GHSA-752w-5fwx-jx9f",
+        ],
+    );
+    assert!(out.status.success(), "open B failed: {stderr}");
+    assert!(stdout.contains("R-0001"), "stdout: {stdout}");
+    assert!(stdout.contains("2026-06-24"), "due date wrong: {stdout}");
+    assert!(
+        stderr.contains("derived (3, 3) from severity"),
+        "expected score note: {stderr}"
+    );
+
+    let (out, stdout, _) = run(root, &["--json", "risks", "show", "R-0001"]);
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["state"]["status"], "open");
+    // "High" parsed case-insensitively.
+    assert_eq!(v["state"]["severity"], "high");
+    assert_eq!(v["state"]["impact"], 3);
+    assert_eq!(v["state"]["likelihood"], 3);
+    assert_eq!(
+        v["state"]["title"],
+        "brdg — 5 high-severity dependency vulnerabilities (SCA)"
+    );
+    // affected_systems derived from `affected`.
+    assert_eq!(v["state"]["affected_systems"], serde_json::json!(["brdg"]));
+    // The recorded finding_id is the exact ghsa value matched.
+    let fr = &v["events"][0]["data"]["finding_ref"];
+    assert_eq!(fr["finding_id"], "GHSA-752w-5fwx-jx9f");
+    assert_eq!(fr["control_id"], "ra-vuln-audit");
+    // Fingerprint is the matched ghsa value, reproducible across runs.
+    assert_eq!(
+        v["state"]["finding_refs"][0]["finding_id"],
+        "GHSA-752w-5fwx-jx9f"
+    );
+}
+
 #[test]
 fn rebuild_regenerates_index() {
     let dir = staged_root();
