@@ -9,15 +9,15 @@ permissions:
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
-    # The dependency-review-action hard-errors with "Dependency review is not
-    # supported on this repository" because the Dependency Graph API is
-    # currently disabled (the dependency-graph/compare endpoint returns 403),
-    # so the check failed on every PR. Keep the workflow in place — it starts
-    # gating automatically once Dependency Graph is enabled under
-    # Settings -> Code security and analysis — but don't let the unsupported
-    # state block PRs in the meantime. Drop continue-on-error once the API is
-    # available so dependency findings gate again.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      # The dependency-review-action hard-errors with "Dependency review is not
+      # supported on this repository" because the Dependency Graph API is
+      # currently disabled (the dependency-graph/compare endpoint returns 403),
+      # so the check failed on every PR. continue-on-error keeps the step (and
+      # thus this check) green while the API is unavailable; the workflow stays
+      # in place and starts gating automatically once Dependency Graph is
+      # enabled under Settings -> Code security and analysis. Drop
+      # continue-on-error at that point so dependency findings gate again.
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+        continue-on-error: true
