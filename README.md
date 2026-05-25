@@ -57,12 +57,14 @@ Install the CLI with cargo:
 cargo install bcl-secunit
 ```
 
-Cargo features gate the native capturers — the default set is
-`aws`, `github`, `deps`, `http`. Build with only what your environment needs
-(`cargo build --no-default-features --features github,deps`). Skills declare
-`requires_features:` so `secunit validate` flags missing capabilities before
-a run starts. See [`docs/cli.md`](docs/cli.md#cargo-features) for the full
-list.
+Cargo features gate the native capturers — the default set is `deps`,
+`github`, and `aws`, with `http` available as an opt-in. (`aws` is currently a
+placeholder so skills that declare `requires_features: [aws]` validate
+cleanly; no AWS capturers are compiled in yet.) Build with only what your
+environment needs (`cargo build --no-default-features --features
+github,deps`). Skills declare `requires_features:` so `secunit validate` flags
+missing capabilities before a run starts. See
+[`docs/cli.md`](docs/cli.md#cargo-features) for the full list.
 
 > The desktop GUI (`secunit-gui`, Tauri) is intentionally excluded from the
 > default `cargo build` so headless CI and core development stay fast. Build
@@ -79,10 +81,9 @@ readable output where applicable), and `-v/-vv/-vvv` for verbosity.
 ```bash
 secunit due --within 7d           # controls coming due
 secunit status [<CONTROL_ID>]     # registry-wide or per-control status
-secunit calendar --quarter 2026-Q2
 secunit show <CONTROL_ID>         # one control's full configuration
 secunit scope <CONTROL_ID>        # preview resolved scope without allocating
-secunit history <CONTROL_ID>      # list runs for a control
+secunit coverage <CONTROL_ID>     # period-by-period coverage for one control
 secunit features                  # which integrations are compiled in
 ```
 
@@ -104,7 +105,7 @@ matrix in [`docs/cli.md`](docs/cli.md#capture)):
 ```bash
 secunit capture github dependabot-alerts --repo <org>/<repo> --out <path>
 secunit capture deps cargo-audit --path <dir> --out <path>
-secunit capture aws guardduty --account <name> --since 7d --out <path>
+secunit capture deps pip-audit --path <dir> --out <path>
 ```
 
 ### Skills
@@ -129,9 +130,8 @@ manifest.
 
 ### Other commands
 
-`secunit report data` assembles report data (by quarter/year/policy-status)
-for a rendering skill; `secunit registry` and `secunit inventory` manage
-controls, schedule, and the inventory. See the CLI reference for details.
+`secunit registry` and `secunit inventory` manage controls, the schedule, and
+the inventory. See the CLI reference for details.
 
 ## Documentation
 
