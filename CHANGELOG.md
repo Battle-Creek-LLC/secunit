@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-25
+
+### Added
+
+- Internal risk register: an authoritative, append-only, hash-chained event log
+  per risk under `risks/`, with a regenerable `risks/index.json` cache. Each risk
+  binds to the finding that produced it by content hash (`manifest_sha256` +
+  `finding_id`). Full design in `docs/risks.md`.
+- `secunit risks` command family — `open` (promote a sealed run's draft finding
+  into the register), `assign`, `score`, `status`, `relink`, `link`, `observe`,
+  `note`, `remediate`, `reopen`, `except`, plus read-only `list`, `show`,
+  `rebuild`.
+- `secunit verify` now also walks each risk's event chain and confirms every
+  `finding_ref` resolves to a sealed manifest whose recomputed sha matches.
+- GUI: a read-only Risks register view with SLA countdown, a risk detail view
+  that renders the event log as a timeline, and an open-risks overview tile.
+
+### Changed
+
+- The risk register is now maintained inside `secunit` as authoritative state and
+  synced *out* to external trackers, rather than living externally and referenced
+  by URL (amends the prior non-goal in `spec.md`).
+- `capture-sweep` now specifies the structured `result.json` `draft_risks` shape,
+  and `secunit risks open --from` tolerates legacy drafts — deriving
+  impact/likelihood from severity and matching `--finding` against
+  id / body_path anchor / `ghsa[]` / subject — so existing findings promote
+  without a re-run.
+
+## [0.2.0] — 2026-05-25
+
+### Added
+
+- Project docs and policy baseline: `README`, `LICENSE`, `SECURITY.md` (CM-2).
+- New application icon for the desktop app (SecUnit shield + visor).
+
+### Changed
+
+- Bumped `gix` to 0.83 (core) and refreshed frontend advisory dependencies;
+  migrated the GUI build to Vite 8 + Vitest 4 (rolldown).
+
+### Security
+
+- Pinned all GitHub Actions to commit SHAs (AC-6/SR-3); restored
+  dependency-review gating once the Dependency Graph was enabled.
+
 ## [0.1.3] — 2026-05-25
 
 ### Added
