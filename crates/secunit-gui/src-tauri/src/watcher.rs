@@ -45,6 +45,15 @@ pub enum WatcherEvent {
         run_id: String,
         path: String,
     },
+    /// Anything under `risks/` changed — a new event line appended to a
+    /// risk log, or the derived `index.json` refreshed. The webview
+    /// re-reads the register (and any open risk detail). `risk_id` is the
+    /// `R-NNNN` directory when the change is scoped to one log; `None`
+    /// for `index.json` itself.
+    RisksChanged {
+        risk_id: Option<String>,
+        path: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -83,6 +92,7 @@ impl EventSink for TauriSink {
             WatcherEvent::StateJsonChanged { .. } => "state_json_changed",
             WatcherEvent::RunStateChanged { .. } => "run_state_changed",
             WatcherEvent::FindingsChanged { .. } => "findings_changed",
+            WatcherEvent::RisksChanged { .. } => "risks_changed",
         };
         if let Err(err) = self.handle.emit(topic, event) {
             tracing::warn!(error = %err, "failed to emit watcher event");
@@ -243,6 +253,16 @@ fn classify(root: &Path, path: &Path) -> Option<WatcherEvent> {
         ["evidence", _y, _q, control, run, rest @ ..] => {
             classify_evidence(control, run, rest, path)
         }
+        // risks/index.json — the derived register cache refreshed.
+        ["risks", "index.json"] => Some(WatcherEvent::RisksChanged {
+            risk_id: None,
+            path: path.display().to_string(),
+        }),
+        // risks/<R-NNNN>/events.jsonl — a log appended to.
+        ["risks", risk_id, "events.jsonl"] => Some(WatcherEvent::RisksChanged {
+            risk_id: Some((*risk_id).to_string()),
+            path: path.display().to_string(),
+        }),
         _ => None,
     }
 }
@@ -351,8 +371,23 @@ mod tests {
                     .into(),
             })
         );
+        assert_eq!(
+            classify(root, &root.join("risks/index.json")),
+            Some(WatcherEvent::RisksChanged {
+                risk_id: None,
+                path: "/r/risks/index.json".into(),
+            })
+        );
+        assert_eq!(
+            classify(root, &root.join("risks/R-0007/events.jsonl")),
+            Some(WatcherEvent::RisksChanged {
+                risk_id: Some("R-0007".into()),
+                path: "/r/risks/R-0007/events.jsonl".into(),
+            })
+        );
         assert_eq!(classify(root, &root.join("README.md")), None);
         assert_eq!(classify(root, &root.join("controls/foo.txt")), None);
+        assert_eq!(classify(root, &root.join("risks/R-0007/notes.txt")), None);
     }
 
     #[test]

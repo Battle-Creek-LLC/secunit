@@ -36,12 +36,20 @@ export interface FindingsChanged {
   path: string;
 }
 
+export interface RisksChanged {
+  kind: "risks_changed";
+  /** `R-NNNN` when scoped to one log; null for `index.json`. */
+  risk_id: string | null;
+  path: string;
+}
+
 export type WatcherEvent =
   | ControlChanged
   | InventoryChanged
   | StateJsonChanged
   | RunStateChanged
-  | FindingsChanged;
+  | FindingsChanged
+  | RisksChanged;
 
 export const TOPICS = [
   "control_changed",
@@ -49,6 +57,7 @@ export const TOPICS = [
   "state_json_changed",
   "run_state_changed",
   "findings_changed",
+  "risks_changed",
 ] as const;
 
 export type WatcherTopic = (typeof TOPICS)[number];

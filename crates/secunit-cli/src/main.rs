@@ -108,6 +108,135 @@ enum Command {
         #[command(subcommand)]
         sub: cmd::capture::CaptureCmd,
     },
+    /// Manage the risk register.
+    Risks {
+        #[command(subcommand)]
+        sub: RisksCmd,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum RisksCmd {
+    /// Open a risk from a sealed run's draft finding.
+    Open {
+        /// The source control id (must match the run's manifest).
+        control_id: String,
+        /// The sealed run dir holding the manifest + draft risk.
+        #[arg(long, value_name = "RUN_DIR")]
+        from: PathBuf,
+        /// The draft-risk finding id to promote.
+        #[arg(long, value_name = "ID")]
+        finding: String,
+        /// Optional initial owner (role).
+        #[arg(long)]
+        owner: Option<String>,
+        /// Override the SLA window; defaults from the control's
+        /// remediation_thresholds for the risk's severity.
+        #[arg(long, value_name = "N")]
+        sla_days: Option<u32>,
+    },
+    /// Assign an owner.
+    Assign {
+        risk_id: String,
+        #[arg(long)]
+        owner: String,
+    },
+    /// Supersede the score (and severity).
+    Score {
+        risk_id: String,
+        #[arg(long)]
+        impact: u8,
+        #[arg(long)]
+        likelihood: u8,
+        /// New severity (critical|high|medium|low|info).
+        #[arg(long, default_value = "high")]
+        severity: String,
+        #[arg(long)]
+        reason: String,
+    },
+    /// Move through the status machine.
+    Status {
+        risk_id: String,
+        /// Target status (open|in-progress|remediated|accepted-exception|false-positive).
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        reason: String,
+    },
+    /// Link another finding ref (re-observed in a later run).
+    Relink {
+        risk_id: String,
+        #[arg(long, value_name = "RUN_DIR")]
+        from: PathBuf,
+        #[arg(long, value_name = "ID")]
+        finding: String,
+    },
+    /// Record an external tracker mirror created by sync-out.
+    Link {
+        risk_id: String,
+        #[arg(long)]
+        system: String,
+        #[arg(long, value_name = "EXT_ID")]
+        id: String,
+        #[arg(long)]
+        url: String,
+    },
+    /// Record an advisory inbound tracker status (never authoritative).
+    Observe {
+        risk_id: String,
+        #[arg(long)]
+        system: String,
+        #[arg(long)]
+        status: String,
+    },
+    /// Append a free-text note.
+    Note {
+        risk_id: String,
+        #[arg(long)]
+        text: String,
+    },
+    /// Mark remediated, optionally binding resolution evidence.
+    Remediate {
+        risk_id: String,
+        /// Sealed run dir proving the fix.
+        #[arg(long, value_name = "RUN_DIR")]
+        evidence: Option<PathBuf>,
+        #[arg(long)]
+        note: String,
+    },
+    /// Reopen a remediated risk.
+    Reopen {
+        risk_id: String,
+        #[arg(long)]
+        reason: String,
+    },
+    /// Document an accepted exception.
+    Except {
+        risk_id: String,
+        #[arg(long)]
+        rationale: String,
+        #[arg(long, value_name = "WHO")]
+        approved_by: String,
+        #[arg(long, value_name = "DATE")]
+        expires: chrono::NaiveDate,
+    },
+    /// List risks (human table; --json for the structured index).
+    List {
+        #[arg(long)]
+        status: Option<String>,
+        /// Comma-separated severities (e.g. `critical,high`).
+        #[arg(long)]
+        severity: Option<String>,
+        #[arg(long)]
+        owner: Option<String>,
+        /// Only risks past their SLA as of today.
+        #[arg(long)]
+        past_sla: bool,
+    },
+    /// Show one risk: current fold + event timeline.
+    Show { risk_id: String },
+    /// Regenerate risks/index.json from the logs.
+    Rebuild,
 }
 
 #[derive(Debug, Subcommand)]
@@ -264,6 +393,78 @@ fn main() -> ExitCode {
             InventoryCmd::Check => cmd::inventory::check(&ctx),
         },
         Command::Capture { sub } => cmd::capture::run(sub),
+        Command::Risks { sub } => match sub {
+            RisksCmd::Open {
+                control_id,
+                from,
+                finding,
+                owner,
+                sla_days,
+            } => cmd::risks::open(
+                &ctx,
+                &control_id,
+                &from,
+                &finding,
+                owner.as_deref(),
+                sla_days,
+            ),
+            RisksCmd::Assign { risk_id, owner } => cmd::risks::assign(&ctx, &risk_id, &owner),
+            RisksCmd::Score {
+                risk_id,
+                impact,
+                likelihood,
+                severity,
+                reason,
+            } => cmd::risks::score(&ctx, &risk_id, impact, likelihood, &severity, &reason),
+            RisksCmd::Status {
+                risk_id,
+                to,
+                reason,
+            } => cmd::risks::status(&ctx, &risk_id, &to, &reason),
+            RisksCmd::Relink {
+                risk_id,
+                from,
+                finding,
+            } => cmd::risks::relink(&ctx, &risk_id, &from, &finding),
+            RisksCmd::Link {
+                risk_id,
+                system,
+                id,
+                url,
+            } => cmd::risks::link(&ctx, &risk_id, &system, &id, &url),
+            RisksCmd::Observe {
+                risk_id,
+                system,
+                status,
+            } => cmd::risks::observe(&ctx, &risk_id, &system, &status),
+            RisksCmd::Note { risk_id, text } => cmd::risks::note(&ctx, &risk_id, &text),
+            RisksCmd::Remediate {
+                risk_id,
+                evidence,
+                note,
+            } => cmd::risks::remediate(&ctx, &risk_id, evidence.as_deref(), &note),
+            RisksCmd::Reopen { risk_id, reason } => cmd::risks::reopen(&ctx, &risk_id, &reason),
+            RisksCmd::Except {
+                risk_id,
+                rationale,
+                approved_by,
+                expires,
+            } => cmd::risks::except(&ctx, &risk_id, &rationale, &approved_by, expires),
+            RisksCmd::List {
+                status,
+                severity,
+                owner,
+                past_sla,
+            } => cmd::risks::list(
+                &ctx,
+                status.as_deref(),
+                severity.as_deref(),
+                owner.as_deref(),
+                past_sla,
+            ),
+            RisksCmd::Show { risk_id } => cmd::risks::show(&ctx, &risk_id),
+            RisksCmd::Rebuild => cmd::risks::rebuild(&ctx),
+        },
     };
 
     match result {

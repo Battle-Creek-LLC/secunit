@@ -9,11 +9,13 @@ import {
   dueRows,
   getInventory,
   listControls,
+  listRisks,
   recentRuns,
   type ControlSummary,
   type CurrentPeriodStatus,
   type DueRowView,
   type InventoryView,
+  type RiskRow,
   type RunRow,
 } from "@/lib/ipc";
 import type { WatcherEvent } from "./events";
@@ -25,6 +27,8 @@ export interface StoreState {
   periods: Map<string, CurrentPeriodStatus>;
   inventory: InventoryView | null;
   runs: RunRow[];
+  /** Risk register rows, keyed by `R-NNNN` id. */
+  risks: Map<string, RiskRow>;
   /** Bumped on every successful refresh — handy for downstream memoisation. */
   revision: number;
 }
@@ -35,6 +39,7 @@ const initialState = (): StoreState => ({
   periods: new Map(),
   inventory: null,
   runs: [],
+  risks: new Map(),
   revision: 0,
 });
 
@@ -60,12 +65,15 @@ class Store {
 
   /** Prime after `load_project` succeeds. */
   async prime() {
-    const [controls, due, periods, inventory, runs] = await Promise.all([
+    const [controls, due, periods, inventory, runs, risks] = await Promise.all([
       listControls(),
       dueRows(),
       currentPeriodStatus(),
       getInventory(),
       recentRuns(50),
+      // Tolerate a missing/corrupt register so the rest of the app still
+      // loads — an empty Map renders as "no risks yet".
+      listRisks().catch(() => [] as RiskRow[]),
     ]);
     this.state = {
       controls: new Map(controls.map((c) => [c.id, c])),
@@ -73,6 +81,7 @@ class Store {
       periods: new Map(periods.map((p) => [p.control_id, p])),
       inventory,
       runs,
+      risks: new Map(risks.map((r) => [r.id, r])),
       revision: this.state.revision + 1,
     };
     this.notify();
@@ -132,6 +141,18 @@ class Store {
           runs,
           controls: new Map(controls.map((c) => [c.id, c])),
           periods: new Map(periods.map((p) => [p.control_id, p])),
+          revision: this.state.revision + 1,
+        };
+        break;
+      }
+      case "risks_changed": {
+        // The whole register is cheap to rebuild (one fold per risk), and
+        // an appended event can touch fingerprint/severity/status/owner at
+        // once, so re-fetch the lot.
+        const risks = await listRisks().catch(() => [] as RiskRow[]);
+        this.state = {
+          ...this.state,
+          risks: new Map(risks.map((r) => [r.id, r])),
           revision: this.state.revision + 1,
         };
         break;

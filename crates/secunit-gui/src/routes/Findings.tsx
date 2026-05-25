@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useStore } from "@/store";
 import { listFindings, type FindingsRow } from "@/lib/ipc";
 import { FindingsFilters } from "@/components/FindingsFilters";
@@ -14,13 +15,16 @@ const PAGE = 20;
 
 export function Findings() {
   const snapshot = useStore();
+  // Seed filters from the URL so deep-links (e.g. from a risk's bound
+  // evidence) land pre-filtered on the right control/run.
+  const [params] = useSearchParams();
   const [rows, setRows] = useState<FindingsRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Filters>({
-    control_id: "",
-    quarter: "",
-    query: "",
-  });
+  const [filters, setFilters] = useState<Filters>(() => ({
+    control_id: params.get("control") ?? "",
+    quarter: params.get("quarter") ?? "",
+    query: params.get("q") ?? "",
+  }));
   const [visible, setVisible] = useState(PAGE);
 
   useEffect(() => {
