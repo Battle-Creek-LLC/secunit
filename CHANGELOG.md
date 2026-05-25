@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-05-25
+
+### Security
+
+- Bumped `tauri` 2.11.0 → 2.11.2 (GHSA-7gmj-67g7-phm9 — IPC origin confusion).
+- Bumped `octocrab` 0.41 → 0.51, moving `jsonwebtoken` 9 → 10.4.0 and clearing the
+  advisory; the GitHub capturers are unchanged (octocrab is used only as
+  auth + transport).
+- Dismissed 8 `rustsec`/`gix`-family advisories as tolerable risk: blocked upstream
+  (no `rustsec` release pulls `gix ≥ 0.83`) and reached only via the deps capturer
+  parsing the trusted `rustsec/advisory-db` repo, not attacker-supplied input.
+
 ## [0.3.0] — 2026-05-25
 
 ### Added
