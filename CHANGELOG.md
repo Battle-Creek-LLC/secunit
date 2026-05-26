@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-26
+
 ### Added
 
 - `secunit doctor` — a read-only environment + registry health preflight that
@@ -18,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (a `fix` field under `--json`) with the concrete next action, distinguishing
   safe auto-repairs (`git init`, `risks rebuild`) from integrity failures the
   agent must investigate rather than repair.
+
+### Security
+
+- Dropped the `gix-reqwest` feature from the `rustsec` dependency in the deps
+  capturer, removing the transitive `gix` 0.72.x tree that was the sole source
+  of 8 `gix`-family advisories (gix RCE/path-traversal, `gix-fs`, `gix-pack`,
+  `gix-transport`, `gix-date`). `rustsec` now runs library-only with a gix-free
+  advisory-db fetch (reqwest + tar + flate2); canonical capturer output is
+  byte-identical. The only remaining `gix` is secunit-core's patched 0.83 (#48).
 
 ## [0.3.1] — 2026-05-25
 
