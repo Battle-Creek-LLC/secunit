@@ -22,10 +22,29 @@ use std::fs;
 use std::process::ExitCode;
 
 use anyhow::Result;
-use secunit_core::evidence::verifier;
+use secunit_core::evidence::{runner, verifier};
 use secunit_core::risks::{build_index, RiskIndex};
 
 use super::Ctx;
+
+/// Does this `.gitignore` text ignore `.secunit.lock`? Tolerant of the common
+/// ways the lock is correctly ignored — an exact line, an anchored `/`-prefix,
+/// or a leading-`*` glob (`*.lock`, `*.secunit.lock`) — so a properly-ignored
+/// lock is not falsely reported. Not a full gitignore engine; `git
+/// check-ignore` would be exhaustive but is heavier than this check warrants.
+fn gitignore_covers_lock(contents: &str) -> bool {
+    const NAME: &str = ".secunit.lock";
+    contents.lines().any(|raw| {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            return false;
+        }
+        let pat = line
+            .trim_start_matches(|c| c == '/' || c == '!')
+            .trim_end_matches('/');
+        pat == NAME || (pat.starts_with('*') && NAME.ends_with(pat.trim_start_matches('*')))
+    })
+}
 
 /// Severity of a single check line.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -117,15 +136,27 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
             features.join(", ")
         },
     );
-    if reg.root.join(".git").exists() {
-        env.ok("git repository", "root is a git repository");
-    } else {
-        env.fail(
+    // Use the same HEAD resolution `run prepare` uses to pin the registry sha,
+    // so doctor passes exactly when prepare will: a bare `.git` directory with
+    // no commit yet resolves no sha and must fail here too.
+    match runner::git_head(&reg.root) {
+        Ok(sha) => env.ok(
+            "git repository",
+            format!("HEAD at {}", sha.get(..12).unwrap_or(sha.as_str())),
+        ),
+        Err(_) if reg.root.join(".git").exists() => env.fail(
+            "git repository",
+            "git repo present but HEAD does not resolve to a commit (no commits yet?)",
+            "make the first commit (`git add -A && git commit`) — `run prepare` pins the \
+             repo's HEAD sha into every manifest and rejects a repo with no commit \
+             (docs/setup-checklist.md §A3/§B1)",
+        ),
+        Err(_) => env.fail(
             "git repository",
             "root is not a git repository, so manifests cannot pin a commit sha",
             "run `git init` here and commit the registry stub — `run prepare` refuses to \
              allocate a run outside a real repo (docs/setup-checklist.md §A3)",
-        );
+        ),
     }
     // Cross-check the unambiguous external integrations against the features
     // this binary was actually built with.
@@ -195,9 +226,7 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
         }
     }
     match fs::read_to_string(reg.root.join(".gitignore")) {
-        Ok(gi) if gi.lines().any(|l| l.trim() == ".secunit.lock") => {
-            st.ok(".gitignore", "ignores .secunit.lock")
-        }
+        Ok(gi) if gitignore_covers_lock(&gi) => st.ok(".gitignore", "ignores .secunit.lock"),
         Ok(_) => st.warn(
             ".gitignore",
             "does not ignore .secunit.lock — the runtime lock must never be committed",
@@ -423,5 +452,33 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
              apply the safe ones, investigate (do not auto-repair) integrity failures"
         );
         Ok(ExitCode::from(1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::gitignore_covers_lock;
+
+    #[test]
+    fn recognizes_valid_lock_ignore_patterns() {
+        // All of these correctly ignore .secunit.lock and must not warn.
+        for pat in [
+            ".secunit.lock",
+            "/.secunit.lock",
+            "*.lock",
+            "*.secunit.lock",
+            "*",
+            "  .secunit.lock  ",
+            "target/\n.secunit.lock\n.DS_Store",
+        ] {
+            assert!(gitignore_covers_lock(pat), "should cover: {pat:?}");
+        }
+    }
+
+    #[test]
+    fn ignores_comments_blanks_and_unrelated_patterns() {
+        for pat in ["", "# .secunit.lock", "target/\n*.tmp\n", ".secunit.locks"] {
+            assert!(!gitignore_covers_lock(pat), "should not cover: {pat:?}");
+        }
     }
 }
