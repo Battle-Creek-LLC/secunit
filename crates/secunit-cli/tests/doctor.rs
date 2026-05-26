@@ -61,7 +61,10 @@ fn doctor_json_shape_and_fixes() {
     // Every actionable line must tell the agent what to do; ok/info must not
     // carry a spurious fix.
     let mut saw_fail = false;
-    for check in sections.iter().flat_map(|s| s["checks"].as_array().unwrap()) {
+    for check in sections
+        .iter()
+        .flat_map(|s| s["checks"].as_array().unwrap())
+    {
         match check["status"].as_str().unwrap() {
             "fail" | "warn" => {
                 saw_fail |= check["status"] == "fail";
@@ -70,8 +73,14 @@ fn doctor_json_shape_and_fixes() {
                     "actionable check without a fix: {check}"
                 );
             }
-            _ => assert!(check["fix"].is_null(), "ok/info should not carry a fix: {check}"),
+            _ => assert!(
+                check["fix"].is_null(),
+                "ok/info should not carry a fix: {check}"
+            ),
         }
     }
-    assert!(saw_fail, "a bare directory should produce at least one failure");
+    assert!(
+        saw_fail,
+        "a bare directory should produce at least one failure"
+    );
 }

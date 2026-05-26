@@ -39,9 +39,7 @@ fn gitignore_covers_lock(contents: &str) -> bool {
         if line.is_empty() || line.starts_with('#') {
             return false;
         }
-        let pat = line
-            .trim_start_matches(|c| c == '/' || c == '!')
-            .trim_end_matches('/');
+        let pat = line.trim_start_matches(['/', '!']).trim_end_matches('/');
         pat == NAME || (pat.starts_with('*') && NAME.ends_with(pat.trim_start_matches('*')))
     })
 }
@@ -97,7 +95,13 @@ impl Section {
         }
     }
 
-    fn push(&mut self, level: Level, name: impl Into<String>, detail: impl Into<String>, fix: Option<String>) {
+    fn push(
+        &mut self,
+        level: Level,
+        name: impl Into<String>,
+        detail: impl Into<String>,
+        fix: Option<String>,
+    ) {
         self.checks.push(Check {
             name: name.into(),
             level,
@@ -261,7 +265,10 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
         } else {
             rg.ok(
                 "validate",
-                format!("schema + cross-references clean ({} warning(s))", report.warnings.len()),
+                format!(
+                    "schema + cross-references clean ({} warning(s))",
+                    report.warnings.len()
+                ),
             );
         }
     } else {
@@ -303,7 +310,10 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
                 for f in &vr.failures {
                     ev.fail(
                         "run manifests",
-                        format!("{} / {}: {:?} — {}", f.control_id, f.run_id, f.kind, f.detail),
+                        format!(
+                            "{} / {}: {:?} — {}",
+                            f.control_id, f.run_id, f.kind, f.detail
+                        ),
                         "this run's hash chain does not recompute — the evidence or manifest \
                          was altered after sealing. Do NOT re-finalize or edit to clear it; \
                          investigate the run dir and `git log` for the registry. Evidence is \
@@ -316,7 +326,10 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
                 if vr.risk_failures.is_empty() {
                     ev.ok(
                         "risk logs",
-                        format!("{} risk log(s) verified, chains intact", vr.verified_risks.len()),
+                        format!(
+                            "{} risk log(s) verified, chains intact",
+                            vr.verified_risks.len()
+                        ),
                     );
                 } else {
                     for f in &vr.risk_failures {
