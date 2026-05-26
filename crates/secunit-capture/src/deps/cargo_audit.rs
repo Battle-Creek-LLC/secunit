@@ -1,5 +1,12 @@
 //! `cargo-audit` capturer using the `rustsec` library directly. No
 //! subprocess; no `cargo-audit` binary required.
+//!
+//! We deliberately build `rustsec` without its `git`/`gix-reqwest`
+//! features so no `gix` crate is compiled in (those carry a string of
+//! RustSec advisories). The library still exposes `Database::open` and
+//! `report::Report::generate`; only the git-backed `Database::fetch`
+//! is gated out. When no local advisory-db is supplied we acquire one
+//! over plain HTTPS instead — see [`fetch_advisory_db`].
 
 use std::path::{Path, PathBuf};
 
@@ -11,11 +18,17 @@ use crate::canonical::{canonicalize_value, sort_array_by_key, strip_keys, Envelo
 pub const CAPTURER: &str = "deps.cargo-audit";
 pub const VERSION: &str = "1";
 
+/// RustSec advisory-db tarball (the `main` branch snapshot from GitHub).
+const ADVISORY_DB_TARBALL: &str =
+    "https://github.com/rustsec/advisory-db/archive/refs/heads/main.tar.gz";
+
 /// Capture cargo-audit findings for `Cargo.lock` at `lockfile_path`.
 ///
-/// The advisory database is fetched from RustSec's GitHub repo unless
-/// `db_path` is supplied (test seam — point at a local advisory-db
-/// clone).
+/// The advisory database is resolved from `db_path` (or the
+/// `SECUNIT_RUSTSEC_DB` env var) when supplied — a test seam pointing
+/// at a local advisory-db clone. Otherwise the RustSec advisory-db
+/// snapshot is downloaded over HTTPS, extracted into a local cache,
+/// and opened from disk. No `gix` is involved either way.
 pub fn capture(lockfile_path: &Path, db_path: Option<&Path>) -> Result<Envelope> {
     let lockfile = rustsec::Lockfile::load(lockfile_path)
         .with_context(|| format!("load Cargo.lock at {}", lockfile_path.display()))?;
@@ -24,7 +37,9 @@ pub fn capture(lockfile_path: &Path, db_path: Option<&Path>) -> Result<Envelope>
         Some(p) => rustsec::Database::open(&p)
             .map_err(|e| anyhow!("open advisory db at {}: {e}", p.display()))?,
         None => {
-            rustsec::Database::fetch().map_err(|e| anyhow!("fetch RustSec advisory db: {e}"))?
+            let cached = fetch_advisory_db().context("acquire RustSec advisory db over HTTPS")?;
+            rustsec::Database::open(&cached)
+                .map_err(|e| anyhow!("open advisory db at {}: {e}", cached.display()))?
         }
     };
 
@@ -53,6 +68,108 @@ fn resolve_db_path(explicit: Option<&Path>) -> Option<PathBuf> {
         return Some(PathBuf::from(s));
     }
     None
+}
+
+/// Download the RustSec advisory-db snapshot over HTTPS and extract it
+/// into a local cache directory, returning the path to the extracted
+/// repository root (suitable for `rustsec::Database::open`).
+///
+/// This replaces `rustsec::Database::fetch`, which is gated behind the
+/// `git`/`gix` feature we removed to clear the gix advisory tree. The
+/// download is a plain `gzip`-compressed `tar` archive fetched with
+/// `reqwest` (blocking) — no git client, no `gix`.
+fn fetch_advisory_db() -> Result<PathBuf> {
+    let cache_root = advisory_db_cache_dir()?;
+    std::fs::create_dir_all(&cache_root)
+        .with_context(|| format!("create advisory-db cache dir {}", cache_root.display()))?;
+
+    let client = reqwest::blocking::Client::builder()
+        .user_agent(concat!("secunit/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .context("build reqwest client")?;
+    let resp = client
+        .get(ADVISORY_DB_TARBALL)
+        .send()
+        .with_context(|| format!("GET {ADVISORY_DB_TARBALL}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(anyhow!(
+            "advisory-db download {ADVISORY_DB_TARBALL} returned HTTP {status}"
+        ));
+    }
+    let bytes = resp.bytes().context("read advisory-db tarball body")?;
+
+    // Extract into a fresh staging dir, then atomically swap it into
+    // place so a partially-written cache can never be opened.
+    let staging = cache_root.join(".staging");
+    if staging.exists() {
+        std::fs::remove_dir_all(&staging)
+            .with_context(|| format!("clear staging dir {}", staging.display()))?;
+    }
+    std::fs::create_dir_all(&staging)
+        .with_context(|| format!("create staging dir {}", staging.display()))?;
+
+    let decoder = flate2::read::GzDecoder::new(&bytes[..]);
+    let mut archive = tar::Archive::new(decoder);
+    archive
+        .unpack(&staging)
+        .context("unpack advisory-db tarball")?;
+
+    // GitHub source tarballs nest everything under a single top-level
+    // directory (e.g. `advisory-db-main/`). Find it.
+    let repo_root = first_subdir(&staging)?
+        .ok_or_else(|| anyhow!("advisory-db tarball had no top-level directory"))?;
+
+    let dest = cache_root.join("advisory-db");
+    if dest.exists() {
+        std::fs::remove_dir_all(&dest)
+            .with_context(|| format!("clear stale cache {}", dest.display()))?;
+    }
+    std::fs::rename(&repo_root, &dest)
+        .with_context(|| format!("install advisory-db into {}", dest.display()))?;
+    let _ = std::fs::remove_dir_all(&staging);
+
+    Ok(dest)
+}
+
+/// Cache directory for the downloaded advisory db. Honours
+/// `SECUNIT_CACHE_DIR` so callers (and tests) can redirect it; falls
+/// back to the platform cache dir, then the system temp dir.
+fn advisory_db_cache_dir() -> Result<PathBuf> {
+    if let Ok(s) = std::env::var("SECUNIT_CACHE_DIR") {
+        return Ok(PathBuf::from(s).join("rustsec"));
+    }
+    let base = dirs_cache_dir().unwrap_or_else(std::env::temp_dir);
+    Ok(base.join("secunit").join("rustsec"))
+}
+
+/// Minimal, dependency-free platform cache-dir lookup. We avoid pulling
+/// in the `dirs` crate for a single path.
+fn dirs_cache_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Caches"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(x) = std::env::var_os("XDG_CACHE_HOME") {
+            return Some(PathBuf::from(x));
+        }
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache"))
+    }
+}
+
+/// Return the first directory entry directly under `dir`, if any.
+fn first_subdir(dir: &Path) -> Result<Option<PathBuf>> {
+    for entry in
+        std::fs::read_dir(dir).with_context(|| format!("read staging dir {}", dir.display()))?
+    {
+        let entry = entry.context("read staging dir entry")?;
+        if entry.file_type().context("stat staging entry")?.is_dir() {
+            return Ok(Some(entry.path()));
+        }
+    }
+    Ok(None)
 }
 
 /// Strip volatile fields from the rustsec report and sort lists.

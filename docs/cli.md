@@ -112,7 +112,7 @@ secunit capture github codeql-alerts      --repo <ORG/REPO> --out <PATH>
 
 secunit capture deps pip-audit   --path <DIR> --out <PATH>
 secunit capture deps pnpm-audit  --path <DIR> --out <PATH>
-secunit capture deps cargo-audit --path <DIR> --out <PATH>
+secunit capture deps cargo-audit --path <CARGO_LOCK> [--db-path <ADVISORY_DB>] --out <PATH>
 secunit capture deps osv-query   --ecosystem <NAME> --package <NAME> --version <STR> --out <PATH>
 
 secunit capture http get <URL> [--header <K=V>...] [--auth-from-env <VAR>] --out <PATH>
