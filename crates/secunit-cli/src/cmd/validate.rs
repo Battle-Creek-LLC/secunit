@@ -61,7 +61,10 @@ pub fn run(ctx: &Ctx, _strict: bool) -> Result<ExitCode> {
 /// Skill-level checks: (a) every local skill's frontmatter parses as
 /// YAML, and (b) every skill a control names — local or bundled — has
 /// the `requires_features:` it declares compiled into this binary.
-fn check_skills(reg: &LoadedRegistry, report: &mut LoadReport) {
+///
+/// Exposed to the crate so `doctor` can fold the same checks into its
+/// registry section without duplicating them.
+pub(crate) fn check_skills(reg: &LoadedRegistry, report: &mut LoadReport) {
     check_local_frontmatter(&reg.root, report);
     check_requires_features(reg, report);
 }

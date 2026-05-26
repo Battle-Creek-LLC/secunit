@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `secunit doctor` — a read-only environment + registry health preflight that
+  automates the Part B audit in `docs/setup-checklist.md`, grouped into five
+  sections (Environment, Repo structure, Registry, Evidence integrity, Risk
+  register). It reuses the existing building blocks (`validate`'s skill checks,
+  `verify`'s hash-chain walk, the risk-register fold) and verifies the git
+  HEAD the same way `run prepare` does. Every `⚠`/`✗` line carries a `fix:`
+  (a `fix` field under `--json`) with the concrete next action, distinguishing
+  safe auto-repairs (`git init`, `risks rebuild`) from integrity failures the
+  agent must investigate rather than repair.
+
 ## [0.3.1] — 2026-05-25
 
 ### Security

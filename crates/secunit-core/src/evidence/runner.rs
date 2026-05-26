@@ -520,7 +520,11 @@ fn sha256_for_skill(root: &Path, skill: &str) -> Result<String> {
 /// `root` isn't a git repo or HEAD can't be peeled (no commits yet,
 /// detached weirdness, etc) — `prepare` requires a real git sha to
 /// pin what the registry said at run time.
-fn git_head(root: &Path) -> Result<String> {
+///
+/// Public so `doctor` can use the *same* check `prepare` does: a repo that
+/// fails here is a repo `run prepare` will reject, so doctor's verdict is
+/// aligned with reality rather than just testing for a `.git` directory.
+pub fn git_head(root: &Path) -> Result<String> {
     let repo = gix::open(root).context("open repo")?;
     let head = repo.head().context("read HEAD")?;
     let id = head.into_peeled_id().context("peel HEAD to a commit")?;

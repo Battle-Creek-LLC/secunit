@@ -86,6 +86,8 @@ enum Command {
     },
     /// Verify manifest hash chains.
     Verify { control_id: Option<String> },
+    /// Health-check the environment and registry (read-only preflight).
+    Doctor,
     /// Show which integrations are compiled in.
     Features,
     /// List, show, or locate runbook skills (bundled + local overrides).
@@ -367,6 +369,7 @@ fn main() -> ExitCode {
             RunCmd::List { pending } => cmd::run::list(&ctx, pending),
         },
         Command::Verify { control_id } => cmd::verify::run(&ctx, control_id.as_deref()),
+        Command::Doctor => cmd::doctor::run(&ctx),
         Command::Features => cmd::features::run(&ctx),
         Command::Skills { sub } => match sub {
             SkillsCmd::List => cmd::skills::list(&ctx),
