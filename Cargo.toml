@@ -16,7 +16,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0"
@@ -24,8 +24,8 @@ repository = "https://github.com/Battle-Creek-LLC/secunit"
 categories = ["command-line-utilities"]
 
 [workspace.dependencies]
-secunit-core = { path = "crates/secunit-core", version = "0.4.1" }
-secunit-capture = { path = "crates/secunit-capture", version = "0.4.1" }
+secunit-core = { path = "crates/secunit-core", version = "0.4.2" }
+secunit-capture = { path = "crates/secunit-capture", version = "0.4.2" }
 
 anyhow = "1"
 thiserror = "1"
