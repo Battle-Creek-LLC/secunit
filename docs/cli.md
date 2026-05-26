@@ -124,6 +124,7 @@ secunit capture snapshot file <SRC> --out <PATH>
 ```
 secunit validate [--strict]
 secunit verify [<CONTROL_ID>] [--from <DATE>] [--json]
+secunit doctor [--json]
 ```
 
 `validate` checks:
@@ -139,6 +140,10 @@ secunit verify [<CONTROL_ID>] [--from <DATE>] [--json]
 Run as a pre-commit hook. `--strict` adds opinionated checks (NIST id format, descriptive title length, scope minimum-tag rules).
 
 `verify` walks every run for a control (or all controls) in chronological order, recomputes every artifact hash, and checks each `prior_run.manifest_sha256` against the recomputed sha of the prior manifest. It also walks each risk's `events.jsonl` chain and confirms every `finding_ref` resolves to a sealed manifest whose recomputed sha matches. Single point of integrity for an assessor.
+
+`doctor` is a read-only preflight that automates the Part B audit in [`setup-checklist.md`](setup-checklist.md). It groups checks into five sections — **Environment** (secunit version, compiled-in capture features, root is a git repo, declared integrations vs. compiled features), **Repo structure** (`_config.yaml`/`org.wisp_repo`, a non-empty `controls/`, `inventory.yaml`/`schedule.yaml`/`state.json` presence, `.gitignore` ignores `.secunit.lock`), **Registry** (the same schema + cross-reference + skill `requires_features` checks `validate` runs), **Evidence integrity** (the `verify` hash-chain walk over runs and risk logs), and **Risk register** (folds every `risks/<id>/events.jsonl` — validating the append-only event-log format — and confirms `risks/index.json` is a fresh projection of the logs). Each line is `✓`/`ℹ`/`⚠`/`✗`; doctor exits 1 if any check fails (warnings and notes do not fail it). Run it when standing up or inheriting a registry, or as a periodic health check.
+
+Every `⚠`/`✗` line carries a `fix:` (a `fix` field under `--json`) with the concrete next action, so an agent can remediate from the report alone. The fixes distinguish trouble that is **safe to auto-repair** (`git init`, `secunit risks rebuild`, editing `_config.yaml`) from **integrity failures it must not auto-repair** — a broken manifest or risk-log hash chain means evidence was altered, and the fix says to investigate rather than re-finalize or hand-edit the append-only logs.
 
 ## Risk register
 
