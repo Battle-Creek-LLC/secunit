@@ -25,9 +25,10 @@ macro_rules! bundled {
     ($name:literal) => {
         BundledSkill {
             name: $name,
-            // Relative to this file (crates/secunit-core/src/skills.rs);
-            // the workspace `skills/` dir is three levels up.
-            body: include_str!(concat!("../../../skills/", $name, ".md")),
+            // Relative to this file (crates/secunit-core/src/skills.rs); the
+            // bundled `skills/` dir lives in the crate root so it ships inside
+            // the published crate tarball.
+            body: include_str!(concat!("../skills/", $name, ".md")),
         }
     };
 }

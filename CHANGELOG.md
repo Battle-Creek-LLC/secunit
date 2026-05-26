@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-05-26
+
+### Fixed
+
+- The bundled skill library now ships inside `secunit-core` (moved from the
+  workspace root to `crates/secunit-core/skills/`), so the crate compiles from
+  its published tarball. Previously the `include_str!` paths reached above the
+  package root and `cargo publish` verification failed — which is why no release
+  past 0.1.2 reached crates.io.
+
+### Changed
+
+- CI (`release.yml`) now publishes `secunit-core`, `secunit-capture`, and
+  `bcl-secunit` to crates.io on `v*` tags. Requires a `CARGO_REGISTRY_TOKEN`
+  repository secret.
+
 ## [0.4.1] — 2026-05-26
 
 ### Security
