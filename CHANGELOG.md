@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-05-26
+
+### Security
+
+- Dismissed `glib` advisory GHSA-wrw7-89jp-8q8g (RUSTSEC-2024-0429,
+  `VariantStrIter` unsoundness, medium) as tolerable risk. `glib` 0.18.5 is
+  transitive, pulled only by the Tauri 2 Linux GTK3 stack (gtk-rs 0.18
+  generation via tao/wry); the fix lands only in `glib` 0.20 (the gtk-rs 0.20
+  generation), which Tauri 2 does not ride, and there is no 0.18.x backport —
+  upstream-blocked. Not reachable in any shipped artifact: the GTK/glib stack
+  is Linux-only, while the GUI ships solely as a macOS `.dmg` (WKWebView/Cocoa,
+  no GTK), and the only Linux release artifact is the CLI, which is not in the
+  Tauri dependency tree. Revisit once Tauri 2 adopts gtk-rs ≥ 0.20.
+
 ## [0.4.0] — 2026-05-26
 
 ### Added
