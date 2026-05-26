@@ -49,8 +49,9 @@ pub enum DepsCmd {
         /// Path to the project's `Cargo.lock`.
         #[arg(long)]
         path: PathBuf,
-        /// Optional local advisory-db path. Defaults to fetching from
-        /// the RustSec GitHub repo.
+        /// Optional local advisory-db path (a cloned rustsec/advisory-db).
+        /// When omitted, the advisory-db snapshot is downloaded over
+        /// HTTPS and cached locally.
         #[arg(long)]
         db_path: Option<PathBuf>,
         #[arg(long)]
