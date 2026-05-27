@@ -97,7 +97,7 @@ jobs:
   # Publish the library + CLI crates to crates.io so `cargo install` and
   # `cargo binstall bcl-secunit@<tag>` can resolve the version. Runs after the
   # binaries are attached so binstall always finds a prebuilt artifact for the
-  # version it just resolved. Requires a CARGO_REGISTRY_TOKEN repo secret.
+  # version it just resolved. Requires a CRATES_IO_TOKEN repo secret.
   publish-crates:
     name: publish to crates.io
     needs: upload-assets
@@ -109,7 +109,9 @@ jobs:
 
       - name: Publish crates
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          # cargo reads the token from CARGO_REGISTRY_TOKEN; the repo secret is
+          # named CRATES_IO_TOKEN.
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         # Explicit `-p` (not `--workspace`) so the unpublished Tauri GUI crate
         # is never pushed. cargo publishes these in dependency order and waits
         # for each to land on the index before publishing its dependents.
