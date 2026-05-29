@@ -134,7 +134,9 @@ pub fn export(opts: &ExportOptions) -> Result<ExportReport> {
         .ok()
         .map(|sha| sha.get(..12).unwrap_or(sha.as_str()).to_string())
         .unwrap_or_else(|| "uncommitted".to_string());
-    let full_hash = hasher::sha256_bytes(body_markdown.as_bytes());
+    // Hash the policy content itself, not the internal anchor markers, so the
+    // provenance digest stays a pure function of the source text.
+    let full_hash = hasher::sha256_bytes(strip_anchor_markers(&body_markdown).as_bytes());
     let content_hash = format!("sha256:{}", &full_hash[..full_hash.len().min(12)]);
 
     let version = opts_version(&wisp_cfg, &fm).unwrap_or_else(|| "0.0.0".to_string());
@@ -266,9 +268,16 @@ fn assemble(source: &Path, cfg: &WispConfig) -> Result<(String, Vec<String>, Opt
         if i > 0 {
             body.push_str("\n\n");
         }
+        let rel = rel_name(source, path);
+        // Anchor marker: the markdown converter turns this into a Typst label on
+        // the section's first heading, so links to this file resolve internally
+        // instead of trying to open a sibling `.md`. Stripped before hashing.
+        body.push_str("<!--wisp:anchor ");
+        body.push_str(&super::markdown::section_slug(&rel));
+        body.push_str("-->\n\n");
         body.push_str(content.trim_end());
         body.push('\n');
-        sections.push(rel_name(source, path));
+        sections.push(rel);
     }
 
     Ok((body, sections, files.first().cloned()))
@@ -311,6 +320,24 @@ fn ordered_markdown(dir: &Path, order: &[String]) -> Result<Vec<PathBuf>> {
     }
     placed.append(&mut remaining); // anything unmatched, lexical order
     Ok(placed)
+}
+
+/// Drop the `<!--wisp:anchor …-->` markers (and the blank line each leaves
+/// behind) so the provenance hash reflects only the policy text.
+fn strip_anchor_markers(body: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    let mut lines = body.lines().peekable();
+    while let Some(line) = lines.next() {
+        if line.starts_with("<!--wisp:anchor ") && line.ends_with("-->") {
+            if lines.peek().is_some_and(|l| l.is_empty()) {
+                lines.next();
+            }
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
 }
 
 fn rel_name(base: &Path, path: &Path) -> String {

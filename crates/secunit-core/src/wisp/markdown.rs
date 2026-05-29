@@ -14,10 +14,22 @@
 //! promoted to a real (level-4) heading so it gains weight and spacing instead
 //! of bleeding into the following list.
 
+use std::collections::HashSet;
+
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 /// Convert a markdown document to Typst markup.
-pub fn to_typst(markdown: &str) -> String {
+///
+/// `sections` carries the relative names of the assembled source files. A link
+/// whose target is one of those files (e.g. the policy index's
+/// `[Access Control Policy](access-control-policy.md)`) is rewired into an
+/// internal cross-reference to that section's heading, so it jumps within the
+/// PDF instead of trying to open a sibling `.md` file. Section anchors are
+/// placed by the `<!--wisp:anchor …-->` markers that assembly injects ahead of
+/// each file.
+pub fn to_typst(markdown: &str, sections: &[String]) -> String {
+    let section_slugs: HashSet<String> = sections.iter().map(|s| section_slug(s)).collect();
+
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_TABLES);
     opts.insert(Options::ENABLE_STRIKETHROUGH);
@@ -25,6 +37,9 @@ pub fn to_typst(markdown: &str) -> String {
 
     let mut out = String::with_capacity(markdown.len() * 2);
     let mut list_stack: Vec<Option<u64>> = Vec::new();
+    // A section anchor (from a `<!--wisp:anchor …-->` marker) waiting to be
+    // attached to the next heading as a Typst label.
+    let mut pending_anchor: Option<String> = None;
 
     // Table accumulation.
     let mut row_cells: Vec<String> = Vec::new();
@@ -64,7 +79,15 @@ pub fn to_typst(markdown: &str) -> String {
                 }
                 out.push(' ');
             }
-            Event::End(TagEnd::Heading(_)) => out.push_str("\n\n"),
+            Event::End(TagEnd::Heading(_)) => {
+                if let Some(slug) = pending_anchor.take() {
+                    // Typst label syntax: `= Heading <label>` on the same line.
+                    out.push_str(" <");
+                    out.push_str(&slug);
+                    out.push('>');
+                }
+                out.push_str("\n\n");
+            }
 
             // ---- paragraphs (buffered only at the top level) ---------------
             Event::Start(Tag::Paragraph) if list_stack.is_empty() && cell_buf.is_none() => {
@@ -167,10 +190,21 @@ pub fn to_typst(markdown: &str) -> String {
                 sink(&mut out, &mut cell_buf, &mut para_buf).push(']')
             }
             Event::Start(Tag::Link { dest_url, .. }) => {
+                let internal = link_target_slug(&dest_url, &section_slugs);
                 let s = sink(&mut out, &mut cell_buf, &mut para_buf);
-                s.push_str("#link(\"");
-                s.push_str(&escape_string(&dest_url));
-                s.push_str("\")[");
+                match internal {
+                    // Internal cross-reference: link by label, no quotes.
+                    Some(slug) => {
+                        s.push_str("#link(<");
+                        s.push_str(&slug);
+                        s.push_str(">)[");
+                    }
+                    None => {
+                        s.push_str("#link(\"");
+                        s.push_str(&escape_string(&dest_url));
+                        s.push_str("\")[");
+                    }
+                }
             }
             Event::End(TagEnd::Link) => sink(&mut out, &mut cell_buf, &mut para_buf).push(']'),
             Event::Code(text) => {
@@ -194,7 +228,11 @@ pub fn to_typst(markdown: &str) -> String {
             Event::SoftBreak => sink(&mut out, &mut cell_buf, &mut para_buf).push(' '),
             Event::HardBreak => sink(&mut out, &mut cell_buf, &mut para_buf).push_str(" \\\n"),
 
-            Event::Html(_) | Event::InlineHtml(_) => {}
+            Event::Html(text) | Event::InlineHtml(text) => {
+                if let Some(slug) = parse_anchor_marker(&text) {
+                    pending_anchor = Some(slug);
+                }
+            }
             _ => {}
         }
     }
@@ -326,13 +364,64 @@ fn escape_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// Stable Typst label for a section, derived from its file name: the stem,
+/// lowercased with every non-alphanumeric run collapsed to a single `-`, under
+/// a `wisp-` namespace (e.g. `access-control-policy.md` → `wisp-access-control-policy`).
+/// Used both to anchor each section's heading and to resolve `.md` links.
+pub fn section_slug(name: &str) -> String {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    let stem = base
+        .strip_suffix(".md")
+        .or_else(|| base.strip_suffix(".markdown"))
+        .unwrap_or(base);
+    let mut slug = String::from("wisp-");
+    let mut prev_dash = false;
+    for ch in stem.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            prev_dash = false;
+        } else if !prev_dash {
+            slug.push('-');
+            prev_dash = true;
+        }
+    }
+    slug.trim_end_matches('-').to_string()
+}
+
+/// If `dest` points at one of the assembled sections, return its label slug.
+/// Only same-document `.md` references qualify; absolute URLs, `mailto:`, and
+/// bare `#fragment` links are left as external/literal links.
+fn link_target_slug(dest: &str, sections: &HashSet<String>) -> Option<String> {
+    if dest.contains("://") || dest.starts_with("mailto:") || dest.starts_with('#') {
+        return None;
+    }
+    let path = dest.split('#').next().unwrap_or(dest);
+    let slug = section_slug(path);
+    sections.contains(&slug).then_some(slug)
+}
+
+/// Parse a `<!--wisp:anchor SLUG-->` marker, returning the slug.
+fn parse_anchor_marker(html: &str) -> Option<String> {
+    let inner = html
+        .trim()
+        .strip_prefix("<!--wisp:anchor ")?
+        .strip_suffix("-->")?;
+    let slug = inner.trim();
+    (!slug.is_empty()).then(|| slug.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Convert with no known sections (the common case for these unit tests).
+    fn to_typst_default(markdown: &str) -> String {
+        to_typst(markdown, &[])
+    }
+
     #[test]
     fn converts_atx_headings() {
-        let typ = to_typst("# Title\n\nbody\n\n## Section\n");
+        let typ = to_typst_default("# Title\n\nbody\n\n## Section\n");
         assert!(typ.contains("= Title"));
         assert!(typ.contains("== Section"));
         assert!(typ.contains("body"));
@@ -340,7 +429,7 @@ mod tests {
 
     #[test]
     fn escapes_typst_metacharacters_in_prose() {
-        let typ = to_typst("Email me @ test or pay $5 to #1\n");
+        let typ = to_typst_default("Email me @ test or pay $5 to #1\n");
         assert!(typ.contains("\\@"));
         assert!(typ.contains("\\$5"));
         assert!(typ.contains("\\#1"));
@@ -350,7 +439,7 @@ mod tests {
     fn list_is_separated_from_preceding_paragraph() {
         // The bug that produced inline "wall of text": a list right under a
         // paragraph must be preceded by a blank line.
-        let typ = to_typst("Some intro.\n- one\n- two\n");
+        let typ = to_typst_default("Some intro.\n- one\n- two\n");
         assert!(
             typ.contains("intro.\n\n- one"),
             "list not blank-separated: {typ:?}"
@@ -359,7 +448,7 @@ mod tests {
 
     #[test]
     fn bold_only_paragraph_becomes_subheading() {
-        let typ = to_typst("**General Use and Ownership**\n\n- a\n- b\n");
+        let typ = to_typst_default("**General Use and Ownership**\n\n- a\n- b\n");
         assert!(
             typ.contains("==== General Use and Ownership"),
             "bold pseudo-heading not promoted: {typ:?}"
@@ -370,7 +459,7 @@ mod tests {
     fn inline_emphasis_is_not_promoted() {
         // `*important*` is CommonMark emphasis → Typst `_italic_`, and an inline
         // run must never be promoted to a sub-heading.
-        let typ = to_typst("This is *important* text.\n");
+        let typ = to_typst_default("This is *important* text.\n");
         assert!(!typ.contains("===="), "inline emphasis wrongly promoted: {typ:?}");
         assert!(typ.contains("_important_"), "emphasis not mapped: {typ:?}");
     }
@@ -379,7 +468,7 @@ mod tests {
     fn inline_strong_is_not_promoted() {
         // `**bold**` mid-sentence has surrounding plain text, so it must stay
         // inline (`*bold*`) and not become a `====` sub-heading.
-        let typ = to_typst("This is **bold** text.\n");
+        let typ = to_typst_default("This is **bold** text.\n");
         assert!(!typ.contains("===="), "inline strong wrongly promoted: {typ:?}");
         assert!(typ.contains("*bold*"), "strong not mapped: {typ:?}");
     }
@@ -387,7 +476,7 @@ mod tests {
     #[test]
     fn renders_a_table() {
         let md = "| Field | Value |\n| --- | --- |\n| Owner | CTO |\n";
-        let typ = to_typst(md);
+        let typ = to_typst_default(md);
         assert!(typ.contains("#table("));
         assert!(typ.contains("columns: 2"));
         assert!(typ.contains("[*Field*]"));
@@ -396,14 +485,58 @@ mod tests {
 
     #[test]
     fn preserves_code_blocks() {
-        let typ = to_typst("```rust\nlet x = 1;\n```\n");
+        let typ = to_typst_default("```rust\nlet x = 1;\n```\n");
         assert!(typ.contains("```rust"));
         assert!(typ.contains("let x = 1;"));
     }
 
     #[test]
     fn no_triple_newlines() {
-        let typ = to_typst("# H\n\n\n\npara\n");
+        let typ = to_typst_default("# H\n\n\n\npara\n");
         assert!(!typ.contains("\n\n\n"), "blank runs not collapsed: {typ:?}");
+    }
+
+    #[test]
+    fn section_slug_is_namespaced_and_stable() {
+        assert_eq!(section_slug("access-control-policy.md"), "wisp-access-control-policy");
+        assert_eq!(section_slug("security/README.md"), "wisp-readme");
+        assert_eq!(section_slug("foo_bar.markdown"), "wisp-foo-bar");
+    }
+
+    #[test]
+    fn rewrites_md_links_to_internal_anchors() {
+        // The policy index links to a sibling .md file that is also an assembled
+        // section: the link must become an internal cross-reference, and the
+        // target section's first heading must carry the matching label.
+        let sections = vec!["access-control-policy.md".to_string()];
+        let body = "<!--wisp:anchor wisp-access-control-policy-->\n\n\
+                    # Access Control Policy\n\n\
+                    See the [ACP](access-control-policy.md#scope) for details.\n";
+        let typ = to_typst(body, &sections);
+        assert!(
+            typ.contains("= Access Control Policy <wisp-access-control-policy>"),
+            "section heading not labelled: {typ}"
+        );
+        assert!(
+            typ.contains("#link(<wisp-access-control-policy>)[ACP]"),
+            "md link not rewired to internal ref: {typ}"
+        );
+        assert!(
+            !typ.contains("#link(\"access-control-policy"),
+            "internal link still emitted as a file URL: {typ}"
+        );
+    }
+
+    #[test]
+    fn external_and_unknown_links_stay_literal() {
+        let sections = vec!["access-control-policy.md".to_string()];
+        // http(s) URLs and .md files that are NOT assembled sections stay as
+        // ordinary `#link("…")` targets.
+        let typ = to_typst(
+            "[site](https://example.com) and [rb](runbooks/restore.md)\n",
+            &sections,
+        );
+        assert!(typ.contains("#link(\"https://example.com\")[site]"), "{typ}");
+        assert!(typ.contains("#link(\"runbooks/restore.md\")[rb]"), "{typ}");
     }
 }

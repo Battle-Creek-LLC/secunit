@@ -72,7 +72,7 @@ pub fn emit(doc: &WispDoc, opts: EmitOptions) -> String {
         s.push_str("#wisp-toc(ctx)\n\n");
     }
 
-    s.push_str(&markdown::to_typst(&doc.body_markdown));
+    s.push_str(&markdown::to_typst(&doc.body_markdown, &doc.sections));
     s.push('\n');
 
     s
