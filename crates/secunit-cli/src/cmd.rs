@@ -24,6 +24,7 @@ pub mod skills;
 pub mod status;
 pub mod validate;
 pub mod verify;
+pub mod wisp;
 
 /// Per-invocation context shared across subcommands.
 pub struct Ctx {

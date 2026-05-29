@@ -22,6 +22,16 @@ walkdir.workspace = true
 fs2.workspace = true
 gix.workspace = true
 tracing.workspace = true
+pulldown-cmark.workspace = true
+typst = { workspace = true, optional = true }
+typst-pdf = { workspace = true, optional = true }
+
+[features]
+# `pdf` compiles the in-binary Typst renderer (the default WISP backend) into
+# the crate. On by default; disable with --no-default-features to drop the
+# heavy typst dependency and emit the .typ source only.
+default = ["pdf"]
+pdf = ["dep:typst", "dep:typst-pdf"]
 
 [dev-dependencies]
 insta.workspace = true

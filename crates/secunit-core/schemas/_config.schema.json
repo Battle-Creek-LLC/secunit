@@ -30,6 +30,44 @@
     "integrations": {
       "type": "object",
       "additionalProperties": true
+    },
+    "wisp": {
+      "type": "object",
+      "description": "WISP PDF export settings (see docs/wisp-pdf-export.md).",
+      "additionalProperties": true,
+      "properties": {
+        "source": { "type": "string" },
+        "order": { "type": "array", "items": { "type": "string" } },
+        "version": { "type": "string" },
+        "template": { "type": "string" },
+        "renderer": { "type": "string", "enum": ["typst", "weasyprint", "chromium"] },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "org": { "type": "string" },
+            "title": { "type": "string" },
+            "classification": { "type": "string" }
+          }
+        },
+        "toc": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "depth": { "type": "integer", "minimum": 1, "maximum": 6 }
+          }
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "page_numbers": { "type": "boolean" },
+            "section_numbers": { "type": "boolean" },
+            "archival": { "type": "boolean" }
+          }
+        }
+      }
     }
   }
 }
