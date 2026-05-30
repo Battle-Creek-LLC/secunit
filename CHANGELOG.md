@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-30
+
+### Added
+
+- `secunit wisp init` and `secunit wisp export`: render the WISP markdown set
+  under `security/` into a single branded PDF, entirely in Rust (markdown →
+  Typst → PDF via the `typst`/`typst-pdf` crates behind an on-by-default `pdf`
+  feature — no external toolchain). Includes a cover page, a native table of
+  contents with page numbers and PDF bookmarks, running header/footer, bundled
+  Inter / JetBrains Mono fonts, and a git-commit + SHA-256 provenance stamp.
+  Branding lives in required, operator-owned partials scaffolded by `wisp init`
+  (`theme/header/footer/cover/toc.typ` + logo). The policy index and inline
+  `.md` cross-references resolve to internal document links, and `--allow-dirty`
+  gates exporting from an uncommitted tree. (#51)
+
 ## [0.4.2] — 2026-05-26
 
 ### Fixed
