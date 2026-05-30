@@ -434,11 +434,11 @@ wisp:
     classification: Confidential
   toc:
     enabled: true
-    depth: 3                   # H1..H3
+    # depth: 3                 # planned — outline depth is currently fixed by the toc.typ partial
   output:
     page_numbers: true
-    section_numbers: false
-    archival: false            # PDF/A
+    # section_numbers: false   # planned — not yet implemented
+    # archival: false          # planned — PDF/A, not yet implemented
 ```
 
 All keys are overridable by the CLI flags in §6. Add a `wisp` block to

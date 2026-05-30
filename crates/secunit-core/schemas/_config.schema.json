@@ -54,17 +54,14 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "enabled": { "type": "boolean" },
-            "depth": { "type": "integer", "minimum": 1, "maximum": 6 }
+            "enabled": { "type": "boolean" }
           }
         },
         "output": {
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "page_numbers": { "type": "boolean" },
-            "section_numbers": { "type": "boolean" },
-            "archival": { "type": "boolean" }
+            "page_numbers": { "type": "boolean" }
           }
         }
       }

@@ -531,6 +531,14 @@ pub fn git_head(root: &Path) -> Result<String> {
     Ok(id.to_hex().to_string())
 }
 
+/// True if the working tree at `root` has uncommitted changes to *tracked*
+/// files (index vs. worktree vs. HEAD). Untracked files are not considered.
+/// Errors only when `root` is not a usable git repo.
+pub fn git_is_dirty(root: &Path) -> Result<bool> {
+    let repo = gix::open(root).context("open repo")?;
+    repo.is_dirty().context("compute worktree status")
+}
+
 fn update_state(reg: &LoadedRegistry, manifest: &Manifest) -> Result<()> {
     let path = reg.root.join(STATE_FILE);
     // Bail loudly on a corrupt state file rather than silently dropping

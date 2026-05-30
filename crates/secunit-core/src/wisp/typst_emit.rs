@@ -83,13 +83,8 @@ fn push_field(s: &mut String, name: &str, value: &str) {
     s.push_str("  ");
     s.push_str(name);
     s.push_str(": \"");
-    s.push_str(&escape_typst_string(value));
+    s.push_str(&markdown::escape_typst_string(value));
     s.push_str("\",\n");
-}
-
-/// Escape a value for inclusion inside a Typst double-quoted string.
-fn escape_typst_string(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(test)]

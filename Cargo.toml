@@ -42,7 +42,9 @@ fs2 = "0.4"
 # gix 0.83 split the hash backend into a dedicated `sha1` feature; 0.66's
 # `max-performance-safe` bundled it. Add `sha1` explicitly so gix-hash gets a
 # backend (without it: "set either the `sha1` or `sha256` feature flag").
-gix = { version = "0.83", default-features = false, features = ["max-performance-safe", "sha1"] }
+# `status` adds worktree-vs-HEAD dirty detection (used by `wisp export` to
+# refuse stamping provenance on an uncommitted tree unless --allow-dirty).
+gix = { version = "0.83", default-features = false, features = ["max-performance-safe", "sha1", "status"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

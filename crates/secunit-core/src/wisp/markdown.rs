@@ -14,7 +14,7 @@
 //! promoted to a real (level-4) heading so it gains weight and spacing instead
 //! of bleeding into the following list.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
@@ -28,7 +28,18 @@ use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, T
 /// placed by the `<!--wisp:anchor …-->` markers that assembly injects ahead of
 /// each file.
 pub fn to_typst(markdown: &str, sections: &[String]) -> String {
-    let section_slugs: HashSet<String> = sections.iter().map(|s| section_slug(s)).collect();
+    // Per-section unique labels (collision-resolved, deterministic by order)
+    // and a basename→label map for resolving `.md` links to the right anchor.
+    let slugs = section_slugs(sections);
+    let known_slugs: HashSet<&str> = slugs.iter().map(String::as_str).collect();
+    let link_map: HashMap<&str, &str> = sections
+        .iter()
+        .map(|s| basename(s))
+        .zip(slugs.iter().map(String::as_str))
+        .collect();
+    // Anchors already emitted, so a duplicate/forged marker can't produce a
+    // second label with the same name (which Typst rejects).
+    let mut emitted_anchors: HashSet<String> = HashSet::new();
 
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_TABLES);
@@ -37,9 +48,6 @@ pub fn to_typst(markdown: &str, sections: &[String]) -> String {
 
     let mut out = String::with_capacity(markdown.len() * 2);
     let mut list_stack: Vec<Option<u64>> = Vec::new();
-    // A section anchor (from a `<!--wisp:anchor …-->` marker) waiting to be
-    // attached to the next heading as a Typst label.
-    let mut pending_anchor: Option<String> = None;
 
     // Table accumulation.
     let mut row_cells: Vec<String> = Vec::new();
@@ -79,15 +87,7 @@ pub fn to_typst(markdown: &str, sections: &[String]) -> String {
                 }
                 out.push(' ');
             }
-            Event::End(TagEnd::Heading(_)) => {
-                if let Some(slug) = pending_anchor.take() {
-                    // Typst label syntax: `= Heading <label>` on the same line.
-                    out.push_str(" <");
-                    out.push_str(&slug);
-                    out.push('>');
-                }
-                out.push_str("\n\n");
-            }
+            Event::End(TagEnd::Heading(_)) => out.push_str("\n\n"),
 
             // ---- paragraphs (buffered only at the top level) ---------------
             Event::Start(Tag::Paragraph) if list_stack.is_empty() && cell_buf.is_none() => {
@@ -190,28 +190,31 @@ pub fn to_typst(markdown: &str, sections: &[String]) -> String {
                 sink(&mut out, &mut cell_buf, &mut para_buf).push(']')
             }
             Event::Start(Tag::Link { dest_url, .. }) => {
-                let internal = link_target_slug(&dest_url, &section_slugs);
+                let internal = link_target_slug(&dest_url, &link_map);
                 let s = sink(&mut out, &mut cell_buf, &mut para_buf);
                 match internal {
                     // Internal cross-reference: link by label, no quotes.
                     Some(slug) => {
                         s.push_str("#link(<");
-                        s.push_str(&slug);
+                        s.push_str(slug);
                         s.push_str(">)[");
                     }
                     None => {
                         s.push_str("#link(\"");
-                        s.push_str(&escape_string(&dest_url));
+                        s.push_str(&escape_typst_string(&dest_url));
                         s.push_str("\")[");
                     }
                 }
             }
             Event::End(TagEnd::Link) => sink(&mut out, &mut cell_buf, &mut para_buf).push(']'),
             Event::Code(text) => {
+                // Emit via `#raw("…")` rather than backtick markup: the string
+                // form carries any character faithfully, including interior
+                // backticks (which backtick-delimited raw cannot contain).
                 let s = sink(&mut out, &mut cell_buf, &mut para_buf);
-                s.push('`');
-                s.push_str(&text.replace('`', "\u{2019}"));
-                s.push('`');
+                s.push_str("#raw(\"");
+                s.push_str(&escape_typst_string(&text));
+                s.push_str("\")");
             }
             Event::Text(text) => {
                 if in_code {
@@ -230,7 +233,16 @@ pub fn to_typst(markdown: &str, sections: &[String]) -> String {
 
             Event::Html(text) | Event::InlineHtml(text) => {
                 if let Some(slug) = parse_anchor_marker(&text) {
-                    pending_anchor = Some(slug);
+                    // Emit a zero-size labelled anchor at the section start, so
+                    // the label always exists even when the section does not
+                    // open with a heading. Unknown (forged) or already-emitted
+                    // slugs are ignored to avoid duplicate-label compile errors.
+                    if known_slugs.contains(slug.as_str()) && emitted_anchors.insert(slug.clone()) {
+                        ensure_blank(&mut out);
+                        out.push_str("#metadata(none) <");
+                        out.push_str(&slug);
+                        out.push_str(">\n\n");
+                    }
                 }
             }
             _ => {}
@@ -359,15 +371,43 @@ fn escape_markup(s: &str) -> String {
     out
 }
 
-/// Escape for a Typst double-quoted string literal (e.g. link URLs).
-fn escape_string(s: &str) -> String {
+/// Escape for a Typst double-quoted string literal (e.g. link URLs, `#raw`).
+/// Shared with `typst_emit` so both escape values identically.
+pub(crate) fn escape_typst_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// The final path segment of `name` (its basename), used to match a link's
+/// target file against the assembled sections.
+fn basename(name: &str) -> &str {
+    name.rsplit(['/', '\\']).next().unwrap_or(name)
+}
+
+/// Per-section unique Typst labels, one per entry in `sections`, in order.
+/// Derived from [`section_slug`] with collisions resolved by a `-2`, `-3`, …
+/// suffix so two files that normalise to the same base slug still get distinct,
+/// non-conflicting labels. Deterministic for a given ordered `sections`, so the
+/// anchor side (assembly) and the link side (conversion) agree.
+pub fn section_slugs(sections: &[String]) -> Vec<String> {
+    let mut used: HashSet<String> = HashSet::new();
+    let mut out = Vec::with_capacity(sections.len());
+    for name in sections {
+        let base = section_slug(name);
+        let mut slug = base.clone();
+        let mut n = 2u32;
+        while !used.insert(slug.clone()) {
+            slug = format!("{base}-{n}");
+            n += 1;
+        }
+        out.push(slug);
+    }
+    out
 }
 
 /// Stable Typst label for a section, derived from its file name: the stem,
 /// lowercased with every non-alphanumeric run collapsed to a single `-`, under
 /// a `wisp-` namespace (e.g. `access-control-policy.md` → `wisp-access-control-policy`).
-/// Used both to anchor each section's heading and to resolve `.md` links.
+/// May collide for unusual names; [`section_slugs`] disambiguates.
 pub fn section_slug(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
     let stem = base
@@ -388,16 +428,15 @@ pub fn section_slug(name: &str) -> String {
     slug.trim_end_matches('-').to_string()
 }
 
-/// If `dest` points at one of the assembled sections, return its label slug.
-/// Only same-document `.md` references qualify; absolute URLs, `mailto:`, and
-/// bare `#fragment` links are left as external/literal links.
-fn link_target_slug(dest: &str, sections: &HashSet<String>) -> Option<String> {
+/// If `dest` points at one of the assembled sections (matched by basename),
+/// return that section's label. Only same-document `.md` references qualify;
+/// absolute URLs, `mailto:`, and bare `#fragment` links stay external.
+fn link_target_slug<'a>(dest: &str, link_map: &HashMap<&str, &'a str>) -> Option<&'a str> {
     if dest.contains("://") || dest.starts_with("mailto:") || dest.starts_with('#') {
         return None;
     }
     let path = dest.split('#').next().unwrap_or(dest);
-    let slug = section_slug(path);
-    sections.contains(&slug).then_some(slug)
+    link_map.get(basename(path)).copied()
 }
 
 /// Parse a `<!--wisp:anchor SLUG-->` marker, returning the slug.
@@ -506,16 +545,16 @@ mod tests {
     #[test]
     fn rewrites_md_links_to_internal_anchors() {
         // The policy index links to a sibling .md file that is also an assembled
-        // section: the link must become an internal cross-reference, and the
-        // target section's first heading must carry the matching label.
+        // section: the link becomes an internal cross-reference, and the section
+        // gets a standalone label anchor from its marker.
         let sections = vec!["access-control-policy.md".to_string()];
         let body = "<!--wisp:anchor wisp-access-control-policy-->\n\n\
                     # Access Control Policy\n\n\
                     See the [ACP](access-control-policy.md#scope) for details.\n";
         let typ = to_typst(body, &sections);
         assert!(
-            typ.contains("= Access Control Policy <wisp-access-control-policy>"),
-            "section heading not labelled: {typ}"
+            typ.contains("#metadata(none) <wisp-access-control-policy>"),
+            "section anchor not emitted: {typ}"
         );
         assert!(
             typ.contains("#link(<wisp-access-control-policy>)[ACP]"),
@@ -525,6 +564,39 @@ mod tests {
             !typ.contains("#link(\"access-control-policy"),
             "internal link still emitted as a file URL: {typ}"
         );
+    }
+
+    #[test]
+    fn anchor_is_emitted_even_without_a_heading() {
+        // A section whose first block is not a heading must still get its label,
+        // otherwise a link to it would reference a non-existent Typst label.
+        let sections = vec!["intro.md".to_string()];
+        let body = "<!--wisp:anchor wisp-intro-->\n\nJust a paragraph, no heading.\n";
+        let typ = to_typst(body, &sections);
+        assert!(
+            typ.contains("#metadata(none) <wisp-intro>"),
+            "heading-less section lost its anchor: {typ}"
+        );
+    }
+
+    #[test]
+    fn forged_or_unknown_anchor_markers_are_ignored() {
+        // A marker whose slug is not a known section (e.g. authored in prose)
+        // must not emit a stray label.
+        let sections = vec!["intro.md".to_string()];
+        let body = "<!--wisp:anchor wisp-intro-->\n\n# Intro\n\n\
+                    <!--wisp:anchor wisp-not-a-section-->\n\nBody.\n";
+        let typ = to_typst(body, &sections);
+        assert!(typ.contains("#metadata(none) <wisp-intro>"));
+        assert!(!typ.contains("wisp-not-a-section"), "forged anchor leaked: {typ}");
+    }
+
+    #[test]
+    fn section_slugs_disambiguate_collisions() {
+        // `-` and `_` both collapse to the same base slug; the second gets a
+        // numeric suffix so the two labels never clash.
+        let s = section_slugs(&["access-control.md".into(), "access_control.md".into()]);
+        assert_eq!(s, vec!["wisp-access-control", "wisp-access-control-2"]);
     }
 
     #[test]

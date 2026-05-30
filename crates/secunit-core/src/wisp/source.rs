@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
 
 use crate::evidence::{hasher, runner};
@@ -116,7 +116,7 @@ pub fn export(opts: &ExportOptions) -> Result<ExportReport> {
 
     // ---- assemble the source ----
     let source_dir = resolve_source(&root, opts.source.as_deref(), &wisp_cfg)?;
-    let (body_markdown, sections, first_file) = assemble(&source_dir, &wisp_cfg)?;
+    let (body_markdown, hash_src, sections, first_file) = assemble(&source_dir, &wisp_cfg)?;
     if sections.is_empty() {
         bail!(
             "no WISP markdown found under {} — set `wisp.source` in _config.yaml \
@@ -130,13 +130,25 @@ pub fn export(opts: &ExportOptions) -> Result<ExportReport> {
         .unwrap_or_default();
 
     // ---- provenance + metadata ----
+    // Refuse to stamp a commit pointer onto a tree with uncommitted changes
+    // unless the operator opts in; mark such exports as `-dirty` so the
+    // provenance line is honest about it.
+    let dirty = runner::git_is_dirty(&root).unwrap_or(false);
+    if dirty && !opts.allow_dirty {
+        bail!(
+            "WISP source tree has uncommitted changes — commit them so the \
+             provenance commit matches the rendered content, or pass \
+             --allow-dirty to export anyway."
+        );
+    }
     let commit = runner::git_head(&root)
         .ok()
         .map(|sha| sha.get(..12).unwrap_or(sha.as_str()).to_string())
+        .map(|sha| if dirty { format!("{sha}-dirty") } else { sha })
         .unwrap_or_else(|| "uncommitted".to_string());
-    // Hash the policy content itself, not the internal anchor markers, so the
-    // provenance digest stays a pure function of the source text.
-    let full_hash = hasher::sha256_bytes(strip_anchor_markers(&body_markdown).as_bytes());
+    // Hash the policy content itself (without the internal anchor markers), so
+    // the provenance digest stays a pure function of the source text.
+    let full_hash = hasher::sha256_bytes(hash_src.as_bytes());
     let content_hash = format!("sha256:{}", &full_hash[..full_hash.len().min(12)]);
 
     let version = opts_version(&wisp_cfg, &fm).unwrap_or_else(|| "0.0.0".to_string());
@@ -178,6 +190,16 @@ pub fn export(opts: &ExportOptions) -> Result<ExportReport> {
     );
     let format = renderer.format();
     template::require_complete(&template_dir, format)?;
+    // The cover/header reference whatever logo the operator scaffolded; a custom
+    // `wisp init --logo brand.png` writes `logo.png`, so resolve the real file
+    // rather than assuming `logo.svg`.
+    let logo = resolve_logo(&template_dir).ok_or_else(|| {
+        anyhow!(
+            "no logo found in {} — run `secunit wisp init` to scaffold one, or \
+             add a logo.<svg|png|jpg|jpeg|webp|gif> file.",
+            template_dir.display()
+        )
+    })?;
 
     // ---- build doc + emit ----
     let doc = WispDoc {
@@ -188,7 +210,7 @@ pub fn export(opts: &ExportOptions) -> Result<ExportReport> {
             effective_date: effective_date.clone(),
             classification,
             status,
-            logo: "logo.svg".to_string(),
+            logo,
             commit: commit.clone(),
             content_hash: content_hash.clone(),
             generated_at: opts.today.to_string(),
@@ -250,37 +272,51 @@ fn resolve_source(root: &Path, override_src: Option<&Path>, cfg: &WispConfig) ->
     Ok(candidate)
 }
 
-/// Returns `(assembled_markdown, ordered_relative_section_names, first_file_path)`.
-fn assemble(source: &Path, cfg: &WispConfig) -> Result<(String, Vec<String>, Option<PathBuf>)> {
+/// Returns `(render_markdown, hash_source, ordered_section_names, first_file)`.
+///
+/// `render_markdown` carries the `<!--wisp:anchor …-->` markers the converter
+/// turns into per-section anchors; `hash_source` is the same content *without*
+/// the markers, so the provenance digest stays a pure function of the policy
+/// text regardless of the internal-link machinery.
+fn assemble(
+    source: &Path,
+    cfg: &WispConfig,
+) -> Result<(String, String, Vec<String>, Option<PathBuf>)> {
     let files = if source.is_file() {
         vec![source.to_path_buf()]
     } else {
         ordered_markdown(source, &cfg.order)?
     };
 
+    let sections: Vec<String> = files.iter().map(|p| rel_name(source, p)).collect();
+    // Unique, collision-resolved label per section; the converter recomputes
+    // the same slugs from `sections`, so anchors and links agree.
+    let slugs = super::markdown::section_slugs(&sections);
+
     let mut body = String::new();
-    let mut sections = Vec::new();
+    let mut hash_src = String::new();
     for (i, path) in files.iter().enumerate() {
         let content = fs::read_to_string(path)
             .with_context(|| format!("read WISP source {}", path.display()))?;
         // Strip front-matter from each file before concatenating.
-        let content = strip_front_matter(&content);
+        let trimmed = strip_front_matter(&content).trim_end().to_string();
         if i > 0 {
             body.push_str("\n\n");
+            hash_src.push_str("\n\n");
         }
-        let rel = rel_name(source, path);
-        // Anchor marker: the markdown converter turns this into a Typst label on
-        // the section's first heading, so links to this file resolve internally
-        // instead of trying to open a sibling `.md`. Stripped before hashing.
+        // Render body: anchor marker so `.md` links to this file resolve to an
+        // in-document anchor instead of trying to open a sibling file.
         body.push_str("<!--wisp:anchor ");
-        body.push_str(&super::markdown::section_slug(&rel));
+        body.push_str(&slugs[i]);
         body.push_str("-->\n\n");
-        body.push_str(content.trim_end());
+        body.push_str(&trimmed);
         body.push('\n');
-        sections.push(rel);
+        // Hash source: the policy text only.
+        hash_src.push_str(&trimmed);
+        hash_src.push('\n');
     }
 
-    Ok((body, sections, files.first().cloned()))
+    Ok((body, hash_src, sections, files.first().cloned()))
 }
 
 /// Collect `*.md` files under `dir`, ordered by `order` patterns if given,
@@ -322,22 +358,13 @@ fn ordered_markdown(dir: &Path, order: &[String]) -> Result<Vec<PathBuf>> {
     Ok(placed)
 }
 
-/// Drop the `<!--wisp:anchor …-->` markers (and the blank line each leaves
-/// behind) so the provenance hash reflects only the policy text.
-fn strip_anchor_markers(body: &str) -> String {
-    let mut out = String::with_capacity(body.len());
-    let mut lines = body.lines().peekable();
-    while let Some(line) = lines.next() {
-        if line.starts_with("<!--wisp:anchor ") && line.ends_with("-->") {
-            if lines.peek().is_some_and(|l| l.is_empty()) {
-                lines.next();
-            }
-            continue;
-        }
-        out.push_str(line);
-        out.push('\n');
-    }
-    out
+/// The logo filename within `template_dir` to reference from the partials —
+/// whichever supported image `wisp init` scaffolded. `None` if none is present.
+fn resolve_logo(template_dir: &Path) -> Option<String> {
+    ["logo.svg", "logo.png", "logo.jpg", "logo.jpeg", "logo.webp", "logo.gif"]
+        .into_iter()
+        .find(|name| template_dir.join(name).exists())
+        .map(str::to_string)
 }
 
 fn rel_name(base: &Path, path: &Path) -> String {
@@ -372,13 +399,10 @@ fn extract_front_matter(path: &Path) -> FrontMatter {
     let Ok(content) = fs::read_to_string(path) else {
         return FrontMatter::default();
     };
-    let Some(rest) = content.strip_prefix("---\n") else {
-        return FrontMatter::default();
-    };
-    let Some(idx) = rest.find("\n---") else {
-        return FrontMatter::default();
-    };
-    serde_yaml::from_str(&rest[..idx]).unwrap_or_default()
+    // Reuse the shared front-matter fence parser so all call sites agree.
+    crate::skills::frontmatter(&content)
+        .and_then(|fm| serde_yaml::from_str(fm).ok())
+        .unwrap_or_default()
 }
 
 /// Minimal `*` glob over a single path segment. Supports any number of `*`
