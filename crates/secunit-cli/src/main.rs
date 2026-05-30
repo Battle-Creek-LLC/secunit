@@ -115,6 +115,61 @@ enum Command {
         #[command(subcommand)]
         sub: RisksCmd,
     },
+    /// Render the WISP to a branded PDF (`init` scaffolds the partials).
+    Wisp {
+        #[command(subcommand)]
+        sub: WispCmd,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum WispCmd {
+    /// Scaffold the generic, operator-owned PDF partials.
+    Init {
+        /// Template directory [default: templates/wisp under the root].
+        #[arg(long, value_name = "DIR")]
+        dir: Option<PathBuf>,
+        /// Partial format: `typst` (default) or `html`.
+        #[arg(long, default_value = "typst")]
+        format: String,
+        /// Seed the cover/header with this logo instead of the bundled shield.
+        #[arg(long, value_name = "FILE")]
+        logo: Option<PathBuf>,
+        /// Overwrite existing partials instead of skipping them.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Render the latest WISP to PDF.
+    Export {
+        /// Output PDF path [default: wisp-<version>.pdf].
+        #[arg(short = 'o', long, value_name = "PATH")]
+        output: Option<PathBuf>,
+        /// WISP source file or directory (overrides config).
+        #[arg(long, value_name = "PATH")]
+        source: Option<PathBuf>,
+        /// Template directory holding the partials (overrides config).
+        #[arg(long, value_name = "PATH")]
+        template: Option<PathBuf>,
+        /// Include a table of contents (default on).
+        #[arg(long, conflicts_with = "no_toc")]
+        toc: bool,
+        #[arg(long)]
+        no_toc: bool,
+        /// Render page numbers (default on).
+        #[arg(long, conflicts_with = "no_page_numbers")]
+        page_numbers: bool,
+        #[arg(long)]
+        no_page_numbers: bool,
+        /// Force the DRAFT watermark.
+        #[arg(long)]
+        draft: bool,
+        /// Allow rendering from an uncommitted working tree.
+        #[arg(long)]
+        allow_dirty: bool,
+        /// Render backend: `typst` (default), `weasyprint`, or `chromium`.
+        #[arg(long, value_name = "BACKEND")]
+        renderer: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -467,6 +522,38 @@ fn main() -> ExitCode {
             ),
             RisksCmd::Show { risk_id } => cmd::risks::show(&ctx, &risk_id),
             RisksCmd::Rebuild => cmd::risks::rebuild(&ctx),
+        },
+        Command::Wisp { sub } => match sub {
+            WispCmd::Init {
+                dir,
+                format,
+                logo,
+                force,
+            } => cmd::wisp::init(&ctx, dir, &format, logo, force),
+            WispCmd::Export {
+                output,
+                source,
+                template,
+                toc,
+                no_toc,
+                page_numbers,
+                no_page_numbers,
+                draft,
+                allow_dirty,
+                renderer,
+            } => cmd::wisp::export(
+                &ctx,
+                output,
+                source,
+                template,
+                toc,
+                no_toc,
+                page_numbers,
+                no_page_numbers,
+                draft,
+                allow_dirty,
+                renderer,
+            ),
         },
     };
 
