@@ -283,10 +283,7 @@ fn heading_depth(level: HeadingLevel) -> usize {
 /// True if `s` is `*...*` with no interior unescaped `*` — i.e. a single bold
 /// run wrapping the whole string.
 fn is_wrapped_bold(s: &str) -> bool {
-    s.len() > 2
-        && s.starts_with('*')
-        && s.ends_with('*')
-        && !s[1..s.len() - 1].contains('*')
+    s.len() > 2 && s.starts_with('*') && s.ends_with('*') && !s[1..s.len() - 1].contains('*')
 }
 
 /// Ensure `s` ends with a blank line (`\n\n`) unless it is empty.
@@ -499,7 +496,10 @@ mod tests {
         // `*important*` is CommonMark emphasis → Typst `_italic_`, and an inline
         // run must never be promoted to a sub-heading.
         let typ = to_typst_default("This is *important* text.\n");
-        assert!(!typ.contains("===="), "inline emphasis wrongly promoted: {typ:?}");
+        assert!(
+            !typ.contains("===="),
+            "inline emphasis wrongly promoted: {typ:?}"
+        );
         assert!(typ.contains("_important_"), "emphasis not mapped: {typ:?}");
     }
 
@@ -508,7 +508,10 @@ mod tests {
         // `**bold**` mid-sentence has surrounding plain text, so it must stay
         // inline (`*bold*`) and not become a `====` sub-heading.
         let typ = to_typst_default("This is **bold** text.\n");
-        assert!(!typ.contains("===="), "inline strong wrongly promoted: {typ:?}");
+        assert!(
+            !typ.contains("===="),
+            "inline strong wrongly promoted: {typ:?}"
+        );
         assert!(typ.contains("*bold*"), "strong not mapped: {typ:?}");
     }
 
@@ -537,7 +540,10 @@ mod tests {
 
     #[test]
     fn section_slug_is_namespaced_and_stable() {
-        assert_eq!(section_slug("access-control-policy.md"), "wisp-access-control-policy");
+        assert_eq!(
+            section_slug("access-control-policy.md"),
+            "wisp-access-control-policy"
+        );
         assert_eq!(section_slug("security/README.md"), "wisp-readme");
         assert_eq!(section_slug("foo_bar.markdown"), "wisp-foo-bar");
     }
@@ -588,7 +594,10 @@ mod tests {
                     <!--wisp:anchor wisp-not-a-section-->\n\nBody.\n";
         let typ = to_typst(body, &sections);
         assert!(typ.contains("#metadata(none) <wisp-intro>"));
-        assert!(!typ.contains("wisp-not-a-section"), "forged anchor leaked: {typ}");
+        assert!(
+            !typ.contains("wisp-not-a-section"),
+            "forged anchor leaked: {typ}"
+        );
     }
 
     #[test]
@@ -608,7 +617,10 @@ mod tests {
             "[site](https://example.com) and [rb](runbooks/restore.md)\n",
             &sections,
         );
-        assert!(typ.contains("#link(\"https://example.com\")[site]"), "{typ}");
+        assert!(
+            typ.contains("#link(\"https://example.com\")[site]"),
+            "{typ}"
+        );
         assert!(typ.contains("#link(\"runbooks/restore.md\")[rb]"), "{typ}");
     }
 }

@@ -41,8 +41,9 @@ pub fn init(opts: &InitOptions) -> Result<InitReport> {
             if dest.exists() && !opts.force {
                 skipped.push(format!("logo.{ext}"));
             } else {
-                fs::copy(src, &dest)
-                    .with_context(|| format!("copy logo {} -> {}", src.display(), dest.display()))?;
+                fs::copy(src, &dest).with_context(|| {
+                    format!("copy logo {} -> {}", src.display(), dest.display())
+                })?;
                 written.push(format!("logo.{ext}"));
             }
         }

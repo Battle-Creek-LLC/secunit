@@ -51,8 +51,20 @@ impl Format {
     /// these and `export` checks for the same set.
     pub fn required_partials(self) -> &'static [&'static str] {
         match self {
-            Format::Typst => &["theme.typ", "header.typ", "footer.typ", "cover.typ", "toc.typ"],
-            Format::Html => &["theme.css", "header.html", "footer.html", "cover.html", "toc.html"],
+            Format::Typst => &[
+                "theme.typ",
+                "header.typ",
+                "footer.typ",
+                "cover.typ",
+                "toc.typ",
+            ],
+            Format::Html => &[
+                "theme.css",
+                "header.html",
+                "footer.html",
+                "cover.html",
+                "toc.html",
+            ],
         }
     }
 }
@@ -72,7 +84,9 @@ impl FromStr for Format {
         match s.trim().to_ascii_lowercase().as_str() {
             "typst" | "typ" => Ok(Format::Typst),
             "html" => Ok(Format::Html),
-            other => Err(format!("unknown partial format `{other}` (expected `typst` or `html`)")),
+            other => Err(format!(
+                "unknown partial format `{other}` (expected `typst` or `html`)"
+            )),
         }
     }
 }

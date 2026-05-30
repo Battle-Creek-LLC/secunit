@@ -361,10 +361,17 @@ fn ordered_markdown(dir: &Path, order: &[String]) -> Result<Vec<PathBuf>> {
 /// The logo filename within `template_dir` to reference from the partials —
 /// whichever supported image `wisp init` scaffolded. `None` if none is present.
 fn resolve_logo(template_dir: &Path) -> Option<String> {
-    ["logo.svg", "logo.png", "logo.jpg", "logo.jpeg", "logo.webp", "logo.gif"]
-        .into_iter()
-        .find(|name| template_dir.join(name).exists())
-        .map(str::to_string)
+    [
+        "logo.svg",
+        "logo.png",
+        "logo.jpg",
+        "logo.jpeg",
+        "logo.webp",
+        "logo.gif",
+    ]
+    .into_iter()
+    .find(|name| template_dir.join(name).exists())
+    .map(str::to_string)
 }
 
 fn rel_name(base: &Path, path: &Path) -> String {
@@ -446,7 +453,10 @@ mod tests {
         assert!(glob_match("*.md", "access-control-policy.md"));
         assert!(glob_match("*-overview.md", "company-overview.md"));
         assert!(!glob_match("*-overview.md", "access-policy.md"));
-        assert!(glob_match("access-control-policy.md", "access-control-policy.md"));
+        assert!(glob_match(
+            "access-control-policy.md",
+            "access-control-policy.md"
+        ));
         assert!(glob_match("*", "anything.md"));
     }
 

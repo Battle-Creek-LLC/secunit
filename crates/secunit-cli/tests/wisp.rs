@@ -32,7 +32,10 @@ fn wisp_init_scaffolds_partials() {
         "toc.typ",
         "logo.svg",
     ] {
-        assert!(tpl.join(name).exists(), "missing scaffolded partial: {name}");
+        assert!(
+            tpl.join(name).exists(),
+            "missing scaffolded partial: {name}"
+        );
     }
 }
 

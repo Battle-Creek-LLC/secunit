@@ -57,9 +57,7 @@ pub fn emit(doc: &WispDoc, opts: EmitOptions) -> String {
     }
     if m.status == Status::Draft {
         // Diagonal DRAFT watermark behind the content.
-        s.push_str(
-            "  background: rotate(-30deg, text(120pt, fill: rgb(\"#0000000d\"))[DRAFT]),\n",
-        );
+        s.push_str("  background: rotate(-30deg, text(120pt, fill: rgb(\"#0000000d\"))[DRAFT]),\n");
     }
     s.push_str("  numbering: none,\n");
     s.push_str(")\n");
@@ -113,7 +111,13 @@ mod tests {
 
     #[test]
     fn emits_imports_ctx_and_body() {
-        let out = emit(&doc(), EmitOptions { toc: true, page_numbers: true });
+        let out = emit(
+            &doc(),
+            EmitOptions {
+                toc: true,
+                page_numbers: true,
+            },
+        );
         assert!(out.contains("#import \"theme.typ\""));
         assert!(out.contains("#wisp-cover(ctx)"));
         assert!(out.contains("#wisp-toc(ctx)"));
@@ -126,7 +130,13 @@ mod tests {
 
     #[test]
     fn omits_toc_and_footer_when_disabled() {
-        let out = emit(&doc(), EmitOptions { toc: false, page_numbers: false });
+        let out = emit(
+            &doc(),
+            EmitOptions {
+                toc: false,
+                page_numbers: false,
+            },
+        );
         assert!(!out.contains("#wisp-toc(ctx)"));
         assert!(!out.contains("footer: wisp-footer"));
     }
