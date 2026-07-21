@@ -207,12 +207,13 @@ standard library without touching any org repo.
 ## Reports
 
 ```
-secunit report data --quarter <YYYY-Qn> --out <PATH>
-secunit report data --year <YYYY> --out <PATH>
-secunit report data --policy-status --out <PATH>
+secunit report data --week <YYYY-Wnn> [--out <PATH>]
+secunit report data --month <YYYY-MM> [--out <PATH>]
+secunit report data --quarter <YYYY-qN> [--out <PATH>]
+secunit report data --year <YYYY> [--out <PATH>]
 ```
 
-Aggregates manifests, state, and the risk register into JSON the `report-quarterly` skill renders to markdown. The binary never composes prose.
+Aggregates one period's manifests, coverage, state, and the risk register into JSON the `report` skill renders to markdown — per-control period status (satisfied/late/gap/open), sealed runs with draft-risk/issue counts, overdue controls, the register's opened/closed delta, and what's due next. Exactly one period selector is required; output goes to `--out` or stdout, always as JSON. The binary never composes prose — and it never publishes; filing the rendered report as a tracker issue (GitLab, Linear) is the `report` skill's job, configured under `report.publish` in `_config.yaml`.
 
 ## Registry / inventory management
 

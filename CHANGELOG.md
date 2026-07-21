@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `secunit report data --week|--month|--quarter|--year`: assemble one
+  period's per-control coverage, sealed runs, overdue controls, risk-register
+  delta, and upcoming due dates into JSON for a report skill to render
+  (PLAN Phase 6, extended with weekly/monthly selectors).
+- The bundled `report` skill now supports `kind: weekly | monthly` with a
+  one-screen stakeholder template, and an opt-in publish step
+  (`skill_args.publish: true`) that files the rendered report as a GitLab or
+  Linear issue per `report.publish` in `_config.yaml` and records the issue
+  URL in the run's `external_links`. Publishing is agent-side only — the
+  binary has no tracker integration.
+- Example controls `rp-weekly-status` / `rp-monthly-status` under
+  `docs/examples/controls/`.
+
 ## [0.5.0] — 2026-05-30
 
 ### Added

@@ -1,0 +1,28 @@
+id: rp-weekly-status
+title: Weekly stakeholder status report
+policy: security/assessment-authorization-monitoring-policy.md
+nist: [CA-7, PM-6]
+owner: cto
+cadence: weekly
+skill: report
+skill_args:
+  kind: weekly
+  sections: [program-status, open-risks, upcoming]
+  publish: true
+
+evidence_required:
+  - kind: file
+    path: raw/report-data.json
+    description: Structured period data from `secunit report data --week`.
+  - kind: report
+    path: raw/weekly-status.md
+    description: The composed stakeholder report, as published.
+
+outputs:
+  report: required
+
+references:
+  - title: Report skill (data pull, templates, publishing)
+    path: skills/report.md
+  - title: Publish target configuration
+    path: _config.yaml

@@ -31,6 +31,36 @@
       "type": "object",
       "additionalProperties": true
     },
+    "report": {
+      "type": "object",
+      "description": "Report skill settings; `publish` names the tracker the agent files rendered reports to (see skills/report.md).",
+      "additionalProperties": true,
+      "properties": {
+        "publish": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "target": { "type": "string", "enum": ["gitlab", "linear", "none"] },
+            "gitlab": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "project": { "type": "string" },
+                "labels": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "linear": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "team": { "type": "string" },
+                "labels": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    },
     "wisp": {
       "type": "object",
       "description": "WISP PDF export settings (see docs/wisp-pdf-export.md).",

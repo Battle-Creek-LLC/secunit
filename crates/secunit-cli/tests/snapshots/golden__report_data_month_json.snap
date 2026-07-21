@@ -1,0 +1,296 @@
+---
+source: crates/secunit-cli/tests/golden.rs
+expression: run_cli(&argv)
+---
+{
+  "schema_version": 1,
+  "period": {
+    "label": "2026-05",
+    "start": "2026-05-01",
+    "end": "2026-05-31"
+  },
+  "generated_on": "2026-06-01",
+  "controls": [
+    {
+      "id": "aa-weekly-audit-review",
+      "title": "Weekly audit and accountability review",
+      "owner": "cto",
+      "cadence": "weekly",
+      "periods": [
+        {
+          "period_id": "2026-W18",
+          "period_start": "2026-04-27",
+          "period_end": "2026-05-03",
+          "status": "gap",
+          "late": false
+        },
+        {
+          "period_id": "2026-W19",
+          "period_start": "2026-05-04",
+          "period_end": "2026-05-10",
+          "status": "gap",
+          "late": false
+        },
+        {
+          "period_id": "2026-W20",
+          "period_start": "2026-05-11",
+          "period_end": "2026-05-17",
+          "status": "gap",
+          "late": false
+        },
+        {
+          "period_id": "2026-W21",
+          "period_start": "2026-05-18",
+          "period_end": "2026-05-24",
+          "status": "gap",
+          "late": false
+        },
+        {
+          "period_id": "2026-W22",
+          "period_start": "2026-05-25",
+          "period_end": "2026-05-31",
+          "status": "gap",
+          "late": false
+        }
+      ],
+      "counts": {
+        "satisfied": 0,
+        "late": 0,
+        "failed": 0,
+        "gaps": 5,
+        "open": 0,
+        "skipped": 0,
+        "future": 0
+      }
+    },
+    {
+      "id": "ac-annual-access-review",
+      "title": "Annual access review across all in-scope systems",
+      "owner": "cto",
+      "cadence": "annual",
+      "periods": [
+        {
+          "period_id": "2026",
+          "period_start": "2026-01-01",
+          "period_end": "2026-12-31",
+          "status": "open",
+          "late": false
+        }
+      ],
+      "counts": {
+        "satisfied": 0,
+        "late": 0,
+        "failed": 0,
+        "gaps": 0,
+        "open": 1,
+        "skipped": 0,
+        "future": 0
+      }
+    },
+    {
+      "id": "ca-quarterly-vuln-scan",
+      "title": "Quarterly internal and external vulnerability scan",
+      "owner": "cto",
+      "cadence": "quarterly",
+      "periods": [
+        {
+          "period_id": "2026-q2",
+          "period_start": "2026-04-01",
+          "period_end": "2026-06-30",
+          "status": "open",
+          "late": false
+        }
+      ],
+      "counts": {
+        "satisfied": 0,
+        "late": 0,
+        "failed": 0,
+        "gaps": 0,
+        "open": 1,
+        "skipped": 0,
+        "future": 0
+      }
+    },
+    {
+      "id": "cp-annual-bcp-test",
+      "title": "Annual Business Continuity Plan test",
+      "owner": "bct",
+      "cadence": "annual",
+      "periods": [
+        {
+          "period_id": "2026",
+          "period_start": "2026-01-01",
+          "period_end": "2026-12-31",
+          "status": "open",
+          "late": false
+        }
+      ],
+      "counts": {
+        "satisfied": 0,
+        "late": 0,
+        "failed": 0,
+        "gaps": 0,
+        "open": 1,
+        "skipped": 0,
+        "future": 0
+      }
+    },
+    {
+      "id": "policy-annual-review-access-control",
+      "title": "Annual review of the Access Control Policy",
+      "owner": "cto",
+      "cadence": "annual",
+      "periods": [
+        {
+          "period_id": "2026",
+          "period_start": "2026-01-01",
+          "period_end": "2026-12-31",
+          "status": "open",
+          "late": false
+        }
+      ],
+      "counts": {
+        "satisfied": 0,
+        "late": 0,
+        "failed": 0,
+        "gaps": 0,
+        "open": 1,
+        "skipped": 0,
+        "future": 0
+      }
+    },
+    {
+      "id": "ra-pentest",
+      "title": "Third-party penetration test engagement",
+      "owner": "cto",
+      "cadence": "annual",
+      "periods": [
+        {
+          "period_id": "2026",
+          "period_start": "2026-01-01",
+          "period_end": "2026-12-31",
+          "status": "open",
+          "late": false
+        }
+      ],
+      "counts": {
+        "satisfied": 0,
+        "late": 0,
+        "failed": 0,
+        "gaps": 0,
+        "open": 1,
+        "skipped": 0,
+        "future": 0
+      }
+    },
+    {
+      "id": "ra-vuln-audit",
+      "title": "Risk-assessment-procedure vulnerability audit",
+      "owner": "cto",
+      "cadence": "annual",
+      "periods": [
+        {
+          "period_id": "2026",
+          "period_start": "2026-01-01",
+          "period_end": "2026-12-31",
+          "status": "open",
+          "late": false
+        }
+      ],
+      "counts": {
+        "satisfied": 0,
+        "late": 0,
+        "failed": 0,
+        "gaps": 0,
+        "open": 1,
+        "skipped": 0,
+        "future": 0
+      }
+    },
+    {
+      "id": "sca-weekly-dependency-scan",
+      "title": "Weekly software composition analysis (dependency vulnerability scan)",
+      "owner": "cto",
+      "cadence": "weekly",
+      "periods": [
+        {
+          "period_id": "2026-W18",
+          "period_start": "2026-04-27",
+          "period_end": "2026-05-03",
+          "status": "gap",
+          "late": false
+        },
+        {
+          "period_id": "2026-W19",
+          "period_start": "2026-05-04",
+          "period_end": "2026-05-10",
+          "status": "gap",
+          "late": false
+        },
+        {
+          "period_id": "2026-W20",
+          "period_start": "2026-05-11",
+          "period_end": "2026-05-17",
+          "status": "gap",
+          "late": false
+        },
+        {
+          "period_id": "2026-W21",
+          "period_start": "2026-05-18",
+          "period_end": "2026-05-24",
+          "status": "gap",
+          "late": false
+        },
+        {
+          "period_id": "2026-W22",
+          "period_start": "2026-05-25",
+          "period_end": "2026-05-31",
+          "status": "gap",
+          "late": false
+        }
+      ],
+      "counts": {
+        "satisfied": 0,
+        "late": 0,
+        "failed": 0,
+        "gaps": 5,
+        "open": 0,
+        "skipped": 0,
+        "future": 0
+      }
+    }
+  ],
+  "totals": {
+    "controls": 8,
+    "runs": 0,
+    "satisfied": 0,
+    "late": 0,
+    "failed": 0,
+    "gaps": 10,
+    "open": 6
+  },
+  "overdue": [
+    {
+      "id": "aa-weekly-audit-review",
+      "title": "Weekly audit and accountability review",
+      "owner": "cto",
+      "next_due": "2026-05-04",
+      "days_overdue": 28,
+      "last_status": "complete"
+    }
+  ],
+  "risks": {
+    "opened_in_period": 0,
+    "closed_in_period": 0,
+    "past_sla": 0
+  },
+  "upcoming": [
+    {
+      "id": "ca-quarterly-vuln-scan",
+      "title": "Quarterly internal and external vulnerability scan",
+      "owner": "cto",
+      "cadence": "quarterly",
+      "next_due": "2026-07-01"
+    }
+  ]
+}
