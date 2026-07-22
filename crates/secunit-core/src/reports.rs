@@ -130,7 +130,14 @@ pub struct RiskSummary {
     /// Risks currently open / in-progress, most severe first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open: Vec<OpenRisk>,
+    /// Risks created (an `opened` event) inside the window.
     pub opened_in_period: usize,
+    /// Risks reopened inside the window. Counted separately from
+    /// `opened_in_period` so a reopen never reads as "no new risk".
+    pub reopened_in_period: usize,
+    /// Risks that closed inside the window and are still closed at the
+    /// window's end. Per-risk, not per-event: close→reopen→close churn
+    /// counts once, and a close undone by a reopen counts zero.
     pub closed_in_period: usize,
     /// Open risks whose SLA due date has passed `generated_on`.
     pub past_sla: usize,
@@ -427,27 +434,56 @@ fn risk_summary(
 
     for risk_id in ids {
         let events = risks::load_events(root, &risk_id)?;
+
+        // Count per risk, not per event: a close that a later in-window
+        // reopen undoes must not read as a closure, and churn must not
+        // double-count. `closed` therefore requires both an in-window
+        // closing event and a closed status when the window ends.
+        let mut opened = false;
+        let mut reopened = false;
+        let mut closing_event = false;
         for ev in &events {
             let d = ev.ts.date_naive();
             if d < start || d > end {
                 continue;
             }
             match &ev.data {
-                EventData::Opened { .. } => summary.opened_in_period += 1,
+                EventData::Opened { .. } => opened = true,
+                EventData::Reopened { .. } => reopened = true,
                 EventData::Remediated { .. } | EventData::ExceptionDocumented { .. } => {
-                    summary.closed_in_period += 1
+                    closing_event = true
                 }
-                EventData::StatusChanged { to, .. } => {
-                    if matches!(
-                        to,
-                        Status::Remediated | Status::FalsePositive | Status::AcceptedException
-                    ) {
-                        summary.closed_in_period += 1;
+                EventData::StatusChanged { to, .. } => match to {
+                    Status::Remediated | Status::FalsePositive | Status::AcceptedException => {
+                        closing_event = true
                     }
-                }
+                    Status::Reopened => reopened = true,
+                    _ => {}
+                },
                 _ => {}
             }
         }
+        if opened {
+            summary.opened_in_period += 1;
+        }
+        if reopened {
+            summary.reopened_in_period += 1;
+        }
+        if closing_event {
+            let at_end: Vec<risks::RiskEvent> = events
+                .iter()
+                .filter(|e| e.ts.date_naive() <= end)
+                .cloned()
+                .collect();
+            let closed_at_end = matches!(
+                risks::fold(&at_end).status,
+                Status::Remediated | Status::FalsePositive | Status::AcceptedException
+            );
+            if closed_at_end {
+                summary.closed_in_period += 1;
+            }
+        }
+
         let state: RiskState = risks::fold(&events);
         if matches!(
             state.status,

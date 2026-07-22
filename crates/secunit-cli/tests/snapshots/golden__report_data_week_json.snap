@@ -215,6 +215,7 @@ expression: run_cli(&argv)
   },
   "risks": {
     "opened_in_period": 0,
+    "reopened_in_period": 0,
     "closed_in_period": 0,
     "past_sla": 0
   },

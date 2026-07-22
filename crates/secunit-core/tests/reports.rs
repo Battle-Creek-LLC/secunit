@@ -298,6 +298,7 @@ fn risk_register_delta_counts_events_in_window() {
     .expect("assemble");
 
     assert_eq!(data.risks.opened_in_period, 2);
+    assert_eq!(data.risks.reopened_in_period, 0);
     assert_eq!(data.risks.closed_in_period, 1);
     assert_eq!(data.risks.open.len(), 1);
     assert_eq!(data.risks.open[0].risk_id, r1.risk_id);
@@ -323,6 +324,141 @@ fn risk_register_delta_counts_events_in_window() {
     assert_eq!(june.risks.opened_in_period, 0);
     assert_eq!(june.risks.closed_in_period, 0);
     assert_eq!(june.risks.open.len(), 1);
+}
+
+#[test]
+fn risk_delta_counts_per_risk_through_reopen_churn() {
+    let (_tmp, root) = staged_fixture();
+
+    let finding_ref = |fid: &str| FindingRef {
+        control_id: CONTROL.to_string(),
+        run_id: "2026-05-04-run-001".to_string(),
+        manifest_sha256: "0".repeat(64),
+        finding_id: fid.to_string(),
+        body_path: None,
+    };
+    let ts = |m: u32, day: u32| d(2026, m, day).and_hms_opt(9, 0, 0).unwrap().and_utc();
+    let start = |root: &Path, id: &str, when| {
+        risks::append(
+            root,
+            id,
+            risks::EventData::StatusChanged {
+                from: Status::Open,
+                to: Status::InProgress,
+                reason: "assigned".into(),
+            },
+            "tester",
+            None,
+            Some(when),
+        )
+        .expect("start");
+    };
+    let remediate = |root: &Path, id: &str, when| {
+        risks::append(
+            root,
+            id,
+            risks::EventData::Remediated {
+                resolved_run_ref: None,
+                note: "fixed".into(),
+            },
+            "tester",
+            None,
+            Some(when),
+        )
+        .expect("remediate");
+    };
+    let reopen = |root: &Path, id: &str, when| {
+        risks::append(
+            root,
+            id,
+            risks::EventData::Reopened {
+                reason: "regressed".into(),
+            },
+            "tester",
+            None,
+            Some(when),
+        )
+        .expect("reopen");
+    };
+
+    // r1: closed, reopened, and closed again all inside May — one risk,
+    // one closure, one reopen; never double-counted.
+    let r1 = risks::open(
+        &root,
+        finding_ref("F-010"),
+        "flapping control drift",
+        Severity::Medium,
+        3,
+        2,
+        vec!["api".into()],
+        30,
+        d(2026, 6, 1),
+        "tester",
+        None,
+        Some(ts(5, 2)),
+    )
+    .expect("open r1");
+    start(&root, &r1.risk_id, ts(5, 3));
+    remediate(&root, &r1.risk_id, ts(5, 5));
+    reopen(&root, &r1.risk_id, ts(5, 10));
+    start(&root, &r1.risk_id, ts(5, 11));
+    remediate(&root, &r1.risk_id, ts(5, 20));
+
+    // r2: remediated in April, reopened in May, still open — must count
+    // as reopened, not vanish from the delta while growing the open list.
+    let r2 = risks::open(
+        &root,
+        finding_ref("F-011"),
+        "regressed hardening",
+        Severity::High,
+        4,
+        3,
+        vec!["api".into()],
+        30,
+        d(2026, 5, 10),
+        "tester",
+        None,
+        Some(ts(4, 2)),
+    )
+    .expect("open r2");
+    start(&root, &r2.risk_id, ts(4, 3));
+    remediate(&root, &r2.risk_id, ts(4, 10));
+    reopen(&root, &r2.risk_id, ts(5, 12));
+
+    let (reg, _) = loader::load(&root);
+    let may = reports::assemble(
+        &reg,
+        "2026-05",
+        Cadence::Monthly,
+        d(2026, 5, 1),
+        d(2026, 5, 31),
+        d(2026, 6, 1),
+    )
+    .expect("assemble may");
+
+    assert_eq!(may.risks.opened_in_period, 1, "only r1 was created in May");
+    assert_eq!(may.risks.reopened_in_period, 2, "r1 and r2 both reopened");
+    assert_eq!(
+        may.risks.closed_in_period, 1,
+        "r1's double close counts once; r2's April close is out of window"
+    );
+    assert_eq!(may.risks.open.len(), 1, "only r2 is open at report time");
+    assert_eq!(may.risks.open[0].risk_id, r2.risk_id);
+
+    // April: r2's close was undone by a May reopen — but at April's end it
+    // stood closed, so April's report still counts it.
+    let april = reports::assemble(
+        &reg,
+        "2026-04",
+        Cadence::Monthly,
+        d(2026, 4, 1),
+        d(2026, 4, 30),
+        d(2026, 6, 1),
+    )
+    .expect("assemble april");
+    assert_eq!(april.risks.opened_in_period, 1);
+    assert_eq!(april.risks.closed_in_period, 1, "closed as of April 30");
+    assert_eq!(april.risks.reopened_in_period, 0);
 }
 
 #[test]

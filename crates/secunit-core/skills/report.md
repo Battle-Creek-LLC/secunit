@@ -103,7 +103,7 @@ Stakeholder-brief: one screen, numbers first.
 <Findings from this period's runs, or "none". Cite the run that produced each.>
 
 ## Risk register
-- Open: <n> (<n> past SLA). Opened this period: <n>. Closed: <n>.
+- Open: <n> (<n> past SLA). Opened this period: <n>. Reopened: <n>. Closed: <n>.
 <Table of open risks above threshold: id, severity, title, owner, due.>
 
 ## Upcoming
