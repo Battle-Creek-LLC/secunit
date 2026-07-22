@@ -417,22 +417,7 @@ fn risk_summary(
     today: NaiveDate,
 ) -> anyhow::Result<RiskSummary> {
     let mut summary = RiskSummary::default();
-    let risks_dir = root.join("risks");
-    if !risks_dir.is_dir() {
-        return Ok(summary);
-    }
-    let mut ids: Vec<String> = Vec::new();
-    for entry in fs::read_dir(&risks_dir)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() && entry.path().join("events.jsonl").is_file() {
-            if let Some(name) = entry.file_name().to_str() {
-                ids.push(name.to_string());
-            }
-        }
-    }
-    ids.sort();
-
-    for risk_id in ids {
+    for risk_id in risks::risk_ids(root)? {
         let events = risks::load_events(root, &risk_id)?;
 
         // Count per risk, not per event: a close that a later in-window

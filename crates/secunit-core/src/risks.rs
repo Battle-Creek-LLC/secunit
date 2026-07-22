@@ -36,6 +36,6 @@ pub use model::{
     Status,
 };
 pub use store::{
-    append, build_index, load_events, open, rebuild, verify_finding_ref, AppendOutcome,
+    append, build_index, load_events, open, rebuild, risk_ids, verify_finding_ref, AppendOutcome,
     OpenOutcome, RiskIndex, RiskIndexEntry,
 };

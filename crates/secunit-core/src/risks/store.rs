@@ -540,11 +540,29 @@ fn refresh_index_entry(
 /// `risks/`. Pure-ish: reads the logs but writes nothing. `rebuild` wraps
 /// this with the lock and an atomic write.
 pub fn build_index(root: &Path) -> Result<RiskIndex> {
-    let dir = risks_root(root);
     let mut index = RiskIndex::default();
+    for name in risk_ids(root)? {
+        let events = load_events(root, &name).with_context(|| format!("load events for {name}"))?;
+        let head_sha = log_head_sha(root, &name)?;
+        let state = fold::fold(&events);
+        index
+            .risks
+            .insert(name, entry_from_state(&state, &head_sha));
+    }
+    index.updated_at = Some(Utc::now());
+    Ok(index)
+}
+
+/// Every risk id in the register: a `risks/<R-NNNN>/` directory whose name
+/// passes [`parse_risk_id`] and that has an `events.jsonl`. Sorted. This is
+/// the register's single membership rule — index builds and report
+/// assembly go through it so they can never disagree about what counts as
+/// a risk (stray dirs, backups, and scratch copies are ignored by both).
+pub fn risk_ids(root: &Path) -> Result<Vec<String>> {
+    let dir = risks_root(root);
+    let mut ids: Vec<String> = Vec::new();
     if !dir.exists() {
-        index.updated_at = Some(Utc::now());
-        return Ok(index);
+        return Ok(ids);
     }
     for entry in fs::read_dir(&dir)? {
         let entry = entry?;
@@ -558,15 +576,10 @@ pub fn build_index(root: &Path) -> Result<RiskIndex> {
         if !events_path(root, &name).exists() {
             continue;
         }
-        let events = load_events(root, &name).with_context(|| format!("load events for {name}"))?;
-        let head_sha = log_head_sha(root, &name)?;
-        let state = fold::fold(&events);
-        index
-            .risks
-            .insert(name, entry_from_state(&state, &head_sha));
+        ids.push(name);
     }
-    index.updated_at = Some(Utc::now());
-    Ok(index)
+    ids.sort();
+    Ok(ids)
 }
 
 /// Regenerate `risks/index.json` from all logs and write it atomically under
