@@ -23,8 +23,8 @@ pub struct PeriodArg<'a> {
 }
 
 impl PeriodArg<'_> {
-    /// Resolve to `(label, start, end)` via `period::bounds`.
-    fn resolve(&self) -> Result<(String, NaiveDate, NaiveDate)> {
+    /// Resolve to `(label, cadence, start, end)` via `period::bounds`.
+    fn resolve(&self) -> Result<(String, Cadence, NaiveDate, NaiveDate)> {
         let (cadence, label, hint) = match (self.week, self.month, self.quarter, self.year) {
             (Some(w), None, None, None) => (Cadence::Weekly, w, "YYYY-Wnn (e.g. 2026-W30)"),
             (None, Some(m), None, None) => (Cadence::Monthly, m, "YYYY-MM (e.g. 2026-07)"),
@@ -33,14 +33,14 @@ impl PeriodArg<'_> {
             _ => bail!("pass exactly one of --week, --month, --quarter, --year"),
         };
         match period::bounds(cadence, label) {
-            Some((start, end)) => Ok((label.to_string(), start, end)),
+            Some((start, end)) => Ok((label.to_string(), cadence, start, end)),
             None => bail!("`{label}` is not a valid period id; expected {hint}"),
         }
     }
 }
 
 pub fn data(ctx: &Ctx, period: &PeriodArg<'_>, out: Option<&Path>) -> Result<ExitCode> {
-    let (label, start, end) = period.resolve()?;
+    let (label, cadence, start, end) = period.resolve()?;
 
     let (reg, report) = ctx.load()?;
     // A control that failed to load is absent from the registry and would
@@ -53,7 +53,7 @@ pub fn data(ctx: &Ctx, period: &PeriodArg<'_>, out: Option<&Path>) -> Result<Exi
         return Ok(ExitCode::from(1));
     }
 
-    let data = reports::assemble(&reg, &label, start, end, ctx.today)?;
+    let data = reports::assemble(&reg, &label, cadence, start, end, ctx.today)?;
     let json = serde_json::to_string_pretty(&data)?;
     match out {
         Some(path) => {

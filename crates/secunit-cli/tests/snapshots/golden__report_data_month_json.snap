@@ -269,16 +269,6 @@ expression: run_cli(&argv)
     "gaps": 10,
     "open": 6
   },
-  "overdue": [
-    {
-      "id": "aa-weekly-audit-review",
-      "title": "Weekly audit and accountability review",
-      "owner": "cto",
-      "next_due": "2026-05-04",
-      "days_overdue": 28,
-      "last_status": "complete"
-    }
-  ],
   "risks": {
     "opened_in_period": 0,
     "closed_in_period": 0,
@@ -290,7 +280,21 @@ expression: run_cli(&argv)
       "title": "Quarterly internal and external vulnerability scan",
       "owner": "cto",
       "cadence": "quarterly",
-      "next_due": "2026-07-01"
+      "next_due": "2026-06-01"
+    },
+    {
+      "id": "sca-weekly-dependency-scan",
+      "title": "Weekly software composition analysis (dependency vulnerability scan)",
+      "owner": "cto",
+      "cadence": "weekly",
+      "next_due": "2026-06-01"
+    },
+    {
+      "id": "aa-weekly-audit-review",
+      "title": "Weekly audit and accountability review",
+      "owner": "cto",
+      "cadence": "weekly",
+      "next_due": "2026-06-02"
     }
   ]
 }

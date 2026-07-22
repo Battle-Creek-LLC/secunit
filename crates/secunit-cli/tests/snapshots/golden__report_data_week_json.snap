@@ -220,8 +220,22 @@ expression: run_cli(&argv)
   },
   "upcoming": [
     {
+      "id": "ca-quarterly-vuln-scan",
+      "title": "Quarterly internal and external vulnerability scan",
+      "owner": "cto",
+      "cadence": "quarterly",
+      "next_due": "2026-05-01"
+    },
+    {
       "id": "aa-weekly-audit-review",
       "title": "Weekly audit and accountability review",
+      "owner": "cto",
+      "cadence": "weekly",
+      "next_due": "2026-05-04"
+    },
+    {
+      "id": "sca-weekly-dependency-scan",
+      "title": "Weekly software composition analysis (dependency vulnerability scan)",
       "owner": "cto",
       "cadence": "weekly",
       "next_due": "2026-05-04"

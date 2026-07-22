@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use chrono::NaiveDate;
 use secunit_core::evidence::manifest::{RunOutcome, RunResult, SystemOutcome, SystemResult};
 use secunit_core::evidence::runner::{self, PrepareOpts};
+use secunit_core::model::Cadence;
 use secunit_core::registry::loader;
 use secunit_core::reports;
 use secunit_core::risks::{self, FindingRef, Severity, Status};
@@ -145,6 +146,7 @@ fn monthly_window_counts_runs_and_surfaces_missed_weeks() {
     let data = reports::assemble(
         &reg,
         "2026-05",
+        Cadence::Monthly,
         d(2026, 5, 1),
         d(2026, 5, 31),
         d(2026, 6, 1),
@@ -168,13 +170,15 @@ fn monthly_window_counts_runs_and_surfaces_missed_weeks() {
     assert_eq!(data.totals.runs, 2);
     assert!(data.totals.gaps >= 2);
 
-    // state.json advanced past the fixture next_due dates by 2026-06-01,
-    // so the never-refreshed controls surface as overdue.
+    // overdue/upcoming follow the resolver, matching `secunit due`: a
+    // missed weekly rolls forward to its next weekday (the misses are the
+    // gaps above, not a standing overdue), so it shows under upcoming.
+    assert!(data.overdue.is_empty(), "resolver rolls weeklies forward");
     assert!(
-        data.overdue
+        data.upcoming
             .iter()
-            .any(|o| o.id == "aa-weekly-audit-review"),
-        "stale weekly control should be overdue"
+            .any(|u| u.id == "aa-weekly-audit-review"),
+        "stale weekly control is due again next week"
     );
 }
 
@@ -187,6 +191,7 @@ fn weekly_window_scopes_to_one_week() {
     let data = reports::assemble(
         &reg,
         "2026-W19",
+        Cadence::Weekly,
         d(2026, 5, 4),
         d(2026, 5, 10),
         d(2026, 5, 11),
@@ -285,6 +290,7 @@ fn risk_register_delta_counts_events_in_window() {
     let data = reports::assemble(
         &reg,
         "2026-05",
+        Cadence::Monthly,
         d(2026, 5, 1),
         d(2026, 5, 31),
         d(2026, 6, 1),
@@ -308,6 +314,7 @@ fn risk_register_delta_counts_events_in_window() {
     let june = reports::assemble(
         &reg,
         "2026-06",
+        Cadence::Monthly,
         d(2026, 6, 1),
         d(2026, 6, 30),
         d(2026, 6, 15),
@@ -329,6 +336,7 @@ fn catch_up_run_sealed_in_window_is_reported() {
     let data = reports::assemble(
         &reg,
         "2026-W19",
+        Cadence::Weekly,
         d(2026, 5, 4),
         d(2026, 5, 10),
         d(2026, 5, 11),

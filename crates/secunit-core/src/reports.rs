@@ -16,6 +16,7 @@ use crate::evidence::manifest::{Manifest, RunOutcome};
 use crate::model::{Cadence, LoadedRegistry, RunStatus};
 use crate::registry::coverage::{self, PeriodCoverage, PeriodStatus};
 use crate::registry::period;
+use crate::registry::resolver;
 use crate::risks::{self, EventData, RiskState, Severity, Status};
 
 // ---------- payload ---------------------------------------------------------
@@ -32,11 +33,13 @@ pub struct ReportData {
     pub generated_on: NaiveDate,
     pub controls: Vec<ControlActivity>,
     pub totals: Totals,
-    /// Controls whose `state.json` next_due has passed `generated_on`.
+    /// Controls past due (and past their cadence grace window) as of
+    /// `generated_on`, per the same resolver `secunit due` uses.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overdue: Vec<OverdueControl>,
     pub risks: RiskSummary,
-    /// Controls coming due within one window-length past the window end.
+    /// Controls due between `generated_on` and the end of the calendar
+    /// period after the window, per the same resolver `secunit due` uses.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upcoming: Vec<UpcomingControl>,
 }
@@ -152,11 +155,14 @@ pub struct OpenRisk {
 
 /// Assemble the report payload for `[start, end]`, labelled `label`.
 ///
-/// `today` separates open from gap periods and anchors SLA/overdue math —
-/// pin it (`--today`) for deterministic output.
+/// `window_cadence` is the cadence of the reporting window itself (weekly
+/// report → `Weekly`) and anchors the `upcoming` horizon to the next
+/// calendar period. `today` separates open from gap periods and anchors
+/// SLA/overdue math — pin it (`--today`) for deterministic output.
 pub fn assemble(
     reg: &LoadedRegistry,
     label: &str,
+    window_cadence: Cadence,
     start: NaiveDate,
     end: NaiveDate,
     today: NaiveDate,
@@ -222,7 +228,7 @@ pub fn assemble(
     }
 
     let overdue = overdue_controls(reg, today);
-    let upcoming = upcoming_controls(reg, today, start, end);
+    let upcoming = upcoming_controls(reg, today, window_cadence, start, end);
     let risks = risk_summary(&reg.root, start, end, today)?;
 
     Ok(ReportData {
@@ -316,54 +322,77 @@ fn runs_in_window(
     Ok(out)
 }
 
+/// Overdue per the resolver — the same due dates, schedule overrides,
+/// never-run handling, and per-cadence grace `secunit due` applies, so the
+/// report can never contradict it.
 fn overdue_controls(reg: &LoadedRegistry, today: NaiveDate) -> Vec<OverdueControl> {
     let mut out: Vec<OverdueControl> = Vec::new();
-    for control in reg.controls.values() {
-        let Some(entry) = reg.state.controls.get(&control.id) else {
+    for row in resolver::due_rows(reg, today) {
+        if !row.overdue {
             continue;
-        };
-        let Some(next_due) = entry.next_due else {
-            continue;
-        };
-        if next_due < today {
-            out.push(OverdueControl {
-                id: control.id.clone(),
-                title: control.title.clone(),
-                owner: control.owner.clone(),
-                next_due,
-                days_overdue: (today - next_due).num_days(),
-                last_status: entry.last_status,
-            });
         }
+        let Some(next_due) = row.next_due else {
+            continue;
+        };
+        let Some(control) = reg.controls.get(&row.control_id) else {
+            continue;
+        };
+        let last_status = reg
+            .state
+            .controls
+            .get(&row.control_id)
+            .map(|e| e.last_status)
+            .unwrap_or(RunStatus::NeverRun);
+        out.push(OverdueControl {
+            id: control.id.clone(),
+            title: control.title.clone(),
+            owner: control.owner.clone(),
+            next_due,
+            days_overdue: (today - next_due).num_days(),
+            last_status,
+        });
     }
     out.sort_by_key(|o| std::cmp::Reverse(o.days_overdue));
     out
 }
 
-/// Controls due between `today` and one window-length past the window end
-/// — the report's "what's next" horizon.
+/// Controls due between `today` and the end of the calendar period after
+/// the window (the next week/month/quarter/year), resolver-computed like
+/// `overdue_controls`. Controls already overdue are listed there instead.
 fn upcoming_controls(
     reg: &LoadedRegistry,
     today: NaiveDate,
+    window_cadence: Cadence,
     start: NaiveDate,
     end: NaiveDate,
 ) -> Vec<UpcomingControl> {
-    let window_days = (end - start).num_days() + 1;
-    let horizon = end + chrono::Duration::days(window_days);
+    let next_period_start = end + chrono::Duration::days(1);
+    let horizon = period::derive(window_cadence, next_period_start)
+        .and_then(|pid| period::bounds(window_cadence, &pid))
+        .map(|(_, pe)| pe)
+        // Continuous has no periods; fall back to one window-length.
+        .unwrap_or(end + chrono::Duration::days((end - start).num_days() + 1));
     let mut out: Vec<UpcomingControl> = Vec::new();
-    for control in reg.controls.values() {
-        let Some(next_due) = reg.state.controls.get(&control.id).and_then(|e| e.next_due) else {
+    for row in resolver::due_rows(reg, today) {
+        if row.overdue {
+            continue;
+        }
+        let Some(next_due) = row.next_due else {
             continue;
         };
-        if next_due >= today && next_due <= horizon {
-            out.push(UpcomingControl {
-                id: control.id.clone(),
-                title: control.title.clone(),
-                owner: control.owner.clone(),
-                cadence: control.cadence,
-                next_due,
-            });
+        if next_due < today || next_due > horizon {
+            continue;
         }
+        let Some(control) = reg.controls.get(&row.control_id) else {
+            continue;
+        };
+        out.push(UpcomingControl {
+            id: control.id.clone(),
+            title: control.title.clone(),
+            owner: control.owner.clone(),
+            cadence: control.cadence,
+            next_due,
+        });
     }
     out.sort_by(|a, b| a.next_due.cmp(&b.next_due).then(a.id.cmp(&b.id)));
     out
