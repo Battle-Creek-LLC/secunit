@@ -88,7 +88,34 @@ pub fn validate_transition(from: Status, to: Status) -> Result<(), TransitionErr
 /// state. Loaders validate this before folding.
 pub fn fold(events: &[RiskEvent]) -> RiskState {
     let first = events.first().expect("fold: empty event log");
-    let mut state = match &first.data {
+    let mut state = seed(first);
+    for ev in &events[1..] {
+        apply(&mut state, ev);
+    }
+    state
+}
+
+/// [`fold`] restricted to events dated at or before `cutoff` — the risk's
+/// state as of that day's end. Borrows the slice, never clones events.
+/// Returns `None` when no event qualifies. Same contract as [`fold`]
+/// otherwise: the first qualifying event must be `opened`.
+pub fn fold_at(events: &[RiskEvent], cutoff: chrono::NaiveDate) -> Option<RiskState> {
+    let mut iter = events.iter().filter(|e| e.ts.date_naive() <= cutoff);
+    let first = iter.next()?;
+    let mut state = seed(first);
+    for ev in iter {
+        apply(&mut state, ev);
+    }
+    Some(state)
+}
+
+/// Seed the state from the leading `opened` event.
+///
+/// # Panics
+///
+/// Panics when the event is not `opened` — see [`fold`]'s contract.
+fn seed(first: &RiskEvent) -> RiskState {
+    match &first.data {
         EventData::Opened {
             finding_ref,
             title,
@@ -118,12 +145,7 @@ pub fn fold(events: &[RiskEvent]) -> RiskState {
             "fold: first event must be `opened`, got `{}`",
             other.type_str()
         ),
-    };
-
-    for ev in &events[1..] {
-        apply(&mut state, ev);
     }
-    state
 }
 
 fn apply(state: &mut RiskState, ev: &RiskEvent) {

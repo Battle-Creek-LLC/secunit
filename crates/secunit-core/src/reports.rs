@@ -467,13 +467,13 @@ fn risk_summary(
                 EventData::Remediated { .. } | EventData::ExceptionDocumented { .. } => {
                     closing_event = true
                 }
-                EventData::StatusChanged { to, .. } => match to {
-                    Status::Remediated | Status::FalsePositive | Status::AcceptedException => {
-                        closing_event = true
+                EventData::StatusChanged { to, .. } => {
+                    if to.is_closed() {
+                        closing_event = true;
+                    } else if matches!(to, Status::Reopened) {
+                        reopened = true;
                     }
-                    Status::Reopened => reopened = true,
-                    _ => {}
-                },
+                }
                 _ => {}
             }
         }
@@ -484,25 +484,14 @@ fn risk_summary(
             summary.reopened_in_period += 1;
         }
         if closing_event {
-            let at_end: Vec<risks::RiskEvent> = events
-                .iter()
-                .filter(|e| e.ts.date_naive() <= end)
-                .cloned()
-                .collect();
-            let closed_at_end = matches!(
-                risks::fold(&at_end).status,
-                Status::Remediated | Status::FalsePositive | Status::AcceptedException
-            );
+            let closed_at_end = risks::fold_at(&events, end).is_some_and(|s| s.status.is_closed());
             if closed_at_end {
                 summary.closed_in_period += 1;
             }
         }
 
         let state: RiskState = risks::fold(&events);
-        if matches!(
-            state.status,
-            Status::Open | Status::InProgress | Status::Reopened
-        ) {
+        if state.status.is_open() {
             let past_sla = state.due_at.is_some_and(|d| d < today);
             if past_sla {
                 summary.past_sla += 1;

@@ -30,7 +30,7 @@ pub mod store;
 
 // Re-export the surface most callers (verify, CLI, GUI) want at
 // `secunit_core::risks::*` so they don't have to thread the submodule path.
-pub use fold::{fold, validate_transition, TransitionError};
+pub use fold::{fold, fold_at, validate_transition, TransitionError};
 pub use model::{
     Agent, EventData, EventEnvelope, ExternalLink, FindingRef, RiskEvent, RiskState, Severity,
     Status,
