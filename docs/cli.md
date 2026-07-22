@@ -43,7 +43,7 @@ Pure read commands. Default human tables; `--json` flips to structured output su
 
 ```
 secunit due [--within <DURATION>] [--overdue-only] [--owner <ROLE>] [--json]
-secunit calendar [--quarter <YYYY-Qn>] [--year <YYYY>] [--through <DATE>] [--json]
+secunit calendar [--quarter <YYYY-qN>] [--year <YYYY>] [--through <DATE>] [--json]
 secunit status [<CONTROL_ID>] [--json]
 secunit show <CONTROL_ID> [--json]
 secunit scope <CONTROL_ID> [--at <DATE>] [--json]
@@ -213,7 +213,7 @@ secunit report data --quarter <YYYY-qN> [--out <PATH>]
 secunit report data --year <YYYY> [--out <PATH>]
 ```
 
-Aggregates one period's manifests, coverage, state, and the risk register into JSON the `report` skill renders to markdown — per-control period status (satisfied/late/gap/open), sealed runs with draft-risk/issue counts, overdue controls, the register's opened/closed delta, and what's due next. Exactly one period selector is required; output goes to `--out` or stdout, always as JSON. The binary never composes prose — and it never publishes; filing the rendered report as a tracker issue (GitLab, Linear) is the `report` skill's job, configured under `report.publish` in `_config.yaml`.
+Period selectors are case-insensitive and tolerate missing zero-padding (`2026-Q3`, `2026-W5` normalize to `2026-q3`, `2026-W05`). Aggregates one period's manifests, coverage, state, and the risk register into JSON the `report` skill renders to markdown — per-control period status (satisfied/late/gap/open), sealed runs with draft-risk/issue counts, overdue controls, the register's opened/closed delta, and what's due next. Exactly one period selector is required; output goes to `--out` or stdout, always as JSON. The binary never composes prose — and it never publishes; filing the rendered report as a tracker issue (GitLab, Linear) is the `report` skill's job, configured under `report.publish` in `_config.yaml`.
 
 ## Registry / inventory management
 
