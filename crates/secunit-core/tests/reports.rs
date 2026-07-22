@@ -74,11 +74,18 @@ fn copy_tree(src: &Path, dst: &Path) {
 
 /// Seal one complete run of `CONTROL` stamped at `today` (noon UTC).
 fn run_one(root: &Path, today: NaiveDate) {
+    run_one_claiming(root, today, None);
+}
+
+/// Like [`run_one`], but claiming an explicit period (the `--period`
+/// catch-up flow).
+fn run_one_claiming(root: &Path, today: NaiveDate, period_id: Option<&str>) {
     let (reg, report) = loader::load(root);
     assert!(report.errors.is_empty(), "load errors: {:?}", report.errors);
 
     let opts = PrepareOpts {
         today: Some(today),
+        period_id: period_id.map(str::to_string),
         ..Default::default()
     };
     let ctx = runner::prepare(&reg, CONTROL, &opts).expect("prepare");
@@ -309,4 +316,33 @@ fn risk_register_delta_counts_events_in_window() {
     assert_eq!(june.risks.opened_in_period, 0);
     assert_eq!(june.risks.closed_in_period, 0);
     assert_eq!(june.risks.open.len(), 1);
+}
+
+#[test]
+fn catch_up_run_sealed_in_window_is_reported() {
+    let (_tmp, root) = staged_fixture();
+    // W18 was missed; the catch-up run seals on Tuesday of W19 while
+    // claiming the prior week — the flow report.md documents.
+    run_one_claiming(&root, d(2026, 5, 5), Some("2026-W18"));
+
+    let (reg, _) = loader::load(&root);
+    let data = reports::assemble(
+        &reg,
+        "2026-W19",
+        d(2026, 5, 4),
+        d(2026, 5, 10),
+        d(2026, 5, 11),
+    )
+    .expect("assemble");
+
+    let sca = data.controls.iter().find(|c| c.id == CONTROL).unwrap();
+    assert_eq!(
+        sca.runs.len(),
+        1,
+        "a run sealed inside W19 must appear even though it claims W18"
+    );
+    assert_eq!(sca.runs[0].period_id.as_deref(), Some("2026-W18"));
+    // The claimed period is outside the window, so W19 itself stays
+    // unsatisfied — the run is activity context, not period coverage.
+    assert_eq!(sca.counts.satisfied, 0);
 }

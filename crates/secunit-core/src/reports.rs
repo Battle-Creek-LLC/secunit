@@ -274,17 +274,23 @@ fn runs_in_window(
                 let Ok(manifest) = serde_json::from_slice::<Manifest>(&bytes) else {
                     continue;
                 };
-                let in_window = match &manifest.period_id {
-                    Some(pid) => {
-                        periods.iter().any(|p| &p.period_id == pid)
-                            || period::bounds(cadence, pid)
-                                .is_some_and(|(ps, pe)| ps <= end && pe >= start)
-                    }
-                    None => {
-                        let d = manifest.completed_at.date_naive();
-                        d >= start && d <= end
-                    }
+                // A run belongs to the window when it was sealed inside it
+                // (catch-up runs claiming a prior period, and runs whose
+                // period id predates a cadence change, must not vanish
+                // from every report) or when its claimed period touches it.
+                let completed_in_window = {
+                    let d = manifest.completed_at.date_naive();
+                    d >= start && d <= end
                 };
+                let in_window = completed_in_window
+                    || match &manifest.period_id {
+                        Some(pid) => {
+                            periods.iter().any(|p| &p.period_id == pid)
+                                || period::bounds(cadence, pid)
+                                    .is_some_and(|(ps, pe)| ps <= end && pe >= start)
+                        }
+                        None => false,
+                    };
                 if !in_window {
                     continue;
                 }
