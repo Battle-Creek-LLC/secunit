@@ -25,7 +25,7 @@ incidents were declared.
 
 ## Risk register
 
-- Open: 2 (0 past SLA). Opened this period: 1. Closed: 0.
+- Open: 2 (0 past SLA). Opened this period: 1. Reopened: 0. Closed: 0.
 
 | Risk | Severity | Title | Owner | Due |
 |---|---|---|---|---|
@@ -40,5 +40,5 @@ incidents were declared.
 ## Report provenance
 
 - Generator skill: `report` (`kind: weekly`)
-- Data: `secunit report data --week 2026-W19` → `raw/report-data.json`
+- Data: `secunit report data --week 2026-W19 --out <run_dir>/raw/report-data.json`
 - Report run: `evidence/2026/q2/rp-weekly-status/2026-05-11-run-001/`
