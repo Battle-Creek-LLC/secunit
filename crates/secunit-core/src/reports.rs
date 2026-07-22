@@ -102,6 +102,13 @@ pub struct RunSummary {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct Totals {
     pub controls: usize,
+    /// Sum of `controls[].runs` lengths — which include runs merely
+    /// *touching* the window (a quarterly run whose period surrounds a
+    /// reported week, a catch-up run sealed inside it). Not "runs
+    /// performed this window": the same surrounding-period run appears
+    /// in every finer-cadence report it overlaps, and regenerating an
+    /// old window after later runs seal can raise this number. Render it
+    /// as "related runs", never as "runs this <period>".
     pub runs: usize,
     pub satisfied: usize,
     pub late: usize,
