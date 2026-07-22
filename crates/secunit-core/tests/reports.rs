@@ -554,4 +554,15 @@ fn corrupt_risk_log_degrades_to_register_error() {
     assert_eq!(data.risks.open[0].risk_id, good.risk_id);
     assert_eq!(data.risks.register_errors.len(), 1);
     assert_eq!(data.risks.register_errors[0].risk_id, bad.risk_id);
+    // Diagnostics are store-relative — these strings get headlined and
+    // possibly published, so the absolute root must not leak.
+    let err = &data.risks.register_errors[0].error;
+    assert!(
+        !err.contains(&root.display().to_string()),
+        "error leaks the store root: {err}"
+    );
+    assert!(
+        err.contains("risks/"),
+        "error should keep the relative path: {err}"
+    );
 }

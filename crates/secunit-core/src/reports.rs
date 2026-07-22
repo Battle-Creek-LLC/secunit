@@ -428,10 +428,14 @@ fn risk_summary(
         let events = match risks::load_events(root, &risk_id) {
             Ok(events) => events,
             Err(e) => {
-                summary.register_errors.push(RegisterError {
-                    risk_id,
-                    error: format!("{e:#}"),
-                });
+                // Make paths store-relative: the skill headlines these
+                // strings and may publish the report as a tracker issue,
+                // so the operator's absolute filesystem layout must not
+                // travel with them.
+                let error = format!("{e:#}").replace(&format!("{}/", root.display()), "");
+                summary
+                    .register_errors
+                    .push(RegisterError { risk_id, error });
                 continue;
             }
         };
