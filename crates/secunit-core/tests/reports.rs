@@ -490,3 +490,68 @@ fn catch_up_run_sealed_in_window_is_reported() {
     // unsatisfied — the run is activity context, not period coverage.
     assert_eq!(sca.counts.satisfied, 0);
 }
+
+#[test]
+fn corrupt_risk_log_degrades_to_register_error() {
+    let (_tmp, root) = staged_fixture();
+
+    let finding_ref = |fid: &str| FindingRef {
+        control_id: CONTROL.to_string(),
+        run_id: "2026-05-04-run-001".to_string(),
+        manifest_sha256: "0".repeat(64),
+        finding_id: fid.to_string(),
+        body_path: None,
+    };
+    let ts = d(2026, 5, 5).and_hms_opt(9, 0, 0).unwrap().and_utc();
+    let good = risks::open(
+        &root,
+        finding_ref("F-001"),
+        "vulnerable dependency",
+        Severity::High,
+        4,
+        3,
+        vec!["api".into()],
+        30,
+        d(2026, 6, 4),
+        "tester",
+        None,
+        Some(ts),
+    )
+    .expect("open good risk");
+    let bad = risks::open(
+        &root,
+        finding_ref("F-002"),
+        "stale access grant",
+        Severity::Medium,
+        3,
+        2,
+        vec!["api".into()],
+        30,
+        d(2026, 6, 4),
+        "tester",
+        None,
+        Some(ts),
+    )
+    .expect("open bad risk");
+    // Truncate the second log mid-line — a crashed append.
+    let log = root.join("risks").join(&bad.risk_id).join("events.jsonl");
+    let text = fs::read_to_string(&log).unwrap();
+    fs::write(&log, &text[..text.len() / 2]).unwrap();
+
+    let (reg, _) = loader::load(&root);
+    let data = reports::assemble(
+        &reg,
+        "2026-05",
+        Cadence::Monthly,
+        d(2026, 5, 1),
+        d(2026, 5, 31),
+        d(2026, 6, 1),
+    )
+    .expect("one broken log must not abort the report");
+
+    assert_eq!(data.risks.opened_in_period, 1, "good risk still counted");
+    assert_eq!(data.risks.open.len(), 1);
+    assert_eq!(data.risks.open[0].risk_id, good.risk_id);
+    assert_eq!(data.risks.register_errors.len(), 1);
+    assert_eq!(data.risks.register_errors[0].risk_id, bad.risk_id);
+}

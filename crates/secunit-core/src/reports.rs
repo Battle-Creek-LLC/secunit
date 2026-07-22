@@ -141,6 +141,19 @@ pub struct RiskSummary {
     pub closed_in_period: usize,
     /// Open risks whose SLA due date has passed `generated_on`.
     pub past_sla: usize,
+    /// Risk logs that could not be read or failed chain validation. The
+    /// report proceeds without them, but a non-empty list means every
+    /// count above understates the register — the skill must surface
+    /// these verbatim, and the operator must investigate before trusting
+    /// the risk section (a broken chain means evidence was altered).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub register_errors: Vec<RegisterError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterError {
+    pub risk_id: String,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -406,10 +419,11 @@ fn upcoming_controls(
 }
 
 /// Fold every risk log under `risks/` into the report's register view:
-/// currently-open risks plus opened/closed counts inside the window.
-/// Corrupt logs are fatal here — unlike a missing manifest, a broken risk
-/// chain means the register can't be trusted, and the report must not
-/// silently understate it.
+/// currently-open risks plus opened/reopened/closed counts inside the
+/// window. A corrupt log doesn't abort the report — that would take the
+/// reporting cadence itself into gap until the append-only log is
+/// restored — but it is never silent either: the broken risk lands in
+/// `register_errors`, in-band where the skill and the reader see it.
 fn risk_summary(
     root: &Path,
     start: NaiveDate,
@@ -418,7 +432,16 @@ fn risk_summary(
 ) -> anyhow::Result<RiskSummary> {
     let mut summary = RiskSummary::default();
     for risk_id in risks::risk_ids(root)? {
-        let events = risks::load_events(root, &risk_id)?;
+        let events = match risks::load_events(root, &risk_id) {
+            Ok(events) => events,
+            Err(e) => {
+                summary.register_errors.push(RegisterError {
+                    risk_id,
+                    error: format!("{e:#}"),
+                });
+                continue;
+            }
+        };
 
         // Count per risk, not per event: a close that a later in-window
         // reopen undoes must not read as a closure, and churn must not

@@ -47,7 +47,10 @@ tracker issue using its own tooling. The binary has no tracker integration.
    - quarterly → `reports/<YYYY>-<qn>-quarterly.md`, copy `run_dir/raw/quarterly-status.md`
    - annual → `reports/<YYYY>-annual.md`, copy `run_dir/raw/annual-status.md`
 5. Note any control that is overdue or never run as a gap (`overdue` and
-   per-control `gaps` in the data call these out).
+   per-control `gaps` in the data call these out). If `risks.register_errors`
+   is non-empty, put it in the headline: the risk counts understate the
+   register, a broken log may mean evidence was altered, and the operator
+   must investigate — never omit or soften this.
 6. **Publish** if `skill_args.publish` is true — see below.
 7. Drop `result.json`.
 
