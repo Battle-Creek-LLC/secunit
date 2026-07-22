@@ -71,29 +71,6 @@ fn canonicalize(cadence: Cadence, raw: &str) -> String {
     .unwrap_or_else(|| raw.to_string())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::canonicalize;
-    use secunit_core::model::Cadence;
-
-    #[test]
-    fn canonicalize_accepts_conventional_spellings() {
-        assert_eq!(canonicalize(Cadence::Quarterly, "2026-Q3"), "2026-q3");
-        assert_eq!(canonicalize(Cadence::Quarterly, "2026-q3"), "2026-q3");
-        assert_eq!(canonicalize(Cadence::Weekly, "2026-W5"), "2026-W05");
-        assert_eq!(canonicalize(Cadence::Weekly, "2026-w05"), "2026-W05");
-        assert_eq!(canonicalize(Cadence::Monthly, "2026-7"), "2026-07");
-        assert_eq!(canonicalize(Cadence::Annual, " 2026 "), "2026");
-    }
-
-    #[test]
-    fn canonicalize_passes_garbage_through_for_bounds_to_reject() {
-        assert_eq!(canonicalize(Cadence::Weekly, "2026-19"), "2026-19");
-        assert_eq!(canonicalize(Cadence::Quarterly, "2026-q12"), "2026-q12");
-        assert_eq!(canonicalize(Cadence::Monthly, "2026-131"), "2026-131");
-    }
-}
-
 pub fn data(ctx: &Ctx, period: &PeriodArg<'_>, out: Option<&Path>) -> Result<ExitCode> {
     let (label, cadence, start, end) = period.resolve()?;
 
@@ -121,4 +98,27 @@ pub fn data(ctx: &Ctx, period: &PeriodArg<'_>, out: Option<&Path>) -> Result<Exi
         None => println!("{json}"),
     }
     Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::canonicalize;
+    use secunit_core::model::Cadence;
+
+    #[test]
+    fn canonicalize_accepts_conventional_spellings() {
+        assert_eq!(canonicalize(Cadence::Quarterly, "2026-Q3"), "2026-q3");
+        assert_eq!(canonicalize(Cadence::Quarterly, "2026-q3"), "2026-q3");
+        assert_eq!(canonicalize(Cadence::Weekly, "2026-W5"), "2026-W05");
+        assert_eq!(canonicalize(Cadence::Weekly, "2026-w05"), "2026-W05");
+        assert_eq!(canonicalize(Cadence::Monthly, "2026-7"), "2026-07");
+        assert_eq!(canonicalize(Cadence::Annual, " 2026 "), "2026");
+    }
+
+    #[test]
+    fn canonicalize_passes_garbage_through_for_bounds_to_reject() {
+        assert_eq!(canonicalize(Cadence::Weekly, "2026-19"), "2026-19");
+        assert_eq!(canonicalize(Cadence::Quarterly, "2026-q12"), "2026-q12");
+        assert_eq!(canonicalize(Cadence::Monthly, "2026-131"), "2026-131");
+    }
 }
