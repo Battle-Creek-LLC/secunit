@@ -6,13 +6,12 @@
 //! the binary never composes the report itself, and this module never
 //! captures or mutates anything.
 
-use std::fs;
 use std::path::Path;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::evidence::manifest::{Manifest, RunOutcome};
+use crate::evidence::manifest::RunOutcome;
 use crate::model::{Cadence, LoadedRegistry, RunStatus};
 use crate::registry::coverage::{self, PeriodCoverage, PeriodStatus};
 use crate::registry::period;
@@ -191,20 +190,23 @@ pub fn assemble(
     let mut totals = Totals::default();
 
     for control in reg.controls.values() {
+        // One walk per control: coverage and the run summaries below
+        // consume the same sealed manifests.
+        let sealed = coverage::sealed_runs_for_control(&reg.root, &control.id)?;
         let cov = if matches!(control.cadence, Cadence::Continuous) {
             None
         } else {
-            Some(coverage::coverage(reg, &control.id, start, end, today)?)
+            Some(coverage::coverage_over_runs(
+                reg,
+                &control.id,
+                &sealed,
+                start,
+                end,
+                today,
+            )?)
         };
         let periods = cov.map(|c| c.periods).unwrap_or_default();
-        let runs = runs_in_window(
-            &reg.root,
-            &control.id,
-            control.cadence,
-            &periods,
-            start,
-            end,
-        )?;
+        let runs = runs_in_window(&reg.root, &sealed, control.cadence, &periods, start, end);
 
         // A control with nothing due and nothing run this window carries
         // no signal for the period — leave it out of the payload.
@@ -268,78 +270,57 @@ pub fn assemble(
     })
 }
 
-/// Sealed runs for `control_id` that belong to the window: they claim a
-/// period listed in `periods`, their claimed period overlaps the window,
-/// or (continuous / legacy runs) they completed inside it. Mirrors the
-/// lenient walk in `registry::coverage` — a corrupt manifest is skipped,
-/// not fatal.
+/// The window's slice of already-walked sealed runs: a run belongs to
+/// the window when it was sealed inside it (catch-up runs claiming a
+/// prior period, and runs whose period id predates a cadence change,
+/// must not vanish from every report) or when its claimed period touches
+/// it. Pure filter — the walk happened once in `assemble`.
 fn runs_in_window(
     root: &Path,
-    control_id: &str,
+    sealed: &[coverage::SealedRun],
     cadence: Cadence,
     periods: &[PeriodCoverage],
     start: NaiveDate,
     end: NaiveDate,
-) -> anyhow::Result<Vec<RunSummary>> {
+) -> Vec<RunSummary> {
     let mut out: Vec<RunSummary> = Vec::new();
-    let evidence = root.join("evidence");
-    if !evidence.is_dir() {
-        return Ok(out);
-    }
-    for year in dir_children(&evidence)? {
-        for quarter in dir_children(&year)? {
-            let ctrl_dir = quarter.join(control_id);
-            if !ctrl_dir.is_dir() {
-                continue;
-            }
-            for run in dir_children(&ctrl_dir)? {
-                let mpath = run.join("manifest.json");
-                let Ok(bytes) = fs::read(&mpath) else {
-                    continue;
-                };
-                let Ok(manifest) = serde_json::from_slice::<Manifest>(&bytes) else {
-                    continue;
-                };
-                // A run belongs to the window when it was sealed inside it
-                // (catch-up runs claiming a prior period, and runs whose
-                // period id predates a cadence change, must not vanish
-                // from every report) or when its claimed period touches it.
-                let completed_in_window = {
-                    let d = manifest.completed_at.date_naive();
-                    d >= start && d <= end
-                };
-                let in_window = completed_in_window
-                    || match &manifest.period_id {
-                        Some(pid) => {
-                            periods.iter().any(|p| &p.period_id == pid)
-                                || period::bounds(cadence, pid)
-                                    .is_some_and(|(ps, pe)| ps <= end && pe >= start)
-                        }
-                        None => false,
-                    };
-                if !in_window {
-                    continue;
+    for run in sealed {
+        let manifest = &run.manifest;
+        let completed_in_window = {
+            let d = manifest.completed_at.date_naive();
+            d >= start && d <= end
+        };
+        let in_window = completed_in_window
+            || match &manifest.period_id {
+                Some(pid) => {
+                    periods.iter().any(|p| &p.period_id == pid)
+                        || period::bounds(cadence, pid)
+                            .is_some_and(|(ps, pe)| ps <= end && pe >= start)
                 }
-                let rel = run
-                    .strip_prefix(root)
-                    .unwrap_or(&run)
-                    .to_string_lossy()
-                    .into_owned();
-                out.push(RunSummary {
-                    run_id: manifest.run_id,
-                    period_id: manifest.period_id,
-                    completed_at: manifest.completed_at,
-                    status: manifest.status,
-                    draft_risks: manifest.draft_risks.len(),
-                    draft_issues: manifest.draft_issues.len(),
-                    external_links: manifest.external_links,
-                    path: rel,
-                });
-            }
+                None => false,
+            };
+        if !in_window {
+            continue;
         }
+        let rel = run
+            .path
+            .strip_prefix(root)
+            .unwrap_or(&run.path)
+            .to_string_lossy()
+            .into_owned();
+        out.push(RunSummary {
+            run_id: manifest.run_id.clone(),
+            period_id: manifest.period_id.clone(),
+            completed_at: manifest.completed_at,
+            status: manifest.status,
+            draft_risks: manifest.draft_risks.len(),
+            draft_issues: manifest.draft_issues.len(),
+            external_links: manifest.external_links.clone(),
+            path: rel,
+        });
     }
     out.sort_by_key(|r| r.completed_at);
-    Ok(out)
+    out
 }
 
 /// Overdue per the resolver — the same due dates, schedule overrides,
@@ -517,16 +498,4 @@ fn risk_summary(
         .open
         .sort_by(|a, b| a.severity.cmp(&b.severity).then(a.risk_id.cmp(&b.risk_id)));
     Ok(summary)
-}
-
-fn dir_children(p: &Path) -> anyhow::Result<Vec<std::path::PathBuf>> {
-    let mut v = Vec::new();
-    for entry in fs::read_dir(p)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            v.push(entry.path());
-        }
-    }
-    v.sort();
-    Ok(v)
 }

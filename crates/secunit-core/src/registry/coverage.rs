@@ -131,13 +131,27 @@ pub fn coverage(
     window_end: NaiveDate,
     today: NaiveDate,
 ) -> anyhow::Result<CoverageReport> {
+    let runs = sealed_runs_for_control(&reg.root, control_id)?;
+    coverage_over_runs(reg, control_id, &runs, window_start, window_end, today)
+}
+
+/// [`coverage`] over runs the caller already walked — so a caller that
+/// also needs the manifests (report assembly) touches the evidence tree
+/// once instead of twice.
+pub fn coverage_over_runs(
+    reg: &LoadedRegistry,
+    control_id: &str,
+    runs: &[SealedRun],
+    window_start: NaiveDate,
+    window_end: NaiveDate,
+    today: NaiveDate,
+) -> anyhow::Result<CoverageReport> {
     let control = reg
         .controls
         .get(control_id)
         .ok_or_else(|| anyhow::anyhow!("control `{control_id}` not found"))?;
 
     let expected = expected_periods(control, &reg.schedule, window_start, window_end);
-    let runs = walk_runs_for_control(&reg.root, control_id)?;
 
     // Bucket runs by claimed period_id. Multiple runs claiming the same
     // period coexist; we pick the earliest `complete` run as the
@@ -145,18 +159,19 @@ pub fn coverage(
     // (PR-2 keeps it minimal — first complete wins).
     let mut by_period: HashMap<String, Vec<RunRef>> = HashMap::new();
     let mut legacy: Vec<UnclassifiedRun> = Vec::new();
-    for r in &runs {
-        match &r.period_id {
+    for r in runs {
+        let m = &r.manifest;
+        match &m.period_id {
             Some(pid) => by_period.entry(pid.clone()).or_default().push(RunRef {
-                run_id: r.run_id.clone(),
-                completed_at: r.completed_at,
-                status: r.status,
+                run_id: m.run_id.clone(),
+                completed_at: m.completed_at,
+                status: m.status,
             }),
             None => legacy.push(UnclassifiedRun {
-                run_id: r.run_id.clone(),
+                run_id: m.run_id.clone(),
                 period_id: None,
-                completed_at: r.completed_at,
-                status: r.status,
+                completed_at: m.completed_at,
+                status: m.status,
                 reason: "legacy run sealed before period_id was introduced".into(),
             }),
         }
@@ -305,21 +320,24 @@ fn quarter_of_month(month: u32) -> u32 {
     (month - 1) / 3 + 1
 }
 
+/// One sealed run on disk: its run directory and parsed manifest. The
+/// single walk result both coverage and report assembly consume, so the
+/// evidence layout and the lenient corrupt-manifest policy live in
+/// exactly one walker.
 #[derive(Debug, Clone)]
-struct WalkedRun {
-    run_id: String,
-    completed_at: DateTime<Utc>,
-    status: RunOutcome,
-    period_id: Option<String>,
+pub struct SealedRun {
+    pub path: std::path::PathBuf,
+    pub manifest: Manifest,
 }
 
 /// Walk `<root>/evidence/*/*/control_id/*/manifest.json` and return one
-/// row per sealed manifest. Skips pending runs (no manifest yet) and
-/// silently skips manifests that fail to parse — coverage queries
-/// shouldn't take down the whole report on one corrupt manifest. Callers
-/// who want stricter checking should use [`crate::evidence::verifier`].
-fn walk_runs_for_control(root: &Path, control_id: &str) -> anyhow::Result<Vec<WalkedRun>> {
-    let mut out: Vec<WalkedRun> = Vec::new();
+/// row per sealed manifest, sorted by path. Skips pending runs (no
+/// manifest yet) and silently skips manifests that fail to parse —
+/// coverage queries shouldn't take down the whole report on one corrupt
+/// manifest. Callers who want stricter checking should use
+/// [`crate::evidence::verifier`].
+pub fn sealed_runs_for_control(root: &Path, control_id: &str) -> anyhow::Result<Vec<SealedRun>> {
+    let mut out: Vec<SealedRun> = Vec::new();
     let evidence = root.join("evidence");
     if !evidence.is_dir() {
         return Ok(out);
@@ -343,11 +361,9 @@ fn walk_runs_for_control(root: &Path, control_id: &str) -> anyhow::Result<Vec<Wa
                     Ok(m) => m,
                     Err(_) => continue,
                 };
-                out.push(WalkedRun {
-                    run_id: manifest.run_id,
-                    completed_at: manifest.completed_at,
-                    status: manifest.status,
-                    period_id: manifest.period_id,
+                out.push(SealedRun {
+                    path: run,
+                    manifest,
                 });
             }
         }
@@ -363,6 +379,8 @@ fn dir_children(p: &Path) -> anyhow::Result<Vec<std::path::PathBuf>> {
             v.push(entry.path());
         }
     }
+    // Deterministic walk order regardless of filesystem readdir order.
+    v.sort();
     Ok(v)
 }
 
