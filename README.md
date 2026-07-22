@@ -131,7 +131,7 @@ manifest.
 ### Reports
 
 ```bash
-secunit report data --week 2026-W30 --out raw/report-data.json   # also --month / --quarter / --year
+secunit report data --week 2026-W30 --out <run_dir>/raw/report-data.json   # also --month / --quarter / --year
 ```
 
 Aggregates one period's coverage, runs, overdue controls, and risk-register

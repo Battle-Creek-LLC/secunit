@@ -26,11 +26,13 @@ tracker issue using its own tooling. The binary has no tracker integration.
    selector — a weekly control claims `2026-W30`, monthly `2026-07`, and so
    on. When reporting on the *previous* period (the usual case for a report
    run early in a new week/month), the operator prepares the run with
-   `--period <prior-period>`. Then:
-   - weekly → `secunit report data --week <YYYY-Wnn> --out raw/report-data.json`
-   - monthly → `secunit report data --month <YYYY-MM> --out raw/report-data.json`
-   - quarterly → `secunit report data --quarter <YYYY-qn> --out raw/report-data.json`
-   - annual → `secunit report data --year <YYYY> --out raw/report-data.json`
+   `--period <prior-period>`. Write the data *into the run dir* — commands
+   run from the store root, so a bare `raw/` would land outside the run and
+   the numbers would never become hash-chained evidence:
+   - weekly → `secunit report data --week <YYYY-Wnn> --out <run_dir>/raw/report-data.json`
+   - monthly → `secunit report data --month <YYYY-MM> --out <run_dir>/raw/report-data.json`
+   - quarterly → `secunit report data --quarter <YYYY-qn> --out <run_dir>/raw/report-data.json`
+   - annual → `secunit report data --year <YYYY> --out <run_dir>/raw/report-data.json`
    This aggregates per-control coverage, sealed runs, overdue controls, the
    risk-register delta, and what's due next.
 2. **Read supporting state** as needed: `secunit status --json` for current
