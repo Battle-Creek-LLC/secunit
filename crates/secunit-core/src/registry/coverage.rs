@@ -348,27 +348,61 @@ pub fn sealed_runs_for_control(root: &Path, control_id: &str) -> anyhow::Result<
             if !ctrl_dir.is_dir() {
                 continue;
             }
-            for run in dir_children(&ctrl_dir)? {
-                let mpath = run.join("manifest.json");
-                if !mpath.is_file() {
+            collect_runs(&ctrl_dir, &mut out)?;
+        }
+    }
+    Ok(out)
+}
+
+/// One walk of the whole evidence tree, bucketing sealed runs by the
+/// control-dir name. Per-control sequences are identical to what
+/// [`sealed_runs_for_control`] returns — registry-wide callers (report
+/// assembly) use this to avoid re-enumerating the year/quarter dirs once
+/// per control.
+pub fn sealed_runs_by_control(
+    root: &Path,
+) -> anyhow::Result<std::collections::BTreeMap<String, Vec<SealedRun>>> {
+    let mut out: std::collections::BTreeMap<String, Vec<SealedRun>> = Default::default();
+    let evidence = root.join("evidence");
+    if !evidence.is_dir() {
+        return Ok(out);
+    }
+    for year in dir_children(&evidence)? {
+        for quarter in dir_children(&year)? {
+            for ctrl_dir in dir_children(&quarter)? {
+                let Some(control_id) = ctrl_dir.file_name().and_then(|n| n.to_str()) else {
                     continue;
-                }
-                let bytes = match fs::read(&mpath) {
-                    Ok(b) => b,
-                    Err(_) => continue,
                 };
-                let manifest: Manifest = match serde_json::from_slice(&bytes) {
-                    Ok(m) => m,
-                    Err(_) => continue,
-                };
-                out.push(SealedRun {
-                    path: run,
-                    manifest,
-                });
+                collect_runs(&ctrl_dir, out.entry(control_id.to_string()).or_default())?;
             }
         }
     }
     Ok(out)
+}
+
+/// Append every sealed run under one `<quarter>/<control>/` dir,
+/// preserving the lenient corrupt-manifest policy documented on
+/// [`sealed_runs_for_control`].
+fn collect_runs(ctrl_dir: &Path, out: &mut Vec<SealedRun>) -> anyhow::Result<()> {
+    for run in dir_children(ctrl_dir)? {
+        let mpath = run.join("manifest.json");
+        if !mpath.is_file() {
+            continue;
+        }
+        let bytes = match fs::read(&mpath) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        let manifest: Manifest = match serde_json::from_slice(&bytes) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        out.push(SealedRun {
+            path: run,
+            manifest,
+        });
+    }
+    Ok(())
 }
 
 fn dir_children(p: &Path) -> anyhow::Result<Vec<std::path::PathBuf>> {

@@ -201,10 +201,12 @@ pub fn assemble(
     let mut controls: Vec<ControlActivity> = Vec::new();
     let mut totals = Totals::default();
 
+    // One walk of the whole evidence tree: coverage and the run summaries
+    // below consume the same sealed manifests, bucketed per control.
+    let mut runs_by_control = coverage::sealed_runs_by_control(&reg.root)?;
+
     for control in reg.controls.values() {
-        // One walk per control: coverage and the run summaries below
-        // consume the same sealed manifests.
-        let sealed = coverage::sealed_runs_for_control(&reg.root, &control.id)?;
+        let sealed = runs_by_control.remove(&control.id).unwrap_or_default();
         let cov = if matches!(control.cadence, Cadence::Continuous) {
             None
         } else {
@@ -261,8 +263,10 @@ pub fn assemble(
         });
     }
 
-    let overdue = overdue_controls(reg, today);
-    let upcoming = upcoming_controls(reg, today, window_cadence, start, end);
+    // One resolver pass; overdue and upcoming partition the same rows.
+    let due_rows = resolver::due_rows(reg, today);
+    let overdue = overdue_controls(reg, &due_rows, today);
+    let upcoming = upcoming_controls(reg, &due_rows, today, window_cadence, start, end);
     let risks = risk_summary(&reg.root, start, end, today)?;
 
     Ok(ReportData {
@@ -338,9 +342,13 @@ fn runs_in_window(
 /// Overdue per the resolver — the same due dates, schedule overrides,
 /// never-run handling, and per-cadence grace `secunit due` applies, so the
 /// report can never contradict it.
-fn overdue_controls(reg: &LoadedRegistry, today: NaiveDate) -> Vec<OverdueControl> {
+fn overdue_controls(
+    reg: &LoadedRegistry,
+    due_rows: &[resolver::DueRow],
+    today: NaiveDate,
+) -> Vec<OverdueControl> {
     let mut out: Vec<OverdueControl> = Vec::new();
-    for row in resolver::due_rows(reg, today) {
+    for row in due_rows {
         if !row.overdue {
             continue;
         }
@@ -374,6 +382,7 @@ fn overdue_controls(reg: &LoadedRegistry, today: NaiveDate) -> Vec<OverdueContro
 /// `overdue_controls`. Controls already overdue are listed there instead.
 fn upcoming_controls(
     reg: &LoadedRegistry,
+    due_rows: &[resolver::DueRow],
     today: NaiveDate,
     window_cadence: Cadence,
     start: NaiveDate,
@@ -386,7 +395,7 @@ fn upcoming_controls(
         // Continuous has no periods; fall back to one window-length.
         .unwrap_or(end + chrono::Duration::days((end - start).num_days() + 1));
     let mut out: Vec<UpcomingControl> = Vec::new();
-    for row in resolver::due_rows(reg, today) {
+    for row in due_rows {
         if row.overdue {
             continue;
         }
