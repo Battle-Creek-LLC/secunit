@@ -43,11 +43,14 @@ pub fn data(ctx: &Ctx, period: &PeriodArg<'_>, out: Option<&Path>) -> Result<Exi
     let (label, start, end) = period.resolve()?;
 
     let (reg, report) = ctx.load()?;
+    // A control that failed to load is absent from the registry and would
+    // silently vanish from every section of the payload — for a compliance
+    // artifact that is worse than no report, so refuse to assemble.
     if !report.is_clean() {
-        eprintln!(
-            "warning: registry has {} load error(s); continuing",
-            report.errors.len()
-        );
+        for e in &report.errors {
+            eprintln!("error {}: {}", e.path.display(), e.message);
+        }
+        return Ok(ExitCode::from(1));
     }
 
     let data = reports::assemble(&reg, &label, start, end, ctx.today)?;
