@@ -17,11 +17,9 @@ OPTIONS:
 
 COMMANDS:
     due          Show controls coming due
-    calendar     Show the schedule for a quarter or year
     status       Show registry-wide or per-control status
     show         Show one control's full configuration
     scope        Preview resolved scope for a control
-    history      List runs for a control
     features     Show which integrations are compiled in
     skills       List, show, or locate runbook skills
 
@@ -43,11 +41,9 @@ Pure read commands. Default human tables; `--json` flips to structured output su
 
 ```
 secunit due [--within <DURATION>] [--overdue-only] [--owner <ROLE>] [--json]
-secunit calendar [--quarter <YYYY-qN>] [--year <YYYY>] [--through <DATE>] [--json]
 secunit status [<CONTROL_ID>] [--json]
 secunit show <CONTROL_ID> [--json]
 secunit scope <CONTROL_ID> [--at <DATE>] [--json]
-secunit history <CONTROL_ID> [--limit <N>] [--json]
 secunit features [--json]
 ```
 
@@ -239,7 +235,7 @@ secunit inventory check
 
 | Subcommand | Default | `--json` flips to |
 |---|---|---|
-| `due`, `calendar`, `status`, `show`, `history`, `scope` | human tables | structured JSON |
+| `due`, `status`, `show`, `scope`, `coverage` | human tables | structured JSON |
 | `run prepare` | structured JSON | (already JSON; `--human` for tables) |
 | `run finalize` | human checklist | structured JSON |
 | `capture *` | writes JSON to `--out`; stderr summary | (no flip — `--out` is the contract) |
