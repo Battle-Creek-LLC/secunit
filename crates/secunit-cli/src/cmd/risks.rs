@@ -3,8 +3,9 @@
 //! Mutating verbs each append exactly one event to a risk's log via
 //! [`secunit_core::risks::store`] (which takes the root lock, validates the
 //! transition + schema, chains, and refreshes `index.json`). Read verbs are
-//! pure folds: `list` reads the derived index, `show` folds a single log,
-//! `rebuild` regenerates the index from the logs.
+//! pure folds: `list` rebuilds the index in memory from the logs (it does
+//! not trust the cached `index.json`, and errors if any log is corrupt),
+//! `show` folds a single log, `rebuild` regenerates the on-disk index.
 //!
 //! Output follows `docs/cli.md`: `list`/`show` are human tables by default
 //! and flip to structured JSON under `--json`; mutating verbs print a short
