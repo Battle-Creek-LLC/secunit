@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Example controls `rp-weekly-status` / `rp-monthly-status` under
   `docs/examples/controls/`.
 
+### Removed
+
+- The planned-but-never-implemented `secunit report data --policy-status`
+  mode. Policy-review status reads out of `secunit status` and the annual
+  report; the docs no longer advertise the flag.
+
 ## [0.5.0] — 2026-05-30
 
 ### Added

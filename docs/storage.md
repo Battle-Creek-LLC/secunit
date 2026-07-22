@@ -313,7 +313,7 @@ staleness without re-folding.
 
 ## `findings.md` template
 
-Every skill emits findings in this shape. Fixed headings let `report-quarterly` aggregate across runs.
+Every skill emits findings in this shape. Fixed headings let the `report` skill aggregate across runs.
 
 For **multi-system** runs:
 
