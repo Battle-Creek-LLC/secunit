@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-23
+
 ### Added
 
 - `secunit report data --week|--month|--quarter|--year`: assemble one
@@ -21,6 +23,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   binary has no tracker integration.
 - Example controls `rp-weekly-status` / `rp-monthly-status` under
   `docs/examples/controls/`.
+
+### Changed
+
+- A due date that passes without a completed run now **holds** until the run
+  completes or a `schedule.yaml` skip covers it, for every cadence — so
+  `secunit due --overdue` (and the report's `overdue` section) actually fire.
+  Previously most cadences rolled a missed date forward to the next firing,
+  silently forgiving the miss.
+- `run prepare --period` canonicalizes operator spellings (`2026-Q3` →
+  `2026-q3`, `2026-w5` → `2026-W05`) before validating and storing, and
+  zero-padded/signed quarter digits are rejected — sealed period ids always
+  match the derive-minted form coverage compares against.
+- A corrupt risk event log no longer takes every register surface down:
+  `risks list` and the GUI register table render the readable risks with a
+  loud warning (list exits 1), report data carries the breakage in-band, and
+  `risks rebuild` stays strict. `verify`/`doctor` now warn about event logs
+  in `risks/` dirs outside the register's `R-NNNN` membership rule.
 
 ### Removed
 
