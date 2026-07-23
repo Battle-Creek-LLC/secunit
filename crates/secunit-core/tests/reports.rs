@@ -574,3 +574,43 @@ fn corrupt_risk_log_degrades_to_register_error() {
         "error should keep the relative path: {err}"
     );
 }
+
+#[test]
+fn late_assembly_looks_forward_from_today() {
+    let (_tmp, root) = staged_fixture();
+    let (reg, _) = loader::load(&root);
+
+    // May's report assembled on 2026-07-10 — well past June, the period
+    // the horizon would naively end at. The horizon floors at the period
+    // containing today, so July dues still surface.
+    let data = reports::assemble(
+        &reg,
+        "2026-05",
+        Cadence::Monthly,
+        d(2026, 5, 1),
+        d(2026, 5, 31),
+        d(2026, 7, 10),
+    )
+    .expect("assemble late");
+
+    assert_eq!(data.period.horizon, d(2026, 7, 31), "end of today's month");
+    assert_eq!(data.period.cadence, Cadence::Monthly);
+
+    // Every resolver row with an in-horizon due date lands in exactly one
+    // list — nothing due soon may vanish just because the report is late.
+    for row in secunit_core::registry::resolver::due_rows(&reg, d(2026, 7, 10)) {
+        let Some(next_due) = row.next_due else {
+            continue;
+        };
+        if next_due > data.period.horizon {
+            continue;
+        }
+        let in_overdue = data.overdue.iter().any(|o| o.id == row.control_id);
+        let in_upcoming = data.upcoming.iter().any(|u| u.id == row.control_id);
+        assert!(
+            in_overdue ^ in_upcoming,
+            "{} (due {next_due}) must appear in exactly one of overdue/upcoming",
+            row.control_id
+        );
+    }
+}

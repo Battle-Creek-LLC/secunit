@@ -112,7 +112,8 @@ Stakeholder-brief: one screen, numbers first.
 <Table of open risks above threshold: id, severity, title, owner, due.>
 
 ## Upcoming
-<Controls due next period, from `upcoming` in the data.>
+<Controls due through `period.horizon`, from `upcoming` in the data —
+cite the horizon date as the section's through-date.>
 ```
 
 ## Quarterly / annual template

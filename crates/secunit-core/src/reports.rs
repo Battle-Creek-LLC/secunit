@@ -42,8 +42,9 @@ pub struct ReportData {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overdue: Vec<OverdueControl>,
     pub risks: RiskSummary,
-    /// Controls due between `generated_on` and the end of the calendar
-    /// period after the window, per the same resolver `secunit due` uses.
+    /// Controls due by `period.horizon` that are not overdue, per the
+    /// same resolver `secunit due` uses. Includes a held due date still
+    /// inside its grace window — due now, not yet overdue.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upcoming: Vec<UpcomingControl>,
 }
@@ -52,8 +53,15 @@ pub struct ReportData {
 pub struct ReportPeriod {
     /// The selector as given: `2026-W30`, `2026-07`, `2026-q3`, or `2026`.
     pub label: String,
+    /// The window's own cadence — what one "period" means here.
+    pub cadence: Cadence,
     pub start: NaiveDate,
     pub end: NaiveDate,
+    /// The through-date `upcoming` considers: the end of the calendar
+    /// period after the window, floored at the period containing
+    /// `generated_on` so late-assembled reports still look forward from
+    /// now. Cite this when rendering an "Upcoming" section.
+    pub horizon: NaiveDate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -265,8 +273,9 @@ pub fn assemble(
 
     // One resolver pass; overdue and upcoming partition the same rows.
     let due_rows = resolver::due_rows(reg, today);
+    let horizon = upcoming_horizon(window_cadence, start, end, today);
     let overdue = overdue_controls(reg, &due_rows, today);
-    let upcoming = upcoming_controls(reg, &due_rows, today, window_cadence, start, end);
+    let upcoming = upcoming_controls(reg, &due_rows, horizon);
     let risks = risk_summary(&reg.root, start, end, today)?;
 
     Ok(ReportData {
@@ -274,8 +283,10 @@ pub fn assemble(
         org: reg.config.org.as_ref().and_then(|o| o.name.clone()),
         period: ReportPeriod {
             label: label.to_string(),
+            cadence: window_cadence,
             start,
             end,
+            horizon,
         },
         generated_on: today,
         controls,
@@ -377,23 +388,33 @@ fn overdue_controls(
     out
 }
 
-/// Controls due between `today` and the end of the calendar period after
-/// the window (the next week/month/quarter/year), resolver-computed like
-/// `overdue_controls`. Controls already overdue are listed there instead.
-fn upcoming_controls(
-    reg: &LoadedRegistry,
-    due_rows: &[resolver::DueRow],
-    today: NaiveDate,
+/// The `upcoming` through-date: the end of the calendar period after the
+/// window, floored at the period containing `today` — a report assembled
+/// long after its window still looks forward from now instead of at an
+/// interval that already ended.
+fn upcoming_horizon(
     window_cadence: Cadence,
     start: NaiveDate,
     end: NaiveDate,
-) -> Vec<UpcomingControl> {
-    let next_period_start = end + chrono::Duration::days(1);
-    let horizon = period::derive(window_cadence, next_period_start)
+    today: NaiveDate,
+) -> NaiveDate {
+    let anchor = (end + chrono::Duration::days(1)).max(today);
+    period::derive(window_cadence, anchor)
         .and_then(|pid| period::bounds(window_cadence, &pid))
         .map(|(_, pe)| pe)
         // Continuous has no periods; fall back to one window-length.
-        .unwrap_or(end + chrono::Duration::days((end - start).num_days() + 1));
+        .unwrap_or(anchor + chrono::Duration::days((end - start).num_days()))
+}
+
+/// Controls due by `horizon`, resolver-computed like `overdue_controls`.
+/// Every due row lands in exactly one list: overdue rows there, all
+/// other in-horizon rows here — including a held due date still inside
+/// its grace window (due, not yet overdue).
+fn upcoming_controls(
+    reg: &LoadedRegistry,
+    due_rows: &[resolver::DueRow],
+    horizon: NaiveDate,
+) -> Vec<UpcomingControl> {
     let mut out: Vec<UpcomingControl> = Vec::new();
     for row in due_rows {
         if row.overdue {
@@ -402,7 +423,7 @@ fn upcoming_controls(
         let Some(next_due) = row.next_due else {
             continue;
         };
-        if next_due < today || next_due > horizon {
+        if next_due > horizon {
             continue;
         }
         let Some(control) = reg.controls.get(&row.control_id) else {

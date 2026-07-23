@@ -6,8 +6,10 @@ expression: run_cli(&argv)
   "schema_version": 1,
   "period": {
     "label": "2026-W18",
+    "cadence": "weekly",
     "start": "2026-04-27",
-    "end": "2026-05-03"
+    "end": "2026-05-03",
+    "horizon": "2026-05-10"
   },
   "generated_on": "2026-05-01",
   "controls": [
