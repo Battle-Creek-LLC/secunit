@@ -727,3 +727,66 @@ fn lapsed_accepted_exception_is_surfaced() {
     .expect("assemble mid-may");
     assert!(may20.risks.lapsed_exceptions.is_empty());
 }
+
+#[test]
+fn orphan_risk_dir_warns_in_verify_and_stays_out_of_reports() {
+    use secunit_core::evidence::verifier;
+
+    let (_tmp, root) = staged_fixture();
+    let finding_ref = FindingRef {
+        control_id: CONTROL.to_string(),
+        run_id: "2026-05-04-run-001".to_string(),
+        manifest_sha256: "0".repeat(64),
+        finding_id: "F-001".to_string(),
+        body_path: None,
+    };
+    let r = risks::open(
+        &root,
+        finding_ref,
+        "vulnerable dependency",
+        Severity::High,
+        4,
+        3,
+        vec!["api".into()],
+        30,
+        d(2026, 6, 4),
+        "tester",
+        None,
+        Some(d(2026, 5, 5).and_hms_opt(9, 0, 0).unwrap().and_utc()),
+    )
+    .expect("open");
+
+    // A backup copy with a valid log but a non-member name.
+    let src = root.join("risks").join(&r.risk_id);
+    let orphan = root.join("risks").join(format!("{}-copy", r.risk_id));
+    fs::create_dir_all(&orphan).unwrap();
+    fs::copy(src.join("events.jsonl"), orphan.join("events.jsonl")).unwrap();
+
+    // Reports count only the member risk — one open risk, no errors.
+    let (reg, _) = loader::load(&root);
+    let data = reports::assemble(
+        &reg,
+        "2026-05",
+        Cadence::Monthly,
+        d(2026, 5, 1),
+        d(2026, 5, 31),
+        d(2026, 6, 1),
+    )
+    .expect("assemble");
+    assert_eq!(data.risks.open.len(), 1);
+    assert!(data.risks.register_errors.is_empty());
+
+    // Verify shares the membership rule and warns about the orphan
+    // instead of vouching for it.
+    let report = verifier::verify(&root, None).expect("verify");
+    assert!(
+        report.verified_risks.iter().all(|v| v.risk_id == r.risk_id),
+        "only the member risk is verified"
+    );
+    assert_eq!(report.risk_warnings.len(), 1);
+    assert!(report.risk_warnings[0].dir.ends_with("-copy"));
+    // The synthetic finding_ref can't resolve (no matching sealed run in
+    // the fixture), so the member risk fails on that — but the orphan
+    // contributes a warning only, never a failure.
+    assert!(report.risk_failures.iter().all(|f| f.risk_id == r.risk_id));
+}
