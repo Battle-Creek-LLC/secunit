@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes } from "react-router";
 import {
   listProjects,
   loadProject,

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useStore } from "@/store";
 import { ControlsTable } from "@/components/ControlsTable";
 import { ControlDetailPane } from "@/components/ControlDetail";

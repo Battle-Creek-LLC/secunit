@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useStore } from "@/store";
 import { getRun, type RunDetail, type RunRow } from "@/lib/ipc";
 import { RunTree } from "@/components/RunTree";
