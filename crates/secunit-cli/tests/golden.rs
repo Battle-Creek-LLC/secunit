@@ -145,3 +145,25 @@ fn show_sca_human() {
     let argv: Vec<&str> = args.iter().map(String::as_str).collect();
     insta::assert_snapshot!("show_sca_human", run_cli(&argv));
 }
+
+#[test]
+fn report_data_week_json() {
+    let args = args_for(
+        "multi-system",
+        "2026-05-01",
+        &["report", "data", "--week", "2026-W18"],
+    );
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    insta::assert_snapshot!("report_data_week_json", run_cli(&argv));
+}
+
+#[test]
+fn report_data_month_json() {
+    let args = args_for(
+        "multi-system",
+        "2026-06-01",
+        &["report", "data", "--month", "2026-05"],
+    );
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    insta::assert_snapshot!("report_data_month_json", run_cli(&argv));
+}

@@ -105,13 +105,18 @@ pub fn prepare(
                     "control `{control_id}` has continuous cadence and does not have schedule periods; --period is not allowed"
                 );
             }
-            if period::bounds(ctrl.cadence, supplied).is_none() {
+            // Canonicalize before validating and storing: coverage matches
+            // period ids by exact string against derive-minted spellings,
+            // so a verbatim `2026-Q3`/`2026-q04` would seal a run that can
+            // never satisfy its period.
+            let canonical = period::canonicalize(ctrl.cadence, supplied);
+            if period::bounds(ctrl.cadence, &canonical).is_none() {
                 bail!(
                     "`{supplied}` is not a valid period id for cadence {:?}",
                     ctrl.cadence
                 );
             }
-            Some(supplied.clone())
+            Some(canonical)
         }
         None => {
             if matches!(ctrl.cadence, Cadence::Continuous) {

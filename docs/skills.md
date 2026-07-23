@@ -68,7 +68,7 @@ Six generic runbooks ship in the binary; most controls name one of these and pas
 - **`capture-sweep`** — the capture→diff→flag engine for automated controls. Runs the `captures[]` / `commands[]` from `skill_args` across the resolved scope, diffs against the prior run, emits findings. Read-only.
 - **`attestation-review`** — the runbook for human-judgment controls: walk `skill_args.checklist[]` with the operator, capture their attestation, draft follow-ups.
 - **`policy-annual-review`** — reused across every policy-review control. The control supplies only `skill_args.policy_path`; the skill walks the policy, captures the diff and attestation, and surfaces policy/procedure drift.
-- **`report`** — read-only; aggregates a period's evidence (`secunit report data`) into a leadership report under `reports/`. `skill_args.kind` selects quarterly/annual.
+- **`report`** — read-only over evidence; aggregates a period's evidence (`secunit report data`) into a stakeholder report under `reports/`. `skill_args.kind` selects weekly/monthly/quarterly/annual. With `skill_args.publish: true`, the agent also files the report as a tracker issue (GitLab via `glab`, Linear via API) per `report.publish` in `_config.yaml` and records the issue URL in the run's `external_links` — the binary has no tracker integration.
 - **`bootstrap`** — derives draft controls from the WISP under `security/`.
 - **`inventory-seed`** — proposes `inventory.yaml` entries from the org's GitHub/cloud/SaaS sources.
 

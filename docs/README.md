@@ -24,6 +24,7 @@ Under [`examples/`](examples/):
   - [`ac-annual-access-review.yaml`](examples/controls/ac-annual-access-review.yaml) — scope by SaaS, all entries
   - [`cp-annual-bcp-test.yaml`](examples/controls/cp-annual-bcp-test.yaml) — scope declared inline
   - [`policy-annual-review-access-control.yaml`](examples/controls/policy-annual-review-access-control.yaml) — org-wide, no scope
+  - [`rp-weekly-status.yaml`](examples/controls/rp-weekly-status.yaml) / [`rp-monthly-status.yaml`](examples/controls/rp-monthly-status.yaml) — stakeholder status reports via the bundled `report` skill, published as tracker issues
 - `skills/` — two reference skill markdowns showing the canonical shapes:
   - [`aa-weekly-audit-review.md`](examples/skills/aa-weekly-audit-review.md) — control-specific, single-system
   - [`sca-weekly-dependency-scan.md`](examples/skills/sca-weekly-dependency-scan.md) — control-specific, multi-system iteration
@@ -34,6 +35,7 @@ Under [`examples/`](examples/):
   - `evidence/2026/q2/aa-weekly-audit-review/2026-05-01-run-001/` — **flat layout** (single-system resolution): [manifest](examples/evidence/2026/q2/aa-weekly-audit-review/2026-05-01-run-001/manifest.json), [findings](examples/evidence/2026/q2/aa-weekly-audit-review/2026-05-01-run-001/findings.md)
   - `evidence/2026/q2/sca-weekly-dependency-scan/2026-05-04-run-001/` — **by-system layout** (multi-system iteration): [manifest](examples/evidence/2026/q2/sca-weekly-dependency-scan/2026-05-04-run-001/manifest.json), [findings](examples/evidence/2026/q2/sca-weekly-dependency-scan/2026-05-04-run-001/findings.md), per-system raw artifacts under `by-system/<name>/raw/`
 - [`reports/2026-q1-quarterly.md`](examples/reports/2026-q1-quarterly.md) — a generated quarterly report.
+- [`reports/2026-W19-weekly.md`](examples/reports/2026-W19-weekly.md) — a generated weekly stakeholder report, as published to the tracker.
 
 ## How to read these in order
 

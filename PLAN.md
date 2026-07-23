@@ -218,14 +218,13 @@ Total: roughly three weeks of focused work to a useful system, then you mostly w
 - `secunit-core::reports::data_assembler`:
   - Walks `evidence/<y>/<q>/`, summarizes per-control activity, counts on-time vs late, extracts open risks from manifest `external_links` (superseded by the `risks/` register once Phase 8 lands; the assembler then reads open risks from `risks/index.json`).
   - Emits structured JSON.
-- CLI: `secunit report data --quarter <yyyy-qN> --out <path>`, `--year`, `--policy-status`.
-- `skills/report-quarterly.md` — agent-side skill that reads `report-data.json`, composes `reports/<y>-<qN>-quarterly.md` matching the example shape under `docs/examples/reports/`.
-- `skills/report-annual.md`, `skills/report-policy-review-status.md` — same pattern, lower priority.
+- CLI: `secunit report data --quarter <yyyy-qN> --out <path>`, plus `--year`, `--week`, `--month` (shipped; the once-planned `--policy-status` mode was dropped — policy-review status reads out of `secunit status` and the annual report instead).
+- Bundled `report` skill — reads `report-data.json`, composes `reports/<y>-<qN>-quarterly.md` matching the example shape under `docs/examples/reports/`; `skill_args.kind` also covers weekly/monthly/annual.
 
 **Tests.**
 
 - **Data assembler:** golden tests against the multi-system fixture org, three quarters of synthetic evidence runs, assert known JSON output.
-- **End-to-end:** run `secunit report data --quarter 2026-q2`; load output through `report-quarterly` skill; manually review markdown against the example.
+- **End-to-end:** run `secunit report data --quarter 2026-q2`; load output through the `report` skill; manually review markdown against the example.
 - **Late-control surfacing:** synthetic fixture with one control that missed two consecutive weekly runs; assert the report calls it out.
 
 **Exit criteria.** Q2 2026 quarterly report committed and reviewed with the Owner.

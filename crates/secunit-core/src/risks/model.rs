@@ -43,6 +43,24 @@ pub enum Status {
 }
 
 impl Status {
+    /// Still-open lifecycle states — the risk demands ongoing work.
+    /// Exhaustive on purpose: a new variant must decide its partition
+    /// here, not fall through a consumer's wildcard arm.
+    pub fn is_open(self) -> bool {
+        match self {
+            Status::Open | Status::InProgress | Status::Reopened => true,
+            Status::Remediated | Status::AcceptedException | Status::FalsePositive => false,
+        }
+    }
+
+    /// Terminal states. Note: SLA surfacing is deliberately narrower —
+    /// `secunit risks list --past-sla` still shows an accepted-exception
+    /// whose date has lapsed (see `cmd/risks.rs::is_past_sla`), so don't
+    /// substitute this for that check.
+    pub fn is_closed(self) -> bool {
+        !self.is_open()
+    }
+
     /// The on-disk kebab-case spelling used in `status-changed` payloads
     /// and the index.
     pub fn as_str(self) -> &'static str {

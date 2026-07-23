@@ -41,6 +41,39 @@ pub fn derive(cadence: Cadence, target_date: NaiveDate) -> Option<String> {
     }
 }
 
+/// Canonicalize operator spellings to the exact form [`derive`] mints and
+/// [`bounds`] parses: `2026-Q3` → `2026-q3`, `2026-w5` → `2026-W05`,
+/// `2026-7` → `2026-07`. Case and zero-padding carry no meaning, but the
+/// canonical spelling is load-bearing on disk — coverage matches a run's
+/// claimed `period_id` against derive-minted ids by exact string, so every
+/// entry point that accepts operator input (`run prepare --period`,
+/// `report data` selectors) must canonicalize before validating or
+/// storing. Anything that doesn't match the rough shape passes through
+/// untouched and fails in [`bounds`] with the caller's format hint.
+pub fn canonicalize(cadence: Cadence, raw: &str) -> String {
+    let raw = raw.trim();
+    let is_digits = |s: &str, max: usize| {
+        !s.is_empty() && s.len() <= max && s.bytes().all(|b| b.is_ascii_digit())
+    };
+    let (y, rest) = match raw.split_once('-') {
+        Some(parts) => parts,
+        None => return raw.to_string(),
+    };
+    match cadence {
+        Cadence::Weekly => rest
+            .strip_prefix(['w', 'W'])
+            .filter(|w| is_digits(w, 2))
+            .map(|w| format!("{y}-W{w:0>2}")),
+        Cadence::Monthly => is_digits(rest, 2).then(|| format!("{y}-{rest:0>2}")),
+        Cadence::Quarterly => rest
+            .strip_prefix(['q', 'Q'])
+            .filter(|q| is_digits(q, 1))
+            .map(|q| format!("{y}-q{q}")),
+        _ => None,
+    }
+    .unwrap_or_else(|| raw.to_string())
+}
+
 /// Parse a period id and return its inclusive date range.
 ///
 /// Returns `None` for `Continuous` and for ids that don't match the
@@ -82,7 +115,10 @@ fn parse_month(s: &str) -> Option<(NaiveDate, NaiveDate)> {
 
 fn parse_quarter(s: &str) -> Option<(NaiveDate, NaiveDate)> {
     let (y, q) = s.split_once("-q")?;
-    if y.len() != 4 {
+    // Exactly one digit, like the week/month parsers' width checks —
+    // otherwise `2026-q04` (or `2026-q+4`, via u32's sign tolerance)
+    // validates yet never string-matches a derive-minted `2026-q4`.
+    if y.len() != 4 || q.len() != 1 {
         return None;
     }
     let year: i32 = y.parse().ok()?;
@@ -264,6 +300,31 @@ mod tests {
         assert_eq!(bounds(Cadence::Quarterly, "2026-q5"), None);
         assert_eq!(bounds(Cadence::SemiAnnual, "2026-H3"), None);
         assert_eq!(bounds(Cadence::Annual, "26"), None);
+    }
+
+    #[test]
+    fn bounds_rejects_non_canonical_quarter_digits() {
+        // Zero-padded or signed quarter digits parse as u32 but would
+        // never string-match a derive-minted id — reject at the grammar.
+        assert_eq!(bounds(Cadence::Quarterly, "2026-q04"), None);
+        assert_eq!(bounds(Cadence::Quarterly, "2026-q+4"), None);
+    }
+
+    #[test]
+    fn canonicalize_accepts_conventional_spellings() {
+        assert_eq!(canonicalize(Cadence::Quarterly, "2026-Q3"), "2026-q3");
+        assert_eq!(canonicalize(Cadence::Quarterly, "2026-q3"), "2026-q3");
+        assert_eq!(canonicalize(Cadence::Weekly, "2026-W5"), "2026-W05");
+        assert_eq!(canonicalize(Cadence::Weekly, "2026-w05"), "2026-W05");
+        assert_eq!(canonicalize(Cadence::Monthly, "2026-7"), "2026-07");
+        assert_eq!(canonicalize(Cadence::Annual, " 2026 "), "2026");
+    }
+
+    #[test]
+    fn canonicalize_passes_garbage_through_for_bounds_to_reject() {
+        assert_eq!(canonicalize(Cadence::Weekly, "2026-19"), "2026-19");
+        assert_eq!(canonicalize(Cadence::Quarterly, "2026-q12"), "2026-q12");
+        assert_eq!(canonicalize(Cadence::Monthly, "2026-131"), "2026-131");
     }
 
     #[test]

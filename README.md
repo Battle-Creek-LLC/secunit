@@ -128,6 +128,19 @@ run in chronological order, recomputes each artifact hash, and confirms each
 run's `prior_run.manifest_sha256` matches the recomputed sha of the prior
 manifest.
 
+### Reports
+
+```bash
+secunit report data --week 2026-W30 --out <run_dir>/raw/report-data.json   # also --month / --quarter / --year
+```
+
+Aggregates one period's coverage, runs, overdue controls, and risk-register
+delta into JSON; the bundled `report` skill renders it to a stakeholder
+report under `reports/` and — when `report.publish` is configured in
+`_config.yaml` — files it as a GitLab or Linear issue, recording the issue
+URL in the run's evidence. The binary assembles data only; prose and
+publishing are the agent's job.
+
 ### Other commands
 
 `secunit registry` and `secunit inventory` manage controls, the schedule, and

@@ -43,6 +43,21 @@ pub struct VerifyReport {
     /// Risk logs that failed verification (broken chain or unresolvable
     /// finding ref).
     pub risk_failures: Vec<RiskFailure>,
+    /// Event logs found outside the register — a `risks/` dir whose name
+    /// fails the `R-NNNN` membership rule (`risks::risk_ids`) but that
+    /// contains an `events.jsonl` (a backup, scratch copy, or
+    /// hand-migrated id). Not verified and invisible to reports and the
+    /// index; warned so a genuine risk stranded there is never silent.
+    /// Warnings do not fail verification.
+    pub risk_warnings: Vec<RiskWarning>,
+}
+
+/// See [`VerifyReport::risk_warnings`].
+#[derive(Debug, Clone)]
+pub struct RiskWarning {
+    /// Store-relative dir, e.g. `risks/R-0001-copy`.
+    pub dir: String,
+    pub detail: String,
 }
 
 /// One verified risk log: its chain walked clean and every `finding_ref`
@@ -339,10 +354,12 @@ fn verify_risks(root: &Path, report: &mut VerifyReport) {
         return;
     }
 
-    // Enumerate `risks/<id>/events.jsonl` dirs, in id order for stable output.
-    let mut risk_ids: Vec<String> = Vec::new();
-    let entries = match fs::read_dir(&risks_dir) {
-        Ok(e) => e,
+    // Membership comes from the register's single rule (`risks::risk_ids`)
+    // so verify can never vouch for a log that reports and the index don't
+    // count. Dirs outside the rule that still hold an events.jsonl are
+    // warned about — a stranded genuine risk must not be silently ignored.
+    let members = match store::risk_ids(root) {
+        Ok(ids) => ids,
         Err(e) => {
             report.risk_failures.push(RiskFailure {
                 risk_id: RISKS_DIR.to_string(),
@@ -352,21 +369,33 @@ fn verify_risks(root: &Path, report: &mut VerifyReport) {
             return;
         }
     };
-    for entry in entries.flatten() {
-        let Ok(ft) = entry.file_type() else { continue };
-        if !ft.is_dir() {
-            continue;
+    if let Ok(entries) = fs::read_dir(&risks_dir) {
+        let mut orphans: Vec<String> = Vec::new();
+        for entry in entries.flatten() {
+            let Ok(ft) = entry.file_type() else { continue };
+            if !ft.is_dir() {
+                continue;
+            }
+            let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+                continue;
+            };
+            if entry.path().join(EVENTS_FILE).exists() && !members.contains(&name) {
+                orphans.push(name);
+            }
         }
-        let Some(name) = entry.file_name().to_str().map(str::to_string) else {
-            continue;
-        };
-        if entry.path().join(EVENTS_FILE).exists() {
-            risk_ids.push(name);
+        orphans.sort();
+        for name in orphans {
+            report.risk_warnings.push(RiskWarning {
+                dir: format!("{RISKS_DIR}/{name}"),
+                detail: "events.jsonl outside the register (dir name is not a valid R-NNNN \
+                         id) — not verified, and invisible to reports and the index; rename \
+                         it into the register or remove it"
+                    .into(),
+            });
         }
     }
-    risk_ids.sort();
 
-    for risk_id in risk_ids {
+    for risk_id in members {
         // load_events validates seq monotonicity, a leading `opened`, AND the
         // prev_sha256 chain — any break (including a single edited line) is an
         // error here, which is exactly the tamper signal we want to surface.

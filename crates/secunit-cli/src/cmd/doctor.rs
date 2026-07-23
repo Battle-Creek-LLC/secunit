@@ -344,6 +344,15 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
                     }
                 }
             }
+            for w in &vr.risk_warnings {
+                ev.warn(
+                    "risk logs",
+                    format!("{}: {}", w.dir, w.detail),
+                    "if this is a stranded genuine risk, rename the dir to its R-NNNN id \
+                     (then `secunit risks rebuild`); if it is a backup or scratch copy, \
+                     move it outside risks/.",
+                );
+            }
         }
         Err(e) => ev.fail(
             "verify",

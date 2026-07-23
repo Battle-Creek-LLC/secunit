@@ -703,3 +703,20 @@ fn prepare_rejects_invalid_period_no_run_dir_created() {
         "no run dir should be allocated when prepare rejects --period"
     );
 }
+
+#[test]
+fn prepare_canonicalizes_operator_period_spelling() {
+    let (_tmp, root) = staged_fixture();
+    let (reg, _) = loader::load(&root);
+    let opts = PrepareOpts {
+        today: Some(NaiveDate::from_ymd_opt(2026, 5, 4).unwrap()),
+        period_id: Some("2026-w19".into()),
+        ..Default::default()
+    };
+    let ctx = runner::prepare(&reg, CONTROL, &opts).expect("prepare");
+    assert_eq!(
+        ctx.period_id.as_deref(),
+        Some("2026-W19"),
+        "sealed period ids must be canonical or coverage can never match them"
+    );
+}

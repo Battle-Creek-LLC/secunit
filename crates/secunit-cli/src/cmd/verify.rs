@@ -32,6 +32,10 @@ pub fn run(ctx: &Ctx, control_id: Option<&str>) -> Result<ExitCode> {
                 "kind": format!("{:?}", f.kind),
                 "detail": f.detail,
             })).collect::<Vec<_>>(),
+            "risk_warnings": report.risk_warnings.iter().map(|w| serde_json::json!({
+                "dir": w.dir,
+                "detail": w.detail,
+            })).collect::<Vec<_>>(),
         });
         println!("{}", serde_json::to_string_pretty(&payload)?);
         return Ok(if report.is_clean() {
@@ -58,6 +62,9 @@ pub fn run(ctx: &Ctx, control_id: Option<&str>) -> Result<ExitCode> {
     }
     for f in &report.risk_failures {
         println!("✗ risk {}: {:?} — {}", f.risk_id, f.kind, f.detail);
+    }
+    for w in &report.risk_warnings {
+        println!("⚠ {}: {}", w.dir, w.detail);
     }
 
     // Report the run summary line whenever there is run evidence to speak to,

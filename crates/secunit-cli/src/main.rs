@@ -110,6 +110,11 @@ enum Command {
         #[command(subcommand)]
         sub: cmd::capture::CaptureCmd,
     },
+    /// Assemble report data for a report skill to render.
+    Report {
+        #[command(subcommand)]
+        sub: ReportCmd,
+    },
     /// Manage the risk register.
     Risks {
         #[command(subcommand)]
@@ -169,6 +174,30 @@ enum WispCmd {
         /// Render backend: `typst` (default), `weasyprint`, or `chromium`.
         #[arg(long, value_name = "BACKEND")]
         renderer: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ReportCmd {
+    /// Aggregate manifests, state, and the risk register for one period
+    /// into JSON. The binary never composes prose.
+    #[command(group(clap::ArgGroup::new("period").required(true).multiple(false)))]
+    Data {
+        /// ISO week, e.g. `2026-W30`.
+        #[arg(long, value_name = "YYYY-Wnn", group = "period")]
+        week: Option<String>,
+        /// Calendar month, e.g. `2026-07`.
+        #[arg(long, value_name = "YYYY-MM", group = "period")]
+        month: Option<String>,
+        /// Quarter, e.g. `2026-q3`.
+        #[arg(long, value_name = "YYYY-qN", group = "period")]
+        quarter: Option<String>,
+        /// Calendar year, e.g. `2026`.
+        #[arg(long, value_name = "YYYY", group = "period")]
+        year: Option<String>,
+        /// Write JSON here instead of stdout.
+        #[arg(long, value_name = "PATH")]
+        out: Option<PathBuf>,
     },
 }
 
@@ -451,6 +480,24 @@ fn main() -> ExitCode {
             InventoryCmd::Check => cmd::inventory::check(&ctx),
         },
         Command::Capture { sub } => cmd::capture::run(sub),
+        Command::Report { sub } => match sub {
+            ReportCmd::Data {
+                week,
+                month,
+                quarter,
+                year,
+                out,
+            } => cmd::report::data(
+                &ctx,
+                &cmd::report::PeriodArg {
+                    week: week.as_deref(),
+                    month: month.as_deref(),
+                    quarter: quarter.as_deref(),
+                    year: year.as_deref(),
+                },
+                out.as_deref(),
+            ),
+        },
         Command::Risks { sub } => match sub {
             RisksCmd::Open {
                 control_id,

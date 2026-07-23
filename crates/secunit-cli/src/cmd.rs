@@ -16,6 +16,7 @@ pub mod due;
 pub mod features;
 pub mod inventory;
 pub mod registry;
+pub mod report;
 pub mod risks;
 pub mod run;
 pub mod scope;
