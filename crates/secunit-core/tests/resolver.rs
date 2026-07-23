@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use chrono::NaiveDate;
 use proptest::prelude::*;
 use secunit_core::model::{
-    Cadence, Control, EvidenceRequirement, InventoryEntry, ResolvedSystem, Schedule, ScheduleEntry,
-    ScheduleInsert, ScheduleSkip, Scope, State, Weekday,
+    Cadence, Control, EvidenceRequirement, InventoryEntry, ResolvedSystem, RunStatus, Schedule,
+    ScheduleEntry, ScheduleInsert, ScheduleSkip, Scope, State, StateEntry, Weekday,
 };
 use secunit_core::registry::{
     loader,
@@ -322,6 +322,62 @@ fn next_due_facade_matches_with_reason() {
         resolver::next_due(&c, &schedule, None, today, None),
         resolver::next_due_with_reason(&c, &schedule, None, today, None).map(|r| r.date)
     );
+}
+
+// ---- stale cached next_due: missed controls stay due -----------------------
+
+fn state_due(next_due: &str) -> StateEntry {
+    StateEntry {
+        last_run_id: None,
+        last_run_path: None,
+        last_run_at: None,
+        last_status: RunStatus::Complete,
+        next_due: Some(d(next_due)),
+    }
+}
+
+#[test]
+fn stale_cached_due_date_is_not_rolled_forward() {
+    // The obligation came due and no finalize advanced it — the date
+    // holds, and past grace the control is overdue. Rolling forward
+    // would make is_overdue unreachable for cadence-driven controls.
+    let w = skeleton("w", Cadence::Weekly);
+    let st = state_due("2026-05-04");
+    let next = resolver::next_due(&w, &Default::default(), Some(&st), d("2026-06-01"), None);
+    assert_eq!(next, Some(d("2026-05-04")));
+    assert!(resolver::is_overdue(&w, next.unwrap(), d("2026-06-01")));
+
+    // Non-weekly cadences previously ignored state entirely.
+    let m = skeleton("m", Cadence::Monthly);
+    let st = state_due("2026-05-01");
+    let next = resolver::next_due(&m, &Default::default(), Some(&st), d("2026-06-15"), None);
+    assert_eq!(next, Some(d("2026-05-01")));
+    assert!(resolver::is_overdue(&m, next.unwrap(), d("2026-06-15")));
+
+    // Inside the grace window the date still holds but is not yet overdue.
+    let st = state_due("2026-05-04");
+    let next = resolver::next_due(&w, &Default::default(), Some(&st), d("2026-05-06"), None);
+    assert_eq!(next, Some(d("2026-05-04")));
+    assert!(!resolver::is_overdue(&w, next.unwrap(), d("2026-05-06")));
+}
+
+#[test]
+fn skip_covering_the_missed_date_forgives_the_miss() {
+    let w = skeleton("w", Cadence::Weekly);
+    let mut entry = entry_for("w");
+    entry.skip = Some(ScheduleSkip {
+        quarter: Some("2026-q2".into()),
+        year: None,
+        reason: Some("audit prep".into()),
+    });
+    let schedule = Schedule {
+        overrides: vec![entry],
+    };
+    // Missed 2026-05-04 (q2), but q2 is skipped for this control — the
+    // sanctioned miss rolls forward... and today (q3) computes normally.
+    let st = state_due("2026-05-04");
+    let next = resolver::next_due(&w, &schedule, Some(&st), d("2026-07-06"), None);
+    assert_eq!(next, Some(d("2026-07-06")), "2026-07-06 is a Monday");
 }
 
 // ---- property: weekly cadence is monotonic in today --------------------

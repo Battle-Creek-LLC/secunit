@@ -170,15 +170,23 @@ fn monthly_window_counts_runs_and_surfaces_missed_weeks() {
     assert_eq!(data.totals.runs, 2);
     assert!(data.totals.gaps >= 2);
 
-    // overdue/upcoming follow the resolver, matching `secunit due`: a
-    // missed weekly rolls forward to its next weekday (the misses are the
-    // gaps above, not a standing overdue), so it shows under upcoming.
-    assert!(data.overdue.is_empty(), "resolver rolls weeklies forward");
+    // overdue follows the resolver, matching `secunit due`: a cached due
+    // date that passed without a completed run holds (and is past the
+    // 3-day weekly grace by 2026-06-01), so the never-refreshed weekly
+    // control is overdue — and not double-listed under upcoming.
+    let aa = data
+        .overdue
+        .iter()
+        .find(|o| o.id == "aa-weekly-audit-review")
+        .expect("stale weekly control should be overdue");
+    assert_eq!(aa.next_due, d(2026, 5, 4));
+    assert_eq!(aa.days_overdue, 28);
     assert!(
-        data.upcoming
+        !data
+            .upcoming
             .iter()
             .any(|u| u.id == "aa-weekly-audit-review"),
-        "stale weekly control is due again next week"
+        "an overdue control belongs in overdue, not upcoming"
     );
 }
 

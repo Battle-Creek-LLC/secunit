@@ -78,22 +78,25 @@ pub fn next_due_with_reason(
     today: NaiveDate,
     config_default_weekday: Option<Weekday>,
 ) -> Option<DueResolution> {
+    // A cached next_due in the past means the obligation came due and no
+    // finalize advanced it — the control is still due on that date, and
+    // once past its grace window it is overdue. Rolling forward here
+    // would silently forgive every miss and leave `is_overdue` (and the
+    // grace table) unreachable for cadence-driven controls. A skip
+    // override covering the missed date sanctions the miss and falls
+    // through to the normal forward computation.
+    if let Some(stale) = state.and_then(|s| s.next_due) {
+        if stale < today && !skip_covers(control, schedule, stale) {
+            return Some(DueResolution {
+                date: stale,
+                reason: DueReason::Cadence,
+                note: Some("due date passed without a completed run".into()),
+            });
+        }
+    }
+
     // Skip a single firing window if `schedule.yaml` says so.
-    let skip_today = schedule
-        .overrides
-        .iter()
-        .filter(|o| o.control_id == control.id)
-        .any(|o| {
-            if let Some(skip) = &o.skip {
-                if let Some(q) = &skip.quarter {
-                    return quarter_string(today) == *q;
-                }
-                if let Some(y) = skip.year {
-                    return today.year() == y;
-                }
-            }
-            false
-        });
+    let skip_today = skip_covers(control, schedule, today);
 
     // Candidate buckets, each carrying provenance for the reason field.
     let mut candidates: Vec<DatedCandidate> = Vec::new();
@@ -225,6 +228,25 @@ impl From<DatedCandidate> for DueResolution {
             note: c.note,
         }
     }
+}
+
+/// Does any `schedule.yaml` skip directive for this control cover `date`?
+fn skip_covers(control: &Control, schedule: &Schedule, date: NaiveDate) -> bool {
+    schedule
+        .overrides
+        .iter()
+        .filter(|o| o.control_id == control.id)
+        .any(|o| {
+            if let Some(skip) = &o.skip {
+                if let Some(q) = &skip.quarter {
+                    return quarter_string(date) == *q;
+                }
+                if let Some(y) = skip.year {
+                    return date.year() == y;
+                }
+            }
+            false
+        })
 }
 
 /// Has the control passed its grace window?

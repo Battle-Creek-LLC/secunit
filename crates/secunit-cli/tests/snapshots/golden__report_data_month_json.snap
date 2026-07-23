@@ -269,6 +269,16 @@ expression: run_cli(&argv)
     "gaps": 10,
     "open": 6
   },
+  "overdue": [
+    {
+      "id": "aa-weekly-audit-review",
+      "title": "Weekly audit and accountability review",
+      "owner": "cto",
+      "next_due": "2026-05-04",
+      "days_overdue": 28,
+      "last_status": "complete"
+    }
+  ],
   "risks": {
     "opened_in_period": 0,
     "reopened_in_period": 0,
@@ -289,13 +299,6 @@ expression: run_cli(&argv)
       "owner": "cto",
       "cadence": "weekly",
       "next_due": "2026-06-01"
-    },
-    {
-      "id": "aa-weekly-audit-review",
-      "title": "Weekly audit and accountability review",
-      "owner": "cto",
-      "cadence": "weekly",
-      "next_due": "2026-06-02"
     }
   ]
 }

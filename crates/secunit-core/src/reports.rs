@@ -33,12 +33,12 @@ pub struct ReportData {
     pub controls: Vec<ControlActivity>,
     pub totals: Totals,
     /// Controls past due and past their cadence grace window as of
-    /// `generated_on`, per the same resolver `secunit due` uses. The
-    /// resolver rolls most missed due dates forward to the next firing
-    /// (a skipped weekly is *due again*, not overdue), so this list is
-    /// usually empty even when periods were missed — missed periods
-    /// surface as `Gap` rows in `controls[].periods`, which is the
-    /// signal a report must call out.
+    /// `generated_on`, per the same resolver `secunit due` uses: a due
+    /// date that passed without a completed run holds until satisfied or
+    /// skipped, so a missed control stays here until it runs. Never-run
+    /// controls have no cached due date and appear under `upcoming`;
+    /// historical misses beyond the latest one surface as `Gap` rows in
+    /// `controls[].periods`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overdue: Vec<OverdueControl>,
     pub risks: RiskSummary,
