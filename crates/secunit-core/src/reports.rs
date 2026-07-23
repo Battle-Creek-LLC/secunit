@@ -32,6 +32,14 @@ pub struct ReportData {
     pub generated_on: NaiveDate,
     pub controls: Vec<ControlActivity>,
     pub totals: Totals,
+    /// Sealed manifests that exist but could not be read or parsed. The
+    /// report proceeds without them, but a non-empty list means run
+    /// counts and period statuses above understate the evidence (a
+    /// period may read Gap only because its manifest is unreadable) —
+    /// the skill must surface these, and the operator must investigate:
+    /// an altered manifest is an integrity event.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub manifest_errors: Vec<ManifestError>,
     /// Controls past due and past their cadence grace window as of
     /// `generated_on`, per the same resolver `secunit due` uses: a due
     /// date that passed without a completed run holds until satisfied or
@@ -176,6 +184,14 @@ pub struct RegisterError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManifestError {
+    pub control_id: String,
+    /// Run dir relative to the secunit root.
+    pub path: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenRisk {
     pub risk_id: String,
     pub title: String,
@@ -210,8 +226,25 @@ pub fn assemble(
     let mut totals = Totals::default();
 
     // One walk of the whole evidence tree: coverage and the run summaries
-    // below consume the same sealed manifests, bucketed per control.
-    let mut runs_by_control = coverage::sealed_runs_by_control(&reg.root)?;
+    // below consume the same sealed manifests, bucketed per control. The
+    // walk's skipped-manifest list goes into the payload — a corrupt
+    // manifest must not silently read as a gap.
+    let walk = coverage::sealed_runs_by_control(&reg.root)?;
+    let mut runs_by_control = walk.runs;
+    let manifest_errors: Vec<ManifestError> = walk
+        .errors
+        .into_iter()
+        .map(|e| ManifestError {
+            control_id: e.control_id,
+            path: e
+                .path
+                .strip_prefix(&reg.root)
+                .unwrap_or(&e.path)
+                .to_string_lossy()
+                .into_owned(),
+            error: e.error,
+        })
+        .collect();
 
     for control in reg.controls.values() {
         let sealed = runs_by_control.remove(&control.id).unwrap_or_default();
@@ -291,6 +324,7 @@ pub fn assemble(
         generated_on: today,
         controls,
         totals,
+        manifest_errors,
         overdue,
         risks,
         upcoming,

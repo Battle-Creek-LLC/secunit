@@ -614,3 +614,44 @@ fn late_assembly_looks_forward_from_today() {
         );
     }
 }
+
+#[test]
+fn corrupt_manifest_degrades_to_manifest_error() {
+    let (_tmp, root) = staged_fixture();
+    run_one(&root, d(2026, 5, 4)); // W19
+    run_one(&root, d(2026, 5, 11)); // W20
+
+    // Truncate W19's manifest mid-file — present but unparseable.
+    let w19_dir = root.join("evidence/2026/q2");
+    let run_dir = fs::read_dir(w19_dir.join(CONTROL))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .min()
+        .unwrap();
+    let mpath = run_dir.join("manifest.json");
+    let text = fs::read_to_string(&mpath).unwrap();
+    fs::write(&mpath, &text[..text.len() / 2]).unwrap();
+
+    let (reg, _) = loader::load(&root);
+    let data = reports::assemble(
+        &reg,
+        "2026-05",
+        Cadence::Monthly,
+        d(2026, 5, 1),
+        d(2026, 5, 31),
+        d(2026, 6, 1),
+    )
+    .expect("one corrupt manifest must not abort the report");
+
+    let sca = data.controls.iter().find(|c| c.id == CONTROL).unwrap();
+    assert_eq!(sca.runs.len(), 1, "W20 still counted");
+    assert_eq!(data.manifest_errors.len(), 1);
+    let err = &data.manifest_errors[0];
+    assert_eq!(err.control_id, CONTROL);
+    assert!(
+        err.path.starts_with("evidence/"),
+        "path must be store-relative: {}",
+        err.path
+    );
+    assert!(err.error.contains("parse manifest.json"));
+}

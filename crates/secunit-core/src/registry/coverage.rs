@@ -348,42 +348,75 @@ pub fn sealed_runs_for_control(root: &Path, control_id: &str) -> anyhow::Result<
             if !ctrl_dir.is_dir() {
                 continue;
             }
-            collect_runs(&ctrl_dir, &mut out)?;
+            collect_runs(&ctrl_dir, &mut out, &mut |_, _| {})?;
         }
     }
     Ok(out)
+}
+
+/// A manifest that exists but could not be read or parsed — evidence
+/// that is present yet unusable. Walkers that skip these must give the
+/// caller the list, so a report can say so in-band instead of silently
+/// reading the period as a gap.
+#[derive(Debug, Clone)]
+pub struct EvidenceError {
+    pub control_id: String,
+    /// The run dir, as walked (absolute; callers relativize for output).
+    pub path: std::path::PathBuf,
+    pub error: String,
+}
+
+/// [`sealed_runs_by_control`]'s result: runs bucketed by control-dir
+/// name, plus every manifest the walk had to skip.
+#[derive(Debug, Clone, Default)]
+pub struct EvidenceWalk {
+    pub runs: std::collections::BTreeMap<String, Vec<SealedRun>>,
+    pub errors: Vec<EvidenceError>,
 }
 
 /// One walk of the whole evidence tree, bucketing sealed runs by the
 /// control-dir name. Per-control sequences are identical to what
 /// [`sealed_runs_for_control`] returns — registry-wide callers (report
 /// assembly) use this to avoid re-enumerating the year/quarter dirs once
-/// per control.
-pub fn sealed_runs_by_control(
-    root: &Path,
-) -> anyhow::Result<std::collections::BTreeMap<String, Vec<SealedRun>>> {
-    let mut out: std::collections::BTreeMap<String, Vec<SealedRun>> = Default::default();
+/// per control, and to receive the corrupt-manifest list the per-control
+/// walker silently skips.
+pub fn sealed_runs_by_control(root: &Path) -> anyhow::Result<EvidenceWalk> {
+    let mut runs: std::collections::BTreeMap<String, Vec<SealedRun>> = Default::default();
+    let mut errors: Vec<EvidenceError> = Vec::new();
     let evidence = root.join("evidence");
-    if !evidence.is_dir() {
-        return Ok(out);
-    }
-    for year in dir_children(&evidence)? {
-        for quarter in dir_children(&year)? {
-            for ctrl_dir in dir_children(&quarter)? {
-                let Some(control_id) = ctrl_dir.file_name().and_then(|n| n.to_str()) else {
-                    continue;
-                };
-                collect_runs(&ctrl_dir, out.entry(control_id.to_string()).or_default())?;
+    if evidence.is_dir() {
+        for year in dir_children(&evidence)? {
+            for quarter in dir_children(&year)? {
+                for ctrl_dir in dir_children(&quarter)? {
+                    let Some(control_id) = ctrl_dir.file_name().and_then(|n| n.to_str()) else {
+                        continue;
+                    };
+                    let control_id = control_id.to_string();
+                    let bucket = runs.entry(control_id.clone()).or_default();
+                    collect_runs(&ctrl_dir, bucket, &mut |path, error| {
+                        errors.push(EvidenceError {
+                            control_id: control_id.clone(),
+                            path,
+                            error,
+                        })
+                    })?;
+                }
             }
         }
     }
-    Ok(out)
+    Ok(EvidenceWalk { runs, errors })
 }
 
-/// Append every sealed run under one `<quarter>/<control>/` dir,
-/// preserving the lenient corrupt-manifest policy documented on
-/// [`sealed_runs_for_control`].
-fn collect_runs(ctrl_dir: &Path, out: &mut Vec<SealedRun>) -> anyhow::Result<()> {
+/// Append every sealed run under one `<quarter>/<control>/` dir. Pending
+/// runs (no manifest yet) are skipped outright; unreadable or unparseable
+/// manifests are reported through `on_error` — the per-control walker
+/// drops them (its documented lenient policy), the registry-wide walker
+/// surfaces them.
+fn collect_runs(
+    ctrl_dir: &Path,
+    out: &mut Vec<SealedRun>,
+    on_error: &mut dyn FnMut(std::path::PathBuf, String),
+) -> anyhow::Result<()> {
     for run in dir_children(ctrl_dir)? {
         let mpath = run.join("manifest.json");
         if !mpath.is_file() {
@@ -391,11 +424,17 @@ fn collect_runs(ctrl_dir: &Path, out: &mut Vec<SealedRun>) -> anyhow::Result<()>
         }
         let bytes = match fs::read(&mpath) {
             Ok(b) => b,
-            Err(_) => continue,
+            Err(e) => {
+                on_error(run, format!("read manifest.json: {e}"));
+                continue;
+            }
         };
         let manifest: Manifest = match serde_json::from_slice(&bytes) {
             Ok(m) => m,
-            Err(_) => continue,
+            Err(e) => {
+                on_error(run, format!("parse manifest.json: {e}"));
+                continue;
+            }
         };
         out.push(SealedRun {
             path: run,
