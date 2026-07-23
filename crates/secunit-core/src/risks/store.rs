@@ -540,17 +540,53 @@ fn refresh_index_entry(
 /// `risks/`. Pure-ish: reads the logs but writes nothing. `rebuild` wraps
 /// this with the lock and an atomic write.
 pub fn build_index(root: &Path) -> Result<RiskIndex> {
+    let (index, errors) = build_index_lenient(root)?;
+    if let Some((name, error)) = errors.first() {
+        bail!("load events for {name}: {error}");
+    }
+    Ok(index)
+}
+
+/// [`build_index`], but a broken log degrades instead of failing: the
+/// index covers every readable risk and the broken ones come back as
+/// `(risk_id, error)` pairs the caller must surface. Read surfaces
+/// (`risks list`, the GUI, report assembly) use this so one corrupt log
+/// doesn't take every register view down; [`rebuild`] stays strict —
+/// regenerating the canonical cache from a broken register must fail.
+pub fn build_index_lenient(root: &Path) -> Result<(RiskIndex, Vec<(String, String)>)> {
+    let register = load_register(root)?;
     let mut index = RiskIndex::default();
-    for name in risk_ids(root)? {
-        let events = load_events(root, &name).with_context(|| format!("load events for {name}"))?;
-        let head_sha = log_head_sha(root, &name)?;
-        let state = fold::fold(&events);
+    for (name, events) in &register.risks {
+        let head_sha = log_head_sha(root, name)?;
+        let state = fold::fold(events);
         index
             .risks
-            .insert(name, entry_from_state(&state, &head_sha));
+            .insert(name.clone(), entry_from_state(&state, &head_sha));
     }
     index.updated_at = Some(Utc::now());
-    Ok(index)
+    Ok((index, register.errors))
+}
+
+/// The register, leniently loaded: events for every member risk that
+/// parses, plus `(risk_id, error)` for every log that could not be read
+/// or failed chain validation. The single degradation rule for register
+/// consumers — a broken log never silently disappears and never takes
+/// the other risks with it.
+pub struct Register {
+    pub risks: Vec<(String, Vec<RiskEvent>)>,
+    pub errors: Vec<(String, String)>,
+}
+
+pub fn load_register(root: &Path) -> Result<Register> {
+    let mut risks = Vec::new();
+    let mut errors = Vec::new();
+    for id in risk_ids(root)? {
+        match load_events(root, &id) {
+            Ok(events) => risks.push((id, events)),
+            Err(e) => errors.push((id, format!("{e:#}"))),
+        }
+    }
+    Ok(Register { risks, errors })
 }
 
 /// Every risk id in the register: a `risks/<R-NNNN>/` directory whose name

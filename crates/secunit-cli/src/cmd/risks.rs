@@ -656,7 +656,18 @@ pub fn list(
     owner: Option<&str>,
     past_sla: bool,
 ) -> Result<ExitCode> {
-    let index = store::build_index(&ctx.root)?;
+    // Lenient: a broken log degrades the listing (banner + exit 1), it
+    // doesn't take the whole register view down.
+    let (index, register_errors) = store::build_index_lenient(&ctx.root)?;
+    for (id, error) in &register_errors {
+        eprintln!("warning: {id}: {error}");
+    }
+    if !register_errors.is_empty() {
+        eprintln!(
+            "warning: {} risk log(s) unreadable — listing is incomplete; investigate before trusting it",
+            register_errors.len()
+        );
+    }
 
     let want_status = status.map(parse_status).transpose()?;
     // `--severity` accepts a comma-separated list (e.g. `critical,high`).
@@ -695,14 +706,18 @@ pub fn list(
             "schema_version": index.schema_version,
             "risks": filtered,
             "updated_at": index.updated_at,
+            "register_errors": register_errors
+                .iter()
+                .map(|(id, error)| serde_json::json!({ "risk_id": id, "error": error }))
+                .collect::<Vec<_>>(),
         });
         println!("{}", serde_json::to_string_pretty(&payload)?);
-        return Ok(ExitCode::SUCCESS);
+        return Ok(exit_for(&register_errors));
     }
 
     if rows.is_empty() {
         println!("No risks match.");
-        return Ok(ExitCode::SUCCESS);
+        return Ok(exit_for(&register_errors));
     }
 
     println!(
@@ -722,7 +737,16 @@ pub fn list(
             e.source_control,
         );
     }
-    Ok(ExitCode::SUCCESS)
+    Ok(exit_for(&register_errors))
+}
+
+/// Success only when every register log was readable.
+fn exit_for(register_errors: &[(String, String)]) -> ExitCode {
+    if register_errors.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
 }
 
 pub fn show(ctx: &Ctx, risk_id: &str) -> Result<ExitCode> {

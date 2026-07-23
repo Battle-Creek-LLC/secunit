@@ -47,7 +47,13 @@ pub fn list_risks(state: State<'_, AppState>) -> Result<Vec<RiskRow>, String> {
         project.root.clone()
     };
 
-    let index = risks::build_index(&root).map_err(|e| format!("build risk index: {e:#}"))?;
+    // Lenient: a broken log must not blank the whole register table —
+    // readable risks still render; the broken ones are logged.
+    let (index, register_errors) =
+        risks::build_index_lenient(&root).map_err(|e| format!("build risk index: {e:#}"))?;
+    for (id, error) in &register_errors {
+        tracing::warn!(risk_id = %id, %error, "risk log unreadable; register view is incomplete");
+    }
 
     let mut rows: Vec<RiskRow> = index
         .risks

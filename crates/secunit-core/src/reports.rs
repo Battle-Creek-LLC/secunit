@@ -504,22 +504,21 @@ fn risk_summary(
     today: NaiveDate,
 ) -> anyhow::Result<RiskSummary> {
     let mut summary = RiskSummary::default();
-    for risk_id in risks::risk_ids(root)? {
-        let events = match risks::load_events(root, &risk_id) {
-            Ok(events) => events,
-            Err(e) => {
-                // Make paths store-relative: the skill headlines these
-                // strings and may publish the report as a tracker issue,
-                // so the operator's absolute filesystem layout must not
-                // travel with them.
-                let error = format!("{e:#}").replace(&format!("{}/", root.display()), "");
-                summary
-                    .register_errors
-                    .push(RegisterError { risk_id, error });
-                continue;
-            }
-        };
-
+    // The store's shared lenient load — the same degradation rule
+    // `risks list` and the GUI use. Make paths store-relative: the skill
+    // headlines these strings and may publish the report as a tracker
+    // issue, so the operator's absolute filesystem layout must not
+    // travel with them.
+    let register = risks::load_register(root)?;
+    summary.register_errors = register
+        .errors
+        .into_iter()
+        .map(|(risk_id, error)| RegisterError {
+            risk_id,
+            error: error.replace(&format!("{}/", root.display()), ""),
+        })
+        .collect();
+    for (risk_id, events) in register.risks {
         // Count per risk, not per event: a close that a later in-window
         // reopen undoes must not read as a closure, and churn must not
         // double-count. `closed` therefore requires both an in-window
