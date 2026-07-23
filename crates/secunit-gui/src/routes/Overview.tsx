@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useStore } from "@/store";
 import { AlertStrip } from "@/components/AlertStrip";
 import { FocusList } from "@/components/FocusList";

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router";
 import { cn } from "@/lib/cn";
 import { Kbd } from "@/components/ui";
 import { ProjectSwitcher } from "@/components/ProjectSwitcher";

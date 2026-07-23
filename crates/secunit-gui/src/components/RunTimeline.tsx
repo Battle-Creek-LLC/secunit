@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Badge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import type { RunRow, RunState } from "@/lib/ipc";

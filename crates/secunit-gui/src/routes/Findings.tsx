@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useStore } from "@/store";
 import { listFindings, type FindingsRow } from "@/lib/ipc";
 import { FindingsFilters } from "@/components/FindingsFilters";

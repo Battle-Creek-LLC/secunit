@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useStore } from "@/store";
 import { RisksTable, type RiskSortKey } from "@/components/RisksTable";
 import { RiskDetailPane } from "@/components/RiskDetail";
