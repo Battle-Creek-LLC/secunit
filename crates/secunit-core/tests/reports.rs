@@ -655,3 +655,75 @@ fn corrupt_manifest_degrades_to_manifest_error() {
     );
     assert!(err.error.contains("parse manifest.json"));
 }
+
+#[test]
+fn lapsed_accepted_exception_is_surfaced() {
+    let (_tmp, root) = staged_fixture();
+
+    let finding_ref = FindingRef {
+        control_id: CONTROL.to_string(),
+        run_id: "2026-05-04-run-001".to_string(),
+        manifest_sha256: "0".repeat(64),
+        finding_id: "F-001".to_string(),
+        body_path: None,
+    };
+    let ts = |day: u32| d(2026, 5, day).and_hms_opt(9, 0, 0).unwrap().and_utc();
+    let r = risks::open(
+        &root,
+        finding_ref,
+        "single-region BCP exposure",
+        Severity::High,
+        4,
+        3,
+        vec!["api".into()],
+        30,
+        d(2026, 6, 3),
+        "tester",
+        None,
+        Some(ts(4)),
+    )
+    .expect("open");
+    risks::append(
+        &root,
+        &r.risk_id,
+        risks::EventData::ExceptionDocumented {
+            rationale: "accepted for the quarter".into(),
+            approved_by: "cto".into(),
+            expires_at: d(2026, 5, 20),
+        },
+        "tester",
+        None,
+        Some(ts(5)),
+    )
+    .expect("except");
+
+    let (reg, _) = loader::load(&root);
+    let data = reports::assemble(
+        &reg,
+        "2026-05",
+        Cadence::Monthly,
+        d(2026, 5, 1),
+        d(2026, 5, 31),
+        d(2026, 6, 1),
+    )
+    .expect("assemble");
+
+    // Not open — but the pass expired May 20, so it must not vanish.
+    assert!(data.risks.open.is_empty());
+    assert_eq!(data.risks.lapsed_exceptions.len(), 1);
+    let lapsed = &data.risks.lapsed_exceptions[0];
+    assert_eq!(lapsed.risk_id, r.risk_id);
+    assert_eq!(lapsed.expired_on, d(2026, 5, 20));
+
+    // An exception still inside its window stays out of the list.
+    let may20 = reports::assemble(
+        &reg,
+        "2026-05",
+        Cadence::Monthly,
+        d(2026, 5, 1),
+        d(2026, 5, 31),
+        d(2026, 5, 15),
+    )
+    .expect("assemble mid-may");
+    assert!(may20.risks.lapsed_exceptions.is_empty());
+}

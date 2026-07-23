@@ -168,6 +168,12 @@ pub struct RiskSummary {
     pub closed_in_period: usize,
     /// Open risks whose SLA due date has passed `generated_on`.
     pub past_sla: usize,
+    /// Accepted exceptions whose expiry (or, lacking one, original SLA
+    /// date — matching `secunit risks list --past-sla`) has passed. Not
+    /// "open", but the pass leadership granted has run out: the report
+    /// must surface them for re-attestation or remediation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lapsed_exceptions: Vec<LapsedException>,
     /// Risk logs that could not be read or failed chain validation. The
     /// report proceeds without them, but a non-empty list means every
     /// count above understates the register — the skill must surface
@@ -181,6 +187,16 @@ pub struct RiskSummary {
 pub struct RegisterError {
     pub risk_id: String,
     pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LapsedException {
+    pub risk_id: String,
+    pub title: String,
+    pub severity: Severity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    pub expired_on: NaiveDate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -561,6 +577,20 @@ fn risk_summary(
                 past_sla,
                 source_control: state.source_control().map(str::to_string),
             });
+        } else if matches!(state.status, Status::AcceptedException) {
+            // An exception's pass can run out; expiry first, else the
+            // original SLA date — the same trigger `risks list --past-sla`
+            // uses — so the report and the CLI agree on lapsed exceptions.
+            let expired_on = state.exception_expires_at.or(state.due_at);
+            if let Some(expired_on) = expired_on.filter(|d| *d < today) {
+                summary.lapsed_exceptions.push(LapsedException {
+                    risk_id,
+                    title: state.title.clone(),
+                    severity: state.severity,
+                    owner: state.owner.clone(),
+                    expired_on,
+                });
+            }
         }
     }
     summary

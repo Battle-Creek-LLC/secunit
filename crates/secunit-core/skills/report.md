@@ -110,6 +110,7 @@ Stakeholder-brief: one screen, numbers first.
 
 ## Risk register
 - Open: <n> (<n> past SLA). Opened this period: <n>. Reopened: <n>. Closed: <n>.
+- Lapsed exceptions needing re-attestation: <from `risks.lapsed_exceptions`, or "none">.
 <Table of open risks above threshold: id, severity, title, owner, due.>
 
 ## Upcoming
