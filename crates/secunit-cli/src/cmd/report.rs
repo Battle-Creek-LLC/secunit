@@ -32,43 +32,12 @@ impl PeriodArg<'_> {
             (None, None, None, Some(y)) => (Cadence::Annual, y, "YYYY (e.g. 2026)"),
             _ => bail!("pass exactly one of --week, --month, --quarter, --year"),
         };
-        let label = canonicalize(cadence, raw);
+        let label = period::canonicalize(cadence, raw);
         match period::bounds(cadence, &label) {
             Some((start, end)) => Ok((label, cadence, start, end)),
             None => bail!("`{raw}` is not a valid period id; expected {hint}"),
         }
     }
-}
-
-/// Canonicalize operator spellings to the exact form `period::bounds`
-/// parses (the `period::derive` output shape): `2026-Q3` → `2026-q3`,
-/// `2026-w5` → `2026-W05`, `2026-7` → `2026-07`. Case and zero-padding
-/// carry no meaning, so rejecting them would only break scripts; the
-/// canonical label is also what lands in the payload. Anything that
-/// doesn't match the rough shape passes through untouched and fails in
-/// `bounds` with the format hint.
-fn canonicalize(cadence: Cadence, raw: &str) -> String {
-    let raw = raw.trim();
-    let is_digits = |s: &str, max: usize| {
-        !s.is_empty() && s.len() <= max && s.bytes().all(|b| b.is_ascii_digit())
-    };
-    let (y, rest) = match raw.split_once('-') {
-        Some(parts) => parts,
-        None => return raw.to_string(),
-    };
-    match cadence {
-        Cadence::Weekly => rest
-            .strip_prefix(['w', 'W'])
-            .filter(|w| is_digits(w, 2))
-            .map(|w| format!("{y}-W{w:0>2}")),
-        Cadence::Monthly => is_digits(rest, 2).then(|| format!("{y}-{rest:0>2}")),
-        Cadence::Quarterly => rest
-            .strip_prefix(['q', 'Q'])
-            .filter(|q| is_digits(q, 1))
-            .map(|q| format!("{y}-q{q}")),
-        _ => None,
-    }
-    .unwrap_or_else(|| raw.to_string())
 }
 
 pub fn data(ctx: &Ctx, period: &PeriodArg<'_>, out: Option<&Path>) -> Result<ExitCode> {
@@ -98,27 +67,4 @@ pub fn data(ctx: &Ctx, period: &PeriodArg<'_>, out: Option<&Path>) -> Result<Exi
         None => println!("{json}"),
     }
     Ok(ExitCode::SUCCESS)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::canonicalize;
-    use secunit_core::model::Cadence;
-
-    #[test]
-    fn canonicalize_accepts_conventional_spellings() {
-        assert_eq!(canonicalize(Cadence::Quarterly, "2026-Q3"), "2026-q3");
-        assert_eq!(canonicalize(Cadence::Quarterly, "2026-q3"), "2026-q3");
-        assert_eq!(canonicalize(Cadence::Weekly, "2026-W5"), "2026-W05");
-        assert_eq!(canonicalize(Cadence::Weekly, "2026-w05"), "2026-W05");
-        assert_eq!(canonicalize(Cadence::Monthly, "2026-7"), "2026-07");
-        assert_eq!(canonicalize(Cadence::Annual, " 2026 "), "2026");
-    }
-
-    #[test]
-    fn canonicalize_passes_garbage_through_for_bounds_to_reject() {
-        assert_eq!(canonicalize(Cadence::Weekly, "2026-19"), "2026-19");
-        assert_eq!(canonicalize(Cadence::Quarterly, "2026-q12"), "2026-q12");
-        assert_eq!(canonicalize(Cadence::Monthly, "2026-131"), "2026-131");
-    }
 }
