@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-07-24
+
+### Security
+
+- Resolve all 12 open dependabot alerts (#55): `serde_with` 3.18.0 → 3.21.0
+  (transitive, serialization-panic advisory), GUI `vite` 8.0.14 → 8.0.16 and
+  `undici` 7.25.0 → 7.28.0 (four high-severity advisories among them), and a
+  GUI migration from `react-router-dom` 6.x to `react-router` 7.18.1 — the
+  entire 6.x line is affected by two SSR-hydration advisories patched only in
+  7.18.0. The GUI uses declarative routing only, so the v7 API is unchanged.
+
 ## [0.6.0] — 2026-07-23
 
 ### Added
