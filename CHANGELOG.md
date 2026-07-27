@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A `schedule.yaml` dated override (`due:`) can now defer a control past its
+  cadence-derived date. Previously only pull-earlier overrides took effect;
+  a deferral was silently ignored and, once the cadence date passed, the
+  control reported permanently overdue with no way to clear it. A dated
+  override is now an authoritative pin for its period: it replaces the
+  cadence candidate outright, and a future `due:` clears a stale
+  `state.next_due` (a deliberate reschedule, unlike a genuine miss, which
+  still reports overdue). If the rescheduled date itself passes without a
+  run, the control goes overdue at the pinned date with reason
+  `override-due`. `insert:` and `skip:` semantics are unchanged.
+
 ## [0.6.1] — 2026-07-24
 
 ### Security

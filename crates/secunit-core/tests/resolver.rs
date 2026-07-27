@@ -197,6 +197,30 @@ fn reason_is_override_due_when_pinned_by_date() {
 }
 
 #[test]
+fn dated_override_can_defer_past_the_cadence_date() {
+    // The pull-later direction of reason_is_override_due_when_pinned_by_date:
+    // the pin replaces the cadence date rather than racing it.
+    let mut c = skeleton("c", Cadence::Annual);
+    c.due_by = Some("july-31".into());
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2027-06-01")),
+            note: Some("certs valid to 2027-07-08".into()),
+            ..entry_for("c")
+        }],
+    };
+    let r = resolver::next_due_with_reason(&c, &schedule, None, d("2026-07-27"), None);
+    assert_eq!(
+        r,
+        Some(DueResolution {
+            date: d("2027-06-01"),
+            reason: DueReason::OverrideDue,
+            note: Some("certs valid to 2027-07-08".into()),
+        })
+    );
+}
+
+#[test]
 fn reason_is_override_insert_when_a_one_off_lands_first() {
     let mut c = skeleton("c", Cadence::Annual);
     c.due_by = Some("december-31".into());
@@ -378,6 +402,43 @@ fn skip_covering_the_missed_date_forgives_the_miss() {
     let st = state_due("2026-05-04");
     let next = resolver::next_due(&w, &schedule, Some(&st), d("2026-07-06"), None);
     assert_eq!(next, Some(d("2026-07-06")), "2026-07-06 is a Monday");
+}
+
+#[test]
+fn dated_override_survives_a_stale_next_due() {
+    // A future dated override is a deliberate reschedule — it clears the
+    // stale next_due instead of leaving the control permanently overdue.
+    let mut c = skeleton("c", Cadence::Annual);
+    c.due_by = Some("july-31".into());
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2027-06-01")),
+            ..entry_for("c")
+        }],
+    };
+    let state = state_due("2026-07-31");
+    let r = resolver::next_due_with_reason(&c, &schedule, Some(&state), d("2026-09-01"), None);
+    assert_eq!(r.unwrap().date, d("2027-06-01"));
+}
+
+#[test]
+fn missed_dated_override_is_reported_as_the_missed_obligation() {
+    // The reschedule itself was missed: overdue at the pinned date with
+    // reason OverrideDue, not at the older cadence date with Cadence.
+    let mut c = skeleton("c", Cadence::Annual);
+    c.due_by = Some("july-31".into());
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2027-06-01")),
+            ..entry_for("c")
+        }],
+    };
+    let state = state_due("2026-07-31");
+    let r =
+        resolver::next_due_with_reason(&c, &schedule, Some(&state), d("2027-08-01"), None).unwrap();
+    assert_eq!(r.date, d("2027-06-01"));
+    assert_eq!(r.reason, DueReason::OverrideDue);
+    assert!(resolver::is_overdue(&c, r.date, d("2027-08-01")));
 }
 
 // ---- property: weekly cadence is monotonic in today --------------------

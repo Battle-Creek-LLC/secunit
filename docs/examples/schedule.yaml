@@ -1,3 +1,6 @@
+# `due:` pins this period's due date, replacing the cadence-derived date —
+# it works in both directions (pull a control earlier or defer it later).
+# `insert:` adds a one-off firing; `skip:` removes one cadence window.
 overrides:
   - control_id: ra-pentest
     due: 2026-12-01

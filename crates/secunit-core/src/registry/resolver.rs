@@ -67,8 +67,12 @@ pub fn next_due(
 /// [`DueReason`] that produced it and the override's note (if any).
 ///
 /// Precedence rules:
-///   * Earlier date always wins.
-///   * On a tie, override sources beat cadence: insert > dated > weekday > cadence.
+///   * A dated override (`due:`) is an authoritative pin for the period:
+///     it replaces the cadence-derived date entirely, whether it moves
+///     the firing earlier or later.
+///   * Inserts are additive one-off firings; among the remaining
+///     candidates the earliest date wins, and on a tie override sources
+///     beat cadence: insert > dated > weekday > cadence.
 ///   * A skip override removes the cadence firing for the matching
 ///     window; the next-earliest insert (if any) takes its place.
 pub fn next_due_with_reason(
@@ -82,16 +86,36 @@ pub fn next_due_with_reason(
     // finalize advanced it — the control is still due on that date, and
     // once past its grace window it is overdue. Rolling forward here
     // would silently forgive every miss and leave `is_overdue` (and the
-    // grace table) unreachable for cadence-driven controls. A skip
-    // override covering the missed date sanctions the miss and falls
-    // through to the normal forward computation.
+    // grace table) unreachable for cadence-driven controls. Two schedule
+    // directives sanction the miss and fall through to the normal
+    // forward computation: a skip covering the missed date, or a dated
+    // override on/after today (a deliberate reschedule of the period).
     if let Some(stale) = state.and_then(|s| s.next_due) {
         if stale < today && !skip_covers(control, schedule, stale) {
-            return Some(DueResolution {
-                date: stale,
-                reason: DueReason::Cadence,
-                note: Some("due date passed without a completed run".into()),
-            });
+            let dated_overrides: Vec<NaiveDate> = schedule
+                .overrides
+                .iter()
+                .filter(|o| o.control_id == control.id)
+                .filter_map(|o| o.due)
+                .collect();
+            let rescheduled_ahead = dated_overrides.iter().any(|d| *d >= today);
+            if !rescheduled_ahead {
+                // If the period was rescheduled and the new date has also
+                // passed, the pinned date is the missed obligation —
+                // report it with override provenance, not the older
+                // cadence date.
+                let (date, reason) = dated_overrides
+                    .into_iter()
+                    .filter(|d| *d >= stale)
+                    .max()
+                    .map(|d| (d, DueReason::OverrideDue))
+                    .unwrap_or((stale, DueReason::Cadence));
+                return Some(DueResolution {
+                    date,
+                    reason,
+                    note: Some("due date passed without a completed run".into()),
+                });
+            }
         }
     }
 
@@ -155,6 +179,14 @@ pub fn next_due_with_reason(
     let weekday_note =
         weekday_override_entry.and_then(|o| o.note.clone().or_else(|| o.reason.clone()));
 
+    // A dated override pins the period: the cadence candidate is
+    // replaced outright, so the pin wins whether it is earlier or later
+    // than the cadence-derived date. Inserts stay in the race — they are
+    // additive firings, not reschedules.
+    let dated_pin = candidates
+        .iter()
+        .any(|c| c.reason == DueReason::OverrideDue);
+
     // Cadence-derived date, accounting for any weekday override that
     // applies to a weekly cadence.
     let cadence_due = match control.cadence {
@@ -172,7 +204,7 @@ pub fn next_due_with_reason(
         Cadence::Annual => Some(next_annual(today, control.due_by.as_deref())),
     };
 
-    if let Some(d) = cadence_due {
+    if let Some(d) = cadence_due.filter(|_| !dated_pin) {
         let weekday_active =
             matches!(control.cadence, Cadence::Weekly) && weekday_override.is_some();
         let (reason, note, precedence) = if weekday_active {

@@ -72,6 +72,13 @@ Cadence is normally derived (weekly = a chosen weekday, quarterly = first busine
 - Specific dated activities mandated by the WISP (e.g. a procedure that fixes vulnerability audits to particular months of the year).
 - One-off slips, postponements, or insertions.
 
+A dated override (`due:`) is an authoritative pin: it replaces the
+cadence-derived date for the period it falls in, whether it moves the firing
+earlier or later. A future `due:` also clears a missed cadence date — it is a
+deliberate reschedule, not a forgiven miss. Inserts (`insert:`) are additive
+one-off firings and never move an existing date; skips (`skip:`) remove one
+cadence window.
+
 ### Evidence
 
 Every control execution writes a **run directory** under `evidence/<year>/<quarter>/<control-id>/<run-id>/` containing:
