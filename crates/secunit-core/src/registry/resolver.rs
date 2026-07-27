@@ -67,12 +67,17 @@ pub fn next_due(
 /// [`DueReason`] that produced it and the override's note (if any).
 ///
 /// Precedence rules:
-///   * A dated override (`due:`) is an authoritative pin for the period:
-///     it replaces the cadence-derived date entirely, whether it moves
-///     the firing earlier or later.
-///   * Inserts are additive one-off firings; among the remaining
-///     candidates the earliest date wins, and on a tie override sources
-///     beat cadence: insert > dated > weekday > cadence.
+///   * Earliest date wins; on a tie, override sources beat cadence:
+///     insert > dated > weekday > cadence.
+///   * A dated override (`due:`) earlier than the cadence date therefore
+///     wins outright. One later than the cadence date is a **bounded
+///     postponement**: it defers the upcoming firing, but only as far as
+///     the next firing after it — a pin can never swallow more than one
+///     cadence firing. A pin further out than that leaves the nearer
+///     firings untouched and only postpones the firing immediately
+///     before it, once its turn comes. Use `skip:` to remove whole
+///     windows; change the control's `due_by`/cadence for a recurring
+///     shift.
 ///   * A skip override removes the cadence firing for the matching
 ///     window; the next-earliest insert (if any) takes its place.
 pub fn next_due_with_reason(
@@ -82,38 +87,79 @@ pub fn next_due_with_reason(
     today: NaiveDate,
     config_default_weekday: Option<Weekday>,
 ) -> Option<DueResolution> {
+    // Weekday override only changes the cadence-derived date for
+    // weekly controls — capture the note so the cadence candidate can
+    // pick it up if it ends up labelled `OverrideWeekday`.
+    let weekday_override_entry = schedule
+        .overrides
+        .iter()
+        .find(|o| o.control_id == control.id && o.weekday.is_some());
+    let weekday_override = weekday_override_entry.and_then(|o| o.weekday);
+    let weekday_note =
+        weekday_override_entry.and_then(|o| o.note.clone().or_else(|| o.reason.clone()));
+    let effective_weekday = weekday_override
+        .or(control.weekday)
+        .or(config_default_weekday)
+        .unwrap_or(Weekday::Monday);
+
+    // Dated overrides (`due:` pins) for this control, collected once —
+    // the stale-miss guard and the candidate race both consult them.
+    let pins: Vec<(NaiveDate, Option<String>)> = schedule
+        .overrides
+        .iter()
+        .filter(|o| o.control_id == control.id)
+        .filter_map(|o| {
+            o.due
+                .map(|d| (d, o.note.clone().or_else(|| o.reason.clone())))
+        })
+        .collect();
+
+    // Does pin `p` legally postpone an obligation at `from`? Only if no
+    // other cadence firing falls in between — a pin defers exactly one
+    // firing, never a stretch of them.
+    let pin_defers = |from: NaiveDate, p: NaiveDate| -> bool {
+        from <= p
+            && match next_firing_after(control, effective_weekday, from) {
+                Some(nf) => nf > p,
+                None => true,
+            }
+    };
+
     // A cached next_due in the past means the obligation came due and no
     // finalize advanced it — the control is still due on that date, and
     // once past its grace window it is overdue. Rolling forward here
     // would silently forgive every miss and leave `is_overdue` (and the
     // grace table) unreachable for cadence-driven controls. Two schedule
     // directives sanction the miss and fall through to the normal
-    // forward computation: a skip covering the missed date, or a dated
-    // override on/after today (a deliberate reschedule of the period).
+    // forward computation: a skip covering the missed date, or a pending
+    // dated override that postpones that same obligation.
     if let Some(stale) = state.and_then(|s| s.next_due) {
         if stale < today && !skip_covers(control, schedule, stale) {
-            let dated_overrides: Vec<NaiveDate> = schedule
-                .overrides
+            let rescheduled = pins
                 .iter()
-                .filter(|o| o.control_id == control.id)
-                .filter_map(|o| o.due)
-                .collect();
-            let rescheduled_ahead = dated_overrides.iter().any(|d| *d >= today);
-            if !rescheduled_ahead {
-                // If the period was rescheduled and the new date has also
-                // passed, the pinned date is the missed obligation —
-                // report it with override provenance, not the older
-                // cadence date.
-                let (date, reason) = dated_overrides
-                    .into_iter()
-                    .filter(|d| *d >= stale)
-                    .max()
-                    .map(|d| (d, DueReason::OverrideDue))
-                    .unwrap_or((stale, DueReason::Cadence));
-                return Some(DueResolution {
-                    date,
-                    reason,
-                    note: Some("due date passed without a completed run".into()),
+                .any(|(p, _)| *p >= today && pin_defers(stale, *p));
+            if !rescheduled {
+                // If the obligation was postponed and the new date has
+                // also passed, the pinned date is the missed obligation —
+                // report it with override provenance and the operator's
+                // note, not the older cadence date.
+                let missed_pin = pins
+                    .iter()
+                    .filter(|(p, _)| *p < today && pin_defers(stale, *p))
+                    .min_by_key(|(p, _)| *p);
+                return Some(match missed_pin {
+                    Some((p, note)) => DueResolution {
+                        date: *p,
+                        reason: DueReason::OverrideDue,
+                        note: note
+                            .clone()
+                            .or_else(|| Some("due date passed without a completed run".into())),
+                    },
+                    None => DueResolution {
+                        date: stale,
+                        reason: DueReason::Cadence,
+                        note: Some("due date passed without a completed run".into()),
+                    },
                 });
             }
         }
@@ -150,61 +196,42 @@ pub fn next_due_with_reason(
         }
     }
 
-    // Dated overrides — a pinned `due:` date.
-    for ov in schedule
-        .overrides
-        .iter()
-        .filter(|o| o.control_id == control.id)
-    {
-        if let Some(d) = ov.due {
-            if d >= today {
-                candidates.push(DatedCandidate {
-                    date: d,
-                    reason: DueReason::OverrideDue,
-                    note: ov.note.clone().or_else(|| ov.reason.clone()),
-                    precedence: 1,
-                });
-            }
+    // Dated overrides — pinned `due:` dates still ahead of us.
+    for (p, note) in &pins {
+        if *p >= today {
+            candidates.push(DatedCandidate {
+                date: *p,
+                reason: DueReason::OverrideDue,
+                note: note.clone(),
+                precedence: 1,
+            });
         }
     }
-
-    // Weekday override only changes the cadence-derived date for
-    // weekly controls — capture the note so the cadence candidate can
-    // pick it up if it ends up labelled `OverrideWeekday`.
-    let weekday_override_entry = schedule
-        .overrides
-        .iter()
-        .find(|o| o.control_id == control.id && o.weekday.is_some());
-    let weekday_override = weekday_override_entry.and_then(|o| o.weekday);
-    let weekday_note =
-        weekday_override_entry.and_then(|o| o.note.clone().or_else(|| o.reason.clone()));
-
-    // A dated override pins the period: the cadence candidate is
-    // replaced outright, so the pin wins whether it is earlier or later
-    // than the cadence-derived date. Inserts stay in the race — they are
-    // additive firings, not reschedules.
-    let dated_pin = candidates
-        .iter()
-        .any(|c| c.reason == DueReason::OverrideDue);
 
     // Cadence-derived date, accounting for any weekday override that
     // applies to a weekly cadence.
     let cadence_due = match control.cadence {
         Cadence::Continuous => None,
-        Cadence::Weekly => {
-            let wd = weekday_override
-                .or(control.weekday)
-                .or(config_default_weekday)
-                .unwrap_or(Weekday::Monday);
-            Some(next_weekly(today, wd, state.and_then(|s| s.next_due)))
-        }
+        Cadence::Weekly => Some(next_weekly(
+            today,
+            effective_weekday,
+            state.and_then(|s| s.next_due),
+        )),
         Cadence::Monthly => Some(next_business_day(today, monthly_anchor(today))),
         Cadence::Quarterly => Some(next_business_day(today, quarterly_anchor(today))),
         Cadence::SemiAnnual => Some(next_business_day(today, semiannual_anchor(today))),
         Cadence::Annual => Some(next_annual(today, control.due_by.as_deref())),
     };
 
-    if let Some(d) = cadence_due.filter(|_| !dated_pin) {
+    // A pending pin that legally postpones the upcoming cadence firing
+    // suppresses it — that is the deferral. A pin further out (with
+    // another firing in between) leaves the cadence candidate in the
+    // race, so nearer firings are never silently swallowed. A pin
+    // earlier than the cadence date needs no suppression: it wins the
+    // earliest-date race on its own.
+    let deferred = |d: NaiveDate| pins.iter().any(|(p, _)| *p >= today && pin_defers(d, *p));
+
+    if let Some(d) = cadence_due.filter(|d| !deferred(*d)) {
         let weekday_active =
             matches!(control.cadence, Cadence::Weekly) && weekday_override.is_some();
         let (reason, note, precedence) = if weekday_active {
@@ -296,6 +323,69 @@ pub fn grace(cadence: Cadence) -> Duration {
         Cadence::SemiAnnual => Duration::days(21),
         Cadence::Annual => Duration::days(30),
     }
+}
+
+/// The first nominal cadence firing strictly after `d`, ignoring state
+/// and overrides. `None` for continuous cadence, which never fires.
+///
+/// This is the yardstick for bounded postponement: a `due:` pin may
+/// defer an obligation only up to (not past) the firing that follows it.
+fn next_firing_after(control: &Control, weekday: Weekday, d: NaiveDate) -> Option<NaiveDate> {
+    let after = d + Duration::days(1);
+    match control.cadence {
+        Cadence::Continuous => None,
+        Cadence::Weekly => Some(next_weekly(after, weekday, None)),
+        Cadence::Monthly => {
+            let this = first_business_day(monthly_anchor(after));
+            Some(if this > d {
+                this
+            } else {
+                let (y, m) = if after.month() == 12 {
+                    (after.year() + 1, 1)
+                } else {
+                    (after.year(), after.month() + 1)
+                };
+                first_business_day(NaiveDate::from_ymd_opt(y, m, 1).unwrap())
+            })
+        }
+        Cadence::Quarterly => {
+            let this = first_business_day(quarterly_anchor(after));
+            Some(if this > d {
+                this
+            } else {
+                let anchor = quarterly_anchor(after);
+                let (y, m) = if anchor.month() == 10 {
+                    (anchor.year() + 1, 1)
+                } else {
+                    (anchor.year(), anchor.month() + 3)
+                };
+                first_business_day(NaiveDate::from_ymd_opt(y, m, 1).unwrap())
+            })
+        }
+        Cadence::SemiAnnual => {
+            let this = first_business_day(semiannual_anchor(after));
+            Some(if this > d {
+                this
+            } else {
+                let anchor = semiannual_anchor(after);
+                let (y, m) = if anchor.month() == 7 {
+                    (anchor.year() + 1, 1)
+                } else {
+                    (anchor.year(), 7)
+                };
+                first_business_day(NaiveDate::from_ymd_opt(y, m, 1).unwrap())
+            })
+        }
+        Cadence::Annual => Some(next_annual(after, control.due_by.as_deref())),
+    }
+}
+
+fn first_business_day(anchor: NaiveDate) -> NaiveDate {
+    let mut d = anchor;
+    while matches!(d.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun) {
+        d += Duration::days(1);
+    }
+    d
 }
 
 fn next_weekly(today: NaiveDate, weekday: Weekday, last_next_due: Option<NaiveDate>) -> NaiveDate {

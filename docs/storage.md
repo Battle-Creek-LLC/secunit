@@ -162,7 +162,7 @@ If scope resolves to exactly one entry, the skill MAY flatten to `raw/`. Either 
 
 ## Cadence resolution
 
-A control's `cadence` resolves to a target date as follows. A `schedule.yaml` dated override (`due:`) replaces the computed date for its period — in either direction, earlier or later.
+A control's `cadence` resolves to a target date as follows. A `schedule.yaml` dated override (`due:`) moves a single firing: earlier it wins outright; later it postpones the upcoming firing, bounded by the next firing after it.
 
 | Cadence | Default firing |
 |---|---|

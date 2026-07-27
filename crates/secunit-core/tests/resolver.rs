@@ -430,6 +430,7 @@ fn missed_dated_override_is_reported_as_the_missed_obligation() {
     let schedule = Schedule {
         overrides: vec![ScheduleEntry {
             due: Some(d("2027-06-01")),
+            note: Some("certs valid to 2027-07-08".into()),
             ..entry_for("c")
         }],
     };
@@ -438,7 +439,103 @@ fn missed_dated_override_is_reported_as_the_missed_obligation() {
         resolver::next_due_with_reason(&c, &schedule, Some(&state), d("2027-08-01"), None).unwrap();
     assert_eq!(r.date, d("2027-06-01"));
     assert_eq!(r.reason, DueReason::OverrideDue);
+    // The operator's rationale survives into the overdue report.
+    assert_eq!(r.note, Some("certs valid to 2027-07-08".into()));
     assert!(resolver::is_overdue(&c, r.date, d("2027-08-01")));
+}
+
+// ---- bounded postponement: a pin defers at most one firing ------------------
+
+#[test]
+fn far_pin_on_a_monthly_control_leaves_nearer_firings_alone() {
+    // A December pin does not swallow the Aug–Nov firings; it only
+    // postpones the December firing once its turn comes.
+    let c = skeleton("c", Cadence::Monthly);
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2026-12-04")),
+            ..entry_for("c")
+        }],
+    };
+    let r = resolver::next_due_with_reason(&c, &schedule, None, d("2026-08-03"), None).unwrap();
+    assert_eq!(r.date, d("2026-08-03"));
+    assert_eq!(r.reason, DueReason::Cadence);
+
+    // Come December, the same pin defers that month's firing.
+    let r = resolver::next_due_with_reason(&c, &schedule, None, d("2026-12-01"), None).unwrap();
+    assert_eq!(r.date, d("2026-12-04"));
+    assert_eq!(r.reason, DueReason::OverrideDue);
+}
+
+#[test]
+fn far_pin_on_a_weekly_control_leaves_nearer_firings_alone() {
+    let c = skeleton("c", Cadence::Weekly);
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2026-12-25")),
+            ..entry_for("c")
+        }],
+    };
+    // 2026-08-04 is a Tuesday; the next Monday still fires.
+    let r = resolver::next_due_with_reason(&c, &schedule, None, d("2026-08-04"), None).unwrap();
+    assert_eq!(r.date, d("2026-08-10"));
+    assert_eq!(r.reason, DueReason::Cadence);
+}
+
+#[test]
+fn annual_pin_can_postpone_within_the_year() {
+    // Vendor slips two weeks: july-31 → august-15. No other firing in
+    // between, so the postponement is honoured.
+    let mut c = skeleton("c", Cadence::Annual);
+    c.due_by = Some("july-31".into());
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2026-08-15")),
+            ..entry_for("c")
+        }],
+    };
+    let r = resolver::next_due_with_reason(&c, &schedule, None, d("2026-07-27"), None).unwrap();
+    assert_eq!(r.date, d("2026-08-15"));
+    assert_eq!(r.reason, DueReason::OverrideDue);
+}
+
+#[test]
+fn future_pin_does_not_forgive_a_miss_of_an_earlier_firing() {
+    // Monthly control missed July; an unrelated December pin exists.
+    // The July miss must stay visible — the pin postpones only the
+    // firing immediately before it.
+    let c = skeleton("c", Cadence::Monthly);
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2026-12-04")),
+            ..entry_for("c")
+        }],
+    };
+    let state = state_due("2026-07-01");
+    let r =
+        resolver::next_due_with_reason(&c, &schedule, Some(&state), d("2026-07-27"), None).unwrap();
+    assert_eq!(r.date, d("2026-07-01"));
+    assert_eq!(r.reason, DueReason::Cadence);
+    assert!(resolver::is_overdue(&c, r.date, d("2026-07-27")));
+}
+
+#[test]
+fn stale_miss_is_not_rebranded_by_an_unrelated_later_pin() {
+    // Missed June firing; a November pin exists and has also passed.
+    // The miss is still June's — the pin never covered it.
+    let c = skeleton("c", Cadence::Monthly);
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2026-11-02")),
+            ..entry_for("c")
+        }],
+    };
+    let state = state_due("2026-06-01");
+    let r =
+        resolver::next_due_with_reason(&c, &schedule, Some(&state), d("2026-11-06"), None).unwrap();
+    assert_eq!(r.date, d("2026-06-01"));
+    assert_eq!(r.reason, DueReason::Cadence);
+    assert!(resolver::is_overdue(&c, r.date, d("2026-11-06")));
 }
 
 // ---- property: weekly cadence is monotonic in today --------------------

@@ -9,16 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A `schedule.yaml` dated override (`due:`) can now defer a control past its
-  cadence-derived date. Previously only pull-earlier overrides took effect;
-  a deferral was silently ignored and, once the cadence date passed, the
-  control reported permanently overdue with no way to clear it. A dated
-  override is now an authoritative pin for its period: it replaces the
-  cadence candidate outright, and a future `due:` clears a stale
-  `state.next_due` (a deliberate reschedule, unlike a genuine miss, which
-  still reports overdue). If the rescheduled date itself passes without a
-  run, the control goes overdue at the pinned date with reason
-  `override-due`. `insert:` and `skip:` semantics are unchanged.
+- A `schedule.yaml` dated override (`due:`) can now postpone a control past
+  its cadence-derived date. Previously only pull-earlier overrides took
+  effect; a postponement was silently ignored and, once the cadence date
+  passed, the control reported permanently overdue with no way to clear it.
+  Postponement is bounded: a pin defers exactly one firing and never past
+  the next firing after it, so a far-out pin on a weekly/monthly control
+  cannot silently swallow the firings in between (`secunit validate` warns
+  about that shape). A pending postponement clears the stale
+  `state.next_due` it covers; any other miss stays overdue, and a missed
+  postponement goes overdue at the pinned date with reason `override-due`
+  and the operator's note. `insert:` and `skip:` semantics are unchanged.
+- `finalize` no longer re-arms an obligation that was satisfied early: the
+  cached `state.next_due` lookup now starts after the satisfied due date,
+  not merely after the run date. Previously an annual control run shortly
+  before its due date got the same date written back and reported overdue
+  weeks later despite the sealed run.
 
 ## [0.6.1] — 2026-07-24
 

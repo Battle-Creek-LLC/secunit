@@ -1,6 +1,7 @@
-# `due:` pins this period's due date, replacing the cadence-derived date —
-# it works in both directions (pull a control earlier or defer it later).
-# `insert:` adds a one-off firing; `skip:` removes one cadence window.
+# `due:` moves exactly one firing: earlier it wins as the sooner deadline;
+# later it postpones the upcoming firing, but never past the next firing
+# after it. Use `skip:` to remove whole windows, `insert:` to add a one-off
+# firing, and change the control's `due_by`/cadence for a recurring shift.
 overrides:
   - control_id: ra-pentest
     due: 2026-12-01

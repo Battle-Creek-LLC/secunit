@@ -270,10 +270,36 @@ fn cross_check(
         }
     }
     for ov in &schedule.overrides {
-        if !controls.contains_key(&ov.control_id) {
+        let Some(ctrl) = controls.get(&ov.control_id) else {
             report.err(
                 root.join("schedule.yaml"),
                 format!("override references unknown control `{}`", ov.control_id),
+            );
+            continue;
+        };
+        // A `due:` pin postpones at most one firing — the one
+        // immediately before it. On fast cadences that is rarely what
+        // the author meant, so say so up front rather than letting the
+        // pin sit mostly inert.
+        if ov.due.is_some()
+            && matches!(
+                ctrl.cadence,
+                crate::model::Cadence::Weekly | crate::model::Cadence::Monthly
+            )
+        {
+            report.warn(
+                root.join("schedule.yaml"),
+                format!(
+                    "`due:` on {} control `{}` only moves the single firing \
+                     immediately before it; earlier firings still occur — use \
+                     `skip:` to remove windows, or change the control's cadence \
+                     for a recurring shift",
+                    match ctrl.cadence {
+                        crate::model::Cadence::Weekly => "weekly",
+                        _ => "monthly",
+                    },
+                    ov.control_id,
+                ),
             );
         }
     }
