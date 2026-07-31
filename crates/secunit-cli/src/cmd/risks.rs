@@ -547,6 +547,25 @@ pub fn score(
     Ok(ExitCode::SUCCESS)
 }
 
+pub fn retitle(ctx: &Ctx, risk_id: &str, title: &str, reason: &str) -> Result<ExitCode> {
+    if title.trim().is_empty() {
+        bail!("--title must not be empty");
+    }
+    let out = store::append(
+        &ctx.root,
+        risk_id,
+        EventData::Retitled {
+            title: title.to_string(),
+            reason: reason.to_string(),
+        },
+        &actor(),
+        agent(),
+        Some(now()),
+    )?;
+    report_event(ctx, risk_id, &out.event, &out.log_head_sha256);
+    Ok(ExitCode::SUCCESS)
+}
+
 pub fn status(ctx: &Ctx, risk_id: &str, to: &str, reason: &str) -> Result<ExitCode> {
     // The append protocol validates `from` against the current fold, so we
     // read it here and let the store reject illegal transitions.

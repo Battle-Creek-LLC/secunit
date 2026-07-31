@@ -294,6 +294,7 @@ const EVENT_LABELS: Record<string, string> = {
   opened: "Opened",
   "owner-assigned": "Owner assigned",
   "score-changed": "Score changed",
+  retitled: "Retitled",
   "sla-set": "SLA set",
   "status-changed": "Status changed",
   "evidence-linked": "Evidence linked",
@@ -352,6 +353,11 @@ function salientPairs(
         ["severity", get("severity")],
         ["impact", get("impact")],
         ["likelihood", get("likelihood")],
+        ["reason", get("reason")],
+      ].filter((p) => p[1] !== "") as Array<[string, string]>;
+    case "retitled":
+      return [
+        ["title", get("title")],
         ["reason", get("reason")],
       ].filter((p) => p[1] !== "") as Array<[string, string]>;
     case "sla-set":

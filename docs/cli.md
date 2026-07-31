@@ -152,6 +152,7 @@ are pure folds.
 secunit risks open <CONTROL_ID> --from <RUN_DIR> --finding <ID> [--owner <ROLE>] [--sla-days <N>]
 secunit risks assign <RISK_ID> --owner <ROLE>
 secunit risks score <RISK_ID> --impact <N> --likelihood <N> --reason <STRING>
+secunit risks retitle <RISK_ID> --title <STRING> [--reason <STRING>]
 secunit risks status <RISK_ID> --to <STATUS> --reason <STRING>
 secunit risks relink <RISK_ID> --from <RUN_DIR> --finding <ID>
 secunit risks link <RISK_ID> --system <NAME> --id <EXT_ID> --url <URL>

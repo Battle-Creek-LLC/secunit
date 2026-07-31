@@ -174,6 +174,9 @@ fn apply(state: &mut RiskState, ev: &RiskEvent) {
                 }
             }
         }
+        EventData::Retitled { title, .. } => {
+            state.title = title.clone();
+        }
         EventData::SlaSet { due_at, .. } => {
             state.due_at = Some(*due_at);
             // An explicit override detaches due_at from the sla_days basis.

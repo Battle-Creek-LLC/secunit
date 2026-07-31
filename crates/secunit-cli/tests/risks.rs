@@ -583,3 +583,86 @@ fn remediate_rejects_run_from_other_control() {
         "stderr: {stderr}"
     );
 }
+
+#[test]
+fn retitle_round_trip() {
+    let dir = staged_root();
+    let root = dir.path();
+    let rd = run_dir_arg(root);
+
+    let (out, _, stderr) = run(
+        root,
+        &[
+            "risks",
+            "open",
+            "ra-vuln-audit",
+            "--from",
+            &rd,
+            "--finding",
+            "S032",
+        ],
+    );
+    assert!(out.status.success(), "open failed: {stderr}");
+
+    let (out, stdout, stderr) = run(
+        root,
+        &[
+            "risks",
+            "retitle",
+            "R-0001",
+            "--title",
+            "Pickle RCE in app-api ingest (CWE-502)",
+            "--reason",
+            "scope narrowed",
+        ],
+    );
+    assert!(out.status.success(), "retitle failed: {stderr}");
+    assert!(stdout.contains("retitled"), "stdout: {stdout}");
+
+    // The fold, the index, and the human table all pick up the new title.
+    let (out, stdout, _) = run(root, &["--json", "risks", "show", "R-0001"]);
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(
+        v["state"]["title"],
+        "Pickle RCE in app-api ingest (CWE-502)"
+    );
+    let ev = v["events"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!(ev["type"], "retitled");
+    assert_eq!(ev["data"]["reason"], "scope narrowed");
+
+    let (out, stdout, _) = run(root, &["--json", "risks", "list"]);
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(
+        v["risks"]["R-0001"]["title"],
+        "Pickle RCE in app-api ingest (CWE-502)"
+    );
+
+    let (out, stdout, _) = run(root, &["risks", "show", "R-0001"]);
+    assert!(out.status.success());
+    assert!(stdout.contains("Pickle RCE in app-api ingest"));
+}
+
+#[test]
+fn retitle_rejects_empty_title() {
+    let dir = staged_root();
+    let root = dir.path();
+    let rd = run_dir_arg(root);
+
+    run(
+        root,
+        &[
+            "risks",
+            "open",
+            "ra-vuln-audit",
+            "--from",
+            &rd,
+            "--finding",
+            "S032",
+        ],
+    );
+    let (out, _, stderr) = run(root, &["risks", "retitle", "R-0001", "--title", "  "]);
+    assert!(!out.status.success(), "expected rejection");
+    assert!(stderr.contains("must not be empty"), "stderr: {stderr}");
+}

@@ -63,6 +63,7 @@ Each line is one immutable event:
 | `opened` | `finding_ref`, `title`, `severity`, `impact`, `likelihood`, `affected_systems`, `sla_days`, `due_at` | Creates the risk; status → `open`. |
 | `owner-assigned` | `owner` | Sets owner. |
 | `score-changed` | `impact`, `likelihood`, `severity`, `reason` | Supersedes the score; recomputes `due_at` if `sla_days` derives from severity. |
+| `retitled` | `title`, `reason` | Supersedes the title. |
 | `sla-set` | `due_at`, `basis` | Overrides the SLA due date. |
 | `status-changed` | `from`, `to`, `reason` | Moves through the status machine (below). |
 | `evidence-linked` | `finding_ref` | Appends another finding ref — how a risk re-observed in a later run is recorded as *persisting*. |
@@ -167,6 +168,7 @@ refresh `index.json`:
 | `secunit risks open --from <run-dir> --finding <id>` | `opened` (promotes a sealed `draft_risk`) |
 | `secunit risks assign <risk-id> --owner <role>` | `owner-assigned` |
 | `secunit risks score <risk-id> --impact N --likelihood N --reason …` | `score-changed` |
+| `secunit risks retitle <risk-id> --title … [--reason …]` | `retitled` |
 | `secunit risks status <risk-id> --to <status> --reason …` | `status-changed` |
 | `secunit risks relink <risk-id> --from <run-dir> --finding <id>` | `evidence-linked` |
 | `secunit risks link <risk-id> --system <name> --id <ext-id> --url <url>` | `external-linked` |

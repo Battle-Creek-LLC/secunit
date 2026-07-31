@@ -240,6 +240,16 @@ enum RisksCmd {
         #[arg(long)]
         reason: String,
     },
+    /// Supersede the title.
+    Retitle {
+        risk_id: String,
+        /// The new title.
+        #[arg(long)]
+        title: String,
+        /// Why the title changed (optional, kept for the audit trail).
+        #[arg(long, default_value = "")]
+        reason: String,
+    },
     /// Move through the status machine.
     Status {
         risk_id: String,
@@ -521,6 +531,11 @@ fn main() -> ExitCode {
                 severity,
                 reason,
             } => cmd::risks::score(&ctx, &risk_id, impact, likelihood, &severity, &reason),
+            RisksCmd::Retitle {
+                risk_id,
+                title,
+                reason,
+            } => cmd::risks::retitle(&ctx, &risk_id, &title, &reason),
             RisksCmd::Status {
                 risk_id,
                 to,

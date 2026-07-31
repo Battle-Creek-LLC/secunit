@@ -30,6 +30,7 @@
         "opened",
         "owner-assigned",
         "score-changed",
+        "retitled",
         "sla-set",
         "status-changed",
         "evidence-linked",
@@ -111,6 +112,22 @@
               "impact": { "$ref": "#/$defs/score" },
               "likelihood": { "$ref": "#/$defs/score" },
               "severity": { "$ref": "#/$defs/severity" },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "retitled" } } },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["title", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "title": { "type": "string", "minLength": 1 },
               "reason": { "type": "string" }
             }
           }
