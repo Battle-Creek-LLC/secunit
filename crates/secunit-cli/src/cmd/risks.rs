@@ -261,6 +261,66 @@ fn resolve_finding(run_dir: &Path, finding: &str) -> Result<ResolvedFinding> {
     })
 }
 
+/// Build the resolution [`FindingRef`] for `remediate --evidence`: a sealed
+/// run of the risk's source control in which the originating finding is
+/// absent. Unlike [`resolve_finding`], no `draft_risk` match is required —
+/// absence is the proof — and a run that still drafts the finding is
+/// rejected because it disproves the fix.
+fn resolution_ref(ctx: &Ctx, risk_id: &str, run_dir: &Path) -> Result<FindingRef> {
+    let (_events, state) = load_state(&ctx.root, risk_id)?;
+    let origin = state
+        .finding_refs
+        .first()
+        .cloned()
+        .ok_or_else(|| anyhow!("{risk_id} has no originating finding"))?;
+
+    let manifest_path = run_dir.join("manifest.json");
+    if !manifest_path.exists() {
+        bail!(
+            "no manifest.json under {} — is the run sealed?",
+            run_dir.display()
+        );
+    }
+    let bytes = std::fs::read(&manifest_path)
+        .with_context(|| format!("read {}", manifest_path.display()))?;
+    let manifest: Manifest = serde_json::from_slice(&bytes)
+        .with_context(|| format!("parse {}", manifest_path.display()))?;
+
+    if manifest.control_id != origin.control_id {
+        bail!(
+            "evidence is a `{}` run, but {risk_id} originates from `{}` — resolution \
+             evidence must come from the same control",
+            manifest.control_id,
+            origin.control_id
+        );
+    }
+    if manifest
+        .draft_risks
+        .iter()
+        .any(|d| draft_matches(d, &origin.finding_id).is_some())
+    {
+        bail!(
+            "run {} still reports `{}` as a draft risk — it disproves the fix; \
+             remediate with a clean run, or without --evidence",
+            manifest.run_id,
+            origin.finding_id
+        );
+    }
+
+    let manifest_sha256 =
+        sha256_file(&manifest_path).with_context(|| format!("hash {}", manifest_path.display()))?;
+    let finding_ref = FindingRef {
+        control_id: manifest.control_id.clone(),
+        run_id: manifest.run_id.clone(),
+        manifest_sha256,
+        finding_id: origin.finding_id.clone(),
+        body_path: None,
+    };
+    store::verify_finding_ref(run_dir, &finding_ref)
+        .with_context(|| format!("verify finding ref against {}", run_dir.display()))?;
+    Ok(finding_ref)
+}
+
 /// The draft's own stable id, if it carries one: `finding_id` / `id`, else
 /// the first value of a `ghsa` / `cve` array, else the trailing `#anchor` of
 /// `body_path`. Used to record a meaningful fingerprint when promotion falls
@@ -579,19 +639,13 @@ pub fn remediate(
     evidence: Option<&Path>,
     note: &str,
 ) -> Result<ExitCode> {
-    // `--evidence` binds the resolution to a sealed run. We resolve it the
-    // same way as `open`, but the finding id is the risk's own originating
-    // finding (its fingerprint), so the resolved ref is verifiable.
+    // `--evidence` binds the resolution to a sealed run of the same
+    // control. A run proving a fix is clean by definition — the finding no
+    // longer appears — so the ref is built from the manifest plus the
+    // risk's own fingerprint rather than by matching a `draft_risk` the
+    // way `open`/`relink` do.
     let resolved_run_ref = match evidence {
-        Some(run_dir) => {
-            let (_events, state) = load_state(&ctx.root, risk_id)?;
-            let finding_id = state
-                .finding_refs
-                .first()
-                .map(|f| f.finding_id.clone())
-                .ok_or_else(|| anyhow!("{risk_id} has no originating finding"))?;
-            Some(resolve_finding(run_dir, &finding_id)?.finding_ref)
-        }
+        Some(run_dir) => Some(resolution_ref(ctx, risk_id, run_dir)?),
         None => None,
     };
     let out = store::append(
