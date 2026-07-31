@@ -166,6 +166,11 @@ pub enum EventData {
         severity: Severity,
         reason: String,
     },
+    /// Supersedes the title.
+    Retitled {
+        title: String,
+        reason: String,
+    },
     /// Overrides the SLA due date.
     SlaSet {
         due_at: NaiveDate,
@@ -224,6 +229,7 @@ impl EventData {
             EventData::Opened { .. } => "opened",
             EventData::OwnerAssigned { .. } => "owner-assigned",
             EventData::ScoreChanged { .. } => "score-changed",
+            EventData::Retitled { .. } => "retitled",
             EventData::SlaSet { .. } => "sla-set",
             EventData::StatusChanged { .. } => "status-changed",
             EventData::EvidenceLinked { .. } => "evidence-linked",

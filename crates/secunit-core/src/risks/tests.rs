@@ -495,3 +495,37 @@ fn verify_finding_ref_matches_real_manifest() {
     std::fs::create_dir_all(&empty).unwrap();
     assert!(verify_finding_ref(&empty, &good).is_err());
 }
+
+#[test]
+fn retitled_supersedes_title_in_fold_and_index() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    let id = open_a_risk(root);
+
+    // The append schema-validates the event, so success here also proves
+    // `retitled` passes risk-event.schema.json.
+    append(
+        root,
+        &id,
+        EventData::Retitled {
+            title: "Pickle RCE in app-api ingest (CWE-502)".into(),
+            reason: "scope narrowed to the ingest path".into(),
+        },
+        "jstockdi",
+        None,
+        Some(ts(25, 10)),
+    )
+    .unwrap();
+
+    let events = load_events(root, &id).unwrap();
+    let state = fold::fold(&events);
+    assert_eq!(state.title, "Pickle RCE in app-api ingest (CWE-502)");
+    // Retitle is not a lifecycle event — status and score are untouched.
+    assert_eq!(state.status, Status::Open);
+    assert_eq!(state.severity, Severity::Critical);
+
+    let idx_bytes = std::fs::read(index_path(root)).unwrap();
+    let index: RiskIndex = serde_json::from_slice(&idx_bytes).unwrap();
+    let entry = index.risks.get(&id).expect("index has the risk");
+    assert_eq!(entry.title, "Pickle RCE in app-api ingest (CWE-502)");
+}
