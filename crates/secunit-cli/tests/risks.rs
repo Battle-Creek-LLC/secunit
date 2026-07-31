@@ -414,3 +414,172 @@ fn rebuild_regenerates_index() {
     assert!(stdout.contains("1 risk"));
     assert!(root.join("risks/index.json").exists());
 }
+
+/// Write a sealed manifest for `control_id`/`run_id` carrying `draft_risks`,
+/// returning the run dir. Used to stage resolution evidence for `remediate`.
+fn write_run(
+    root: &Path,
+    control_id: &str,
+    run_id: &str,
+    draft_risks: serde_json::Value,
+) -> String {
+    let manifest = serde_json::json!({
+        "schema_version": 1,
+        "control_id": control_id,
+        "run_id": run_id,
+        "started_at": "2026-06-20T14:00:00Z",
+        "completed_at": "2026-06-20T14:30:00Z",
+        "agent": {
+            "model": "m",
+            "skill": "s",
+            "skill_sha256": "a".repeat(64),
+            "control_sha256": "b".repeat(64)
+        },
+        "registry_git_sha": "abcdef0",
+        "scope_layout": "flat",
+        "resolved_scope": [],
+        "artifacts": [],
+        "status": "complete",
+        "draft_risks": draft_risks
+    });
+    let run_dir = root.join(format!("evidence/2026/q2/{control_id}/{run_id}"));
+    write(
+        &run_dir.join("manifest.json"),
+        &serde_json::to_string_pretty(&manifest).unwrap(),
+    );
+    run_dir.to_str().unwrap().to_string()
+}
+
+/// Open the staged S032 risk and walk it to in-progress, returning its id.
+fn opened_in_progress(root: &Path) -> &'static str {
+    let rd = run_dir_arg(root);
+    let (out, _, stderr) = run(
+        root,
+        &[
+            "risks",
+            "open",
+            "ra-vuln-audit",
+            "--from",
+            &rd,
+            "--finding",
+            "S032",
+        ],
+    );
+    assert!(out.status.success(), "open failed: {stderr}");
+    let (out, _, stderr) = run(
+        root,
+        &[
+            "risks",
+            "status",
+            "R-0001",
+            "--to",
+            "in-progress",
+            "--reason",
+            "working it",
+        ],
+    );
+    assert!(out.status.success(), "status failed: {stderr}");
+    "R-0001"
+}
+
+#[test]
+fn remediate_accepts_clean_evidence_run() {
+    // A later run of the same control with NO drafts — the finding is gone,
+    // which is exactly what proves the fix. It must be accepted and bound
+    // as resolved_run_ref under the risk's own fingerprint.
+    let dir = staged_root();
+    let root = dir.path();
+    let id = opened_in_progress(root);
+    let clean = write_run(
+        root,
+        "ra-vuln-audit",
+        "2026-06-20-run-001",
+        serde_json::json!([]),
+    );
+
+    let (out, stdout, stderr) = run(
+        root,
+        &[
+            "risks",
+            "remediate",
+            id,
+            "--evidence",
+            &clean,
+            "--note",
+            "patched; clean rescan",
+        ],
+    );
+    assert!(out.status.success(), "remediate failed: {stderr}");
+    assert!(stdout.contains("remediated"), "stdout: {stdout}");
+
+    let (out, stdout, _) = run(root, &["--json", "risks", "show", id]);
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["state"]["status"], "remediated");
+    let ev = v["events"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!(ev["type"], "remediated");
+    assert_eq!(
+        ev["data"]["resolved_run_ref"]["run_id"],
+        "2026-06-20-run-001"
+    );
+    // The resolution ref carries the risk's own finding id, so `verify`
+    // can walk it back to the sealed manifest.
+    assert_eq!(ev["data"]["resolved_run_ref"]["finding_id"], "S032");
+}
+
+#[test]
+fn remediate_rejects_run_still_reporting_finding() {
+    // The original run still drafts S032 — offering it as resolution
+    // evidence disproves the fix and must be rejected.
+    let dir = staged_root();
+    let root = dir.path();
+    let id = opened_in_progress(root);
+    let rd = run_dir_arg(root);
+
+    let (out, _, stderr) = run(
+        root,
+        &[
+            "risks",
+            "remediate",
+            id,
+            "--evidence",
+            &rd,
+            "--note",
+            "should not land",
+        ],
+    );
+    assert!(!out.status.success(), "expected rejection");
+    assert!(stderr.contains("disproves the fix"), "stderr: {stderr}");
+}
+
+#[test]
+fn remediate_rejects_run_from_other_control() {
+    // Resolution evidence must come from the risk's source control.
+    let dir = staged_root();
+    let root = dir.path();
+    let id = opened_in_progress(root);
+    let other = write_run(
+        root,
+        "other-control",
+        "2026-06-20-run-001",
+        serde_json::json!([]),
+    );
+
+    let (out, _, stderr) = run(
+        root,
+        &[
+            "risks",
+            "remediate",
+            id,
+            "--evidence",
+            &other,
+            "--note",
+            "should not land",
+        ],
+    );
+    assert!(!out.status.success(), "expected rejection");
+    assert!(
+        stderr.contains("must come from the same control"),
+        "stderr: {stderr}"
+    );
+}

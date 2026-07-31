@@ -184,6 +184,13 @@ exists and **recomputes its sha to match**, so a risk cannot be bound to absent
 or fabricated evidence. SLA defaults from the source control's
 `remediation_thresholds`.
 
+`risks remediate --evidence` binds a sealed run of the risk's **source
+control** in which the originating finding no longer appears — absence is the
+proof, so no `draft_risk` match is required. A run that still drafts the
+finding disproves the fix and is rejected; so is a run of a different control.
+The recorded `resolved_run_ref` carries the risk's own `finding_id`, and its
+manifest sha is verified the same way as `open --from`.
+
 **Read verbs** are pure folds and never write:
 
 ```
