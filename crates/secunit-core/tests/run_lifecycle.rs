@@ -90,6 +90,16 @@ fn run_one_with_status(
     run_status: RunOutcome,
     system_status: SystemOutcome,
 ) -> (PrepareContext, PathBuf) {
+    run_control(root, CONTROL, today, run_status, system_status)
+}
+
+fn run_control(
+    root: &Path,
+    control: &str,
+    today: NaiveDate,
+    run_status: RunOutcome,
+    system_status: SystemOutcome,
+) -> (PrepareContext, PathBuf) {
     let (reg, report) = loader::load(root);
     assert!(report.errors.is_empty(), "load errors: {:?}", report.errors);
 
@@ -97,7 +107,7 @@ fn run_one_with_status(
         today: Some(today),
         ..Default::default()
     };
-    let ctx = runner::prepare(&reg, CONTROL, &opts).expect("prepare");
+    let ctx = runner::prepare(&reg, control, &opts).expect("prepare");
 
     // Drop a fake evidence blob into every per-system raw/ slot, plus a
     // findings.md and a result.json that matches the prepare context.
@@ -387,6 +397,29 @@ fn finalize_populates_next_due_in_state() {
         .expect("next_due present in state.json");
     // Next Monday after a Monday-weekly run is the following Monday.
     assert_eq!(next.as_str(), Some("2026-05-11"));
+}
+
+#[test]
+fn finalize_does_not_rearm_an_obligation_satisfied_early() {
+    // Annual control due december-31, run on november-20: anchoring the
+    // next-due lookup at run date + 1 would hand 2026-12-31 straight
+    // back, and the control would report overdue in January despite the
+    // sealed run. The lookup must clear the satisfied obligation.
+    let (_tmp, root) = staged_fixture();
+    run_control(
+        &root,
+        "ac-annual-access-review",
+        NaiveDate::from_ymd_opt(2026, 11, 20).unwrap(),
+        RunOutcome::Complete,
+        SystemOutcome::Complete,
+    );
+
+    let raw = fs::read(root.join("state.json")).expect("state.json");
+    let state: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    let next = state
+        .pointer("/controls/ac-annual-access-review/next_due")
+        .expect("next_due present in state.json");
+    assert_eq!(next.as_str(), Some("2027-12-31"));
 }
 
 #[test]

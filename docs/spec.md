@@ -72,6 +72,17 @@ Cadence is normally derived (weekly = a chosen weekday, quarterly = first busine
 - Specific dated activities mandated by the WISP (e.g. a procedure that fixes vulnerability audits to particular months of the year).
 - One-off slips, postponements, or insertions.
 
+A dated override (`due:`) moves exactly one firing. Earlier than the cadence
+date, it simply wins as the sooner deadline. Later, it is a **bounded
+postponement**: it defers the upcoming firing, but never past the next firing
+after it — a pin cannot swallow a stretch of firings, so a far-out pin on a
+fast cadence leaves the nearer firings untouched and only moves the firing
+immediately before it. A pending postponement also clears a missed cadence
+date it covers — a deliberate reschedule, not a forgiven miss; a miss of any
+other firing stays visible. For a recurring shift change the control's
+`due_by` or cadence; to remove whole windows use `skip:`. Inserts (`insert:`)
+are additive one-off firings and never move an existing date.
+
 ### Evidence
 
 Every control execution writes a **run directory** under `evidence/<year>/<quarter>/<control-id>/<run-id>/` containing:

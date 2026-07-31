@@ -565,16 +565,27 @@ fn update_state(reg: &LoadedRegistry, manifest: &Manifest) -> Result<()> {
     // Compute the next firing date as part of finalize so state.json is
     // a useful cache for `secunit due` and downstream report skills,
     // rather than a placeholder readers have to re-derive on every load.
-    // Anchor at "the day after the run's target date" (parsed from the
-    // run-id's YYYY-MM-DD prefix, not wall-clock completion time) so a
-    // weekly control with target Monday returns *next* Monday, not today.
+    // Anchor at the day after whichever is later: the run's target date
+    // (parsed from the run-id's YYYY-MM-DD prefix, not wall-clock
+    // completion time) or the obligation the run satisfied. Anchoring on
+    // the run date alone re-arms an obligation that was satisfied early —
+    // an annual control run on 07-20 against a 07-31 due date would get
+    // next_due = 07-31 back and report overdue in August despite the
+    // sealed run.
     let run_date = manifest
         .run_id
         .get(0..10)
         .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
     let next_due = run_date.and_then(|d| {
-        let lookup_from = d + chrono::Duration::days(1);
         reg.controls.get(&manifest.control_id).and_then(|ctrl| {
+            let satisfied = crate::registry::resolver::next_due(
+                ctrl,
+                &reg.schedule,
+                state.controls.get(&manifest.control_id),
+                d,
+                reg.config.weekly_default_weekday,
+            );
+            let lookup_from = satisfied.map_or(d, |s| s.max(d)) + chrono::Duration::days(1);
             crate::registry::resolver::next_due(
                 ctrl,
                 &reg.schedule,
