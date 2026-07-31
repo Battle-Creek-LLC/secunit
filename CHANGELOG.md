@@ -7,8 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-07-31
+
+### Added
+
+- `secunit risks retitle <RISK_ID> --title <STRING> [--reason <STRING>]` —
+  supersede a risk's title. Titles were fixed at `opened`, the only projected
+  field with no correction path; a vague or wrong title stayed wrong in
+  `list`, `show`, the index, the GUI, and every downstream report. The new
+  `retitled` event (title + audit reason) folds last-write-wins like
+  `score-changed` and touches nothing else — status, score, and SLA are
+  unchanged.
+
 ### Fixed
 
+- `risks remediate --evidence` now accepts a clean run as resolution
+  evidence. It previously resolved the run through the same draft-risk
+  matcher `open` uses, demanding the fixed finding still be drafted in the
+  evidence run — but a run proving a fix is clean by definition, so every
+  honest resolution run was rejected, and the single-draft fallback could
+  silently bind an unrelated finding as the resolution ref. The ref is now
+  built from the manifest plus the risk's own fingerprint; evidence must be
+  a run of the risk's source control, and a run that still drafts the
+  finding is rejected because it disproves the fix.
 - A `schedule.yaml` dated override (`due:`) can now postpone a control past
   its cadence-derived date. Previously only pull-earlier overrides took
   effect; a postponement was silently ignored and, once the cadence date
