@@ -565,10 +565,10 @@ fn update_state(reg: &LoadedRegistry, manifest: &Manifest) -> Result<()> {
     // Compute the next firing date as part of finalize so state.json is
     // a useful cache for `secunit due` and downstream report skills,
     // rather than a placeholder readers have to re-derive on every load.
-    // The run (dated by the run-id's YYYY-MM-DD prefix, not wall-clock
-    // completion time) satisfies the obligation the resolver reports for
-    // that day, so the cache advances to the first nominal firing after
-    // whichever is later: that obligation or the run date. Re-resolving
+    // A complete run (dated by the run-id's YYYY-MM-DD prefix, not
+    // wall-clock completion time) satisfies the obligation the resolver
+    // reports for that day, so the cache advances to the first nominal
+    // firing after whichever is later: that obligation or the run date. Re-resolving
     // at "run date + 1" instead hands the day after the run back for
     // month-anchored cadences — the resolver's monthly/quarterly/
     // semi-annual arms answer "when is the current period due", never
@@ -583,17 +583,26 @@ fn update_state(reg: &LoadedRegistry, manifest: &Manifest) -> Result<()> {
         .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
     let next_due = run_date.and_then(|d| {
         reg.controls.get(&manifest.control_id).and_then(|ctrl| {
-            let satisfied = crate::registry::resolver::next_due(
+            let obligation = crate::registry::resolver::next_due(
                 ctrl,
                 &reg.schedule,
                 state.controls.get(&manifest.control_id),
                 d,
                 reg.config.weekly_default_weekday,
             );
+            // Only a complete run satisfies the obligation. A failed or
+            // partial run leaves the due date standing, so the control
+            // stays in `secunit due` and escalates to overdue past its
+            // grace window instead of falling silent until next period.
+            // (Coverage agrees: a failed-only period is `failed`, not
+            // `satisfied`.)
+            if manifest.status != RunOutcome::Complete {
+                return obligation;
+            }
             crate::registry::resolver::next_firing_after(
                 ctrl,
                 &reg.schedule,
-                satisfied.map_or(d, |s| s.max(d)),
+                obligation.map_or(d, |s| s.max(d)),
                 reg.config.weekly_default_weekday,
             )
         })

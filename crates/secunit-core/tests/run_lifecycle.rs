@@ -806,3 +806,24 @@ fn finalize_rolls_quarterly_next_due_to_next_period() {
         .expect("next_due present in state.json");
     assert_eq!(next.as_str(), Some("2027-01-01"));
 }
+
+#[test]
+fn failed_run_does_not_advance_next_due() {
+    // A failed run does not satisfy the obligation: the due date must
+    // stand so the control stays in `secunit due` and goes overdue past
+    // grace, instead of falling silent until the next period.
+    let (_tmp, root) = staged_fixture();
+    run_one_with_status(
+        &root,
+        NaiveDate::from_ymd_opt(2026, 5, 4).unwrap(),
+        RunOutcome::Failed,
+        SystemOutcome::Failed,
+    );
+
+    let raw = fs::read(root.join("state.json")).expect("state.json");
+    let state: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    let next = state
+        .pointer("/controls/sca-weekly-dependency-scan/next_due")
+        .expect("next_due present in state.json");
+    assert_eq!(next.as_str(), Some("2026-05-04"));
+}

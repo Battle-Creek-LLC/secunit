@@ -97,10 +97,7 @@ pub fn next_due_with_reason(
     let weekday_override = weekday_override_entry.and_then(|o| o.weekday);
     let weekday_note =
         weekday_override_entry.and_then(|o| o.note.clone().or_else(|| o.reason.clone()));
-    let effective_weekday = weekday_override
-        .or(control.weekday)
-        .or(config_default_weekday)
-        .unwrap_or(Weekday::Monday);
+    let effective_weekday = effective_weekday(control, schedule, config_default_weekday);
 
     // Dated overrides (`due:` pins) for this control, collected once —
     // the stale-miss guard and the candidate race both consult them.
@@ -348,14 +345,7 @@ pub fn next_firing_after(
     after: NaiveDate,
     config_default_weekday: Option<Weekday>,
 ) -> Option<NaiveDate> {
-    let effective_weekday = schedule
-        .overrides
-        .iter()
-        .find(|o| o.control_id == control.id && o.weekday.is_some())
-        .and_then(|o| o.weekday)
-        .or(control.weekday)
-        .or(config_default_weekday)
-        .unwrap_or(Weekday::Monday);
+    let effective_weekday = effective_weekday(control, schedule, config_default_weekday);
     let mut d = nominal_firing_after(control, effective_weekday, after)?;
     // Roll past skip-removed windows. Bounded: a year-wide skip on a
     // weekly control is ~52 firings; past the bound, return the last
@@ -367,6 +357,24 @@ pub fn next_firing_after(
         d = nominal_firing_after(control, effective_weekday, d)?;
     }
     Some(d)
+}
+
+/// The weekday a weekly control fires on: schedule override > control's
+/// own `weekday` > config default > Monday. Single source of the chain
+/// so [`next_due_with_reason`] and [`next_firing_after`] cannot drift.
+fn effective_weekday(
+    control: &Control,
+    schedule: &Schedule,
+    config_default_weekday: Option<Weekday>,
+) -> Weekday {
+    schedule
+        .overrides
+        .iter()
+        .find(|o| o.control_id == control.id && o.weekday.is_some())
+        .and_then(|o| o.weekday)
+        .or(control.weekday)
+        .or(config_default_weekday)
+        .unwrap_or(Weekday::Monday)
 }
 
 /// The first nominal cadence firing strictly after `d`, ignoring state
