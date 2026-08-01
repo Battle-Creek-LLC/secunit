@@ -568,3 +568,131 @@ proptest! {
 // quiet unused-import lint when proptest's macro layout shifts under us.
 #[allow(dead_code)]
 fn _keep_imports(_: &ResolvedSystem, _: &EvidenceRequirement, _: &State, _: &Scope) {}
+
+// ---- issue #65: the next-period roll ----------------------------------------
+
+#[test]
+fn cached_future_next_due_is_honoured_for_month_anchored_cadences() {
+    // finalize cached 2026-10-01 after a mid-Q3 run. Reading in August
+    // must return the cached obligation — recomputing from `today`
+    // re-arms the quarter the run just satisfied.
+    for cadence in [Cadence::Monthly, Cadence::Quarterly, Cadence::SemiAnnual] {
+        let c = skeleton("c", cadence);
+        let st = state_due("2026-10-01");
+        let n = resolver::next_due(&c, &Default::default(), Some(&st), d("2026-08-15"), None);
+        assert_eq!(n, Some(d("2026-10-01")), "cadence {cadence:?}");
+    }
+}
+
+#[test]
+fn insert_still_beats_a_cached_next_due() {
+    // The cache is only the cadence candidate; overrides keep racing.
+    let c = skeleton("c", Cadence::Quarterly);
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            insert: Some(ScheduleInsert {
+                run_at: d("2026-09-01"),
+                reason: Some("extra scan".into()),
+            }),
+            ..entry_for("c")
+        }],
+    };
+    let st = state_due("2026-10-01");
+    let r = resolver::next_due_with_reason(&c, &schedule, Some(&st), d("2026-08-15"), None);
+    assert_eq!(
+        r,
+        Some(DueResolution {
+            date: d("2026-09-01"),
+            reason: DueReason::OverrideInsert,
+            note: Some("extra scan".into()),
+        })
+    );
+}
+
+#[test]
+fn next_firing_after_rolls_to_the_next_period() {
+    // The signature of issue #65 was next_due landing one business day
+    // after the run; the correct next firings from 2026-07-21 are the
+    // next period starts (business-day adjusted).
+    let cases = [
+        (Cadence::Weekly, "2026-07-27"),     // next Monday
+        (Cadence::Monthly, "2026-08-03"),    // Aug 1 is a Saturday
+        (Cadence::Quarterly, "2026-10-01"),  // Q4 anchor, a Thursday
+        (Cadence::SemiAnnual, "2027-01-01"), // H1-2027 anchor, a Friday
+    ];
+    for (cadence, want) in cases {
+        let c = skeleton("c", cadence);
+        let n = resolver::next_firing_after(&c, &Default::default(), d("2026-07-21"), None);
+        assert_eq!(n, Some(d(want)), "cadence {cadence:?}");
+    }
+
+    let mut a = skeleton("a", Cadence::Annual);
+    a.due_by = Some("december-31".into());
+    let n = resolver::next_firing_after(&a, &Default::default(), d("2026-12-31"), None);
+    assert_eq!(n, Some(d("2027-12-31")));
+}
+
+#[test]
+fn next_firing_after_rolls_past_skipped_windows() {
+    let c = skeleton("c", Cadence::Quarterly);
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            skip: Some(ScheduleSkip {
+                quarter: Some("2026-q4".into()),
+                year: None,
+                reason: Some("frozen".into()),
+            }),
+            ..entry_for("c")
+        }],
+    };
+    let n = resolver::next_firing_after(&c, &schedule, d("2026-07-21"), None);
+    assert_eq!(n, Some(d("2027-01-01")));
+}
+
+#[test]
+fn pin_earlier_than_a_cached_next_due_wins() {
+    // A `due:` pin ahead of the cached obligation is the sooner
+    // deadline; it must win the race against the cache.
+    let c = skeleton("c", Cadence::Quarterly);
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2026-09-15")),
+            note: Some("board asked for it early".into()),
+            ..entry_for("c")
+        }],
+    };
+    let st = state_due("2026-10-01");
+    let r = resolver::next_due_with_reason(&c, &schedule, Some(&st), d("2026-08-15"), None);
+    assert_eq!(
+        r,
+        Some(DueResolution {
+            date: d("2026-09-15"),
+            reason: DueReason::OverrideDue,
+            note: Some("board asked for it early".into()),
+        })
+    );
+}
+
+#[test]
+fn pin_can_defer_a_cached_next_due() {
+    // A pin between the cached obligation and the firing after it is a
+    // bounded postponement of the cached date.
+    let c = skeleton("c", Cadence::Quarterly);
+    let schedule = Schedule {
+        overrides: vec![ScheduleEntry {
+            due: Some(d("2026-11-15")),
+            note: Some("auditor on site mid-November".into()),
+            ..entry_for("c")
+        }],
+    };
+    let st = state_due("2026-10-01");
+    let r = resolver::next_due_with_reason(&c, &schedule, Some(&st), d("2026-08-15"), None);
+    assert_eq!(
+        r,
+        Some(DueResolution {
+            date: d("2026-11-15"),
+            reason: DueReason::OverrideDue,
+            note: Some("auditor on site mid-November".into()),
+        })
+    );
+}

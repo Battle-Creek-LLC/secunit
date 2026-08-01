@@ -565,32 +565,44 @@ fn update_state(reg: &LoadedRegistry, manifest: &Manifest) -> Result<()> {
     // Compute the next firing date as part of finalize so state.json is
     // a useful cache for `secunit due` and downstream report skills,
     // rather than a placeholder readers have to re-derive on every load.
-    // Anchor at the day after whichever is later: the run's target date
-    // (parsed from the run-id's YYYY-MM-DD prefix, not wall-clock
-    // completion time) or the obligation the run satisfied. Anchoring on
-    // the run date alone re-arms an obligation that was satisfied early —
-    // an annual control run on 07-20 against a 07-31 due date would get
-    // next_due = 07-31 back and report overdue in August despite the
-    // sealed run.
+    // A complete run (dated by the run-id's YYYY-MM-DD prefix, not
+    // wall-clock completion time) satisfies the obligation the resolver
+    // reports for that day, so the cache advances to the first nominal
+    // firing after whichever is later: that obligation or the run date. Re-resolving
+    // at "run date + 1" instead hands the day after the run back for
+    // month-anchored cadences — the resolver's monthly/quarterly/
+    // semi-annual arms answer "when is the current period due", never
+    // "when is the next firing" — so a control run yesterday would read
+    // past-due today (issue #65). Taking the later of the two also keeps
+    // an early run from re-arming its own obligation: an annual control
+    // run on 07-20 against a 07-31 due date must advance to next year,
+    // not get 07-31 handed back.
     let run_date = manifest
         .run_id
         .get(0..10)
         .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
     let next_due = run_date.and_then(|d| {
         reg.controls.get(&manifest.control_id).and_then(|ctrl| {
-            let satisfied = crate::registry::resolver::next_due(
+            let obligation = crate::registry::resolver::next_due(
                 ctrl,
                 &reg.schedule,
                 state.controls.get(&manifest.control_id),
                 d,
                 reg.config.weekly_default_weekday,
             );
-            let lookup_from = satisfied.map_or(d, |s| s.max(d)) + chrono::Duration::days(1);
-            crate::registry::resolver::next_due(
+            // Only a complete run satisfies the obligation. A failed or
+            // partial run leaves the due date standing, so the control
+            // stays in `secunit due` and escalates to overdue past its
+            // grace window instead of falling silent until next period.
+            // (Coverage agrees: a failed-only period is `failed`, not
+            // `satisfied`.)
+            if manifest.status != RunOutcome::Complete {
+                return obligation;
+            }
+            crate::registry::resolver::next_firing_after(
                 ctrl,
                 &reg.schedule,
-                None,
-                lookup_from,
+                obligation.map_or(d, |s| s.max(d)),
                 reg.config.weekly_default_weekday,
             )
         })
