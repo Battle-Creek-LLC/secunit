@@ -119,7 +119,7 @@ pub fn next_due_with_reason(
     // firing, never a stretch of them.
     let pin_defers = |from: NaiveDate, p: NaiveDate| -> bool {
         from <= p
-            && match next_firing_after(control, effective_weekday, from) {
+            && match nominal_firing_after(control, effective_weekday, from) {
                 Some(nf) => nf > p,
                 None => true,
             }
@@ -208,19 +208,27 @@ pub fn next_due_with_reason(
         }
     }
 
-    // Cadence-derived date, accounting for any weekday override that
-    // applies to a weekly cadence.
+    // Cadence-derived date. A cached future `state.next_due` is
+    // authoritative for every cadence: finalize wrote it as the next
+    // nominal obligation after the sealed run, and recomputing from
+    // `today` instead would re-arm the period the run just satisfied
+    // (the month-anchored arms below can only say "when is the current
+    // period due", never "when is the next firing"). Without a fresh
+    // cache, fall back to the current period's target, accounting for
+    // any weekday override that applies to a weekly cadence.
+    let cached_next = state.and_then(|s| s.next_due).filter(|d| *d >= today);
     let cadence_due = match control.cadence {
         Cadence::Continuous => None,
-        Cadence::Weekly => Some(next_weekly(
-            today,
-            effective_weekday,
-            state.and_then(|s| s.next_due),
-        )),
-        Cadence::Monthly => Some(next_business_day(today, monthly_anchor(today))),
-        Cadence::Quarterly => Some(next_business_day(today, quarterly_anchor(today))),
-        Cadence::SemiAnnual => Some(next_business_day(today, semiannual_anchor(today))),
-        Cadence::Annual => Some(next_annual(today, control.due_by.as_deref())),
+        _ => cached_next.or_else(|| {
+            Some(match control.cadence {
+                Cadence::Continuous => unreachable!("handled above"),
+                Cadence::Weekly => next_weekly(today, effective_weekday),
+                Cadence::Monthly => next_business_day(today, monthly_anchor(today)),
+                Cadence::Quarterly => next_business_day(today, quarterly_anchor(today)),
+                Cadence::SemiAnnual => next_business_day(today, semiannual_anchor(today)),
+                Cadence::Annual => next_annual(today, control.due_by.as_deref()),
+            })
+        }),
     };
 
     // A pending pin that legally postpones the upcoming cadence firing
@@ -325,16 +333,52 @@ pub fn grace(cadence: Cadence) -> Duration {
     }
 }
 
+/// The next nominal cadence firing strictly after `after`, resolving the
+/// effective weekday (schedule override > control > config default) and
+/// rolling past firings whose window a `skip:` directive removes.
+///
+/// This is the date finalize caches as `state.next_due` once a run has
+/// satisfied the current obligation. Pins and inserts are deliberately
+/// NOT baked in — the read-side candidate race in
+/// [`next_due_with_reason`] applies overrides dynamically, so the cache
+/// stays a pure cadence fact. `None` for continuous cadence.
+pub fn next_firing_after(
+    control: &Control,
+    schedule: &Schedule,
+    after: NaiveDate,
+    config_default_weekday: Option<Weekday>,
+) -> Option<NaiveDate> {
+    let effective_weekday = schedule
+        .overrides
+        .iter()
+        .find(|o| o.control_id == control.id && o.weekday.is_some())
+        .and_then(|o| o.weekday)
+        .or(control.weekday)
+        .or(config_default_weekday)
+        .unwrap_or(Weekday::Monday);
+    let mut d = nominal_firing_after(control, effective_weekday, after)?;
+    // Roll past skip-removed windows. Bounded: a year-wide skip on a
+    // weekly control is ~52 firings; past the bound, return the last
+    // computed date rather than loop forever on a pathological schedule.
+    for _ in 0..256 {
+        if !skip_covers(control, schedule, d) {
+            return Some(d);
+        }
+        d = nominal_firing_after(control, effective_weekday, d)?;
+    }
+    Some(d)
+}
+
 /// The first nominal cadence firing strictly after `d`, ignoring state
 /// and overrides. `None` for continuous cadence, which never fires.
 ///
 /// This is the yardstick for bounded postponement: a `due:` pin may
 /// defer an obligation only up to (not past) the firing that follows it.
-fn next_firing_after(control: &Control, weekday: Weekday, d: NaiveDate) -> Option<NaiveDate> {
+fn nominal_firing_after(control: &Control, weekday: Weekday, d: NaiveDate) -> Option<NaiveDate> {
     let after = d + Duration::days(1);
     match control.cadence {
         Cadence::Continuous => None,
-        Cadence::Weekly => Some(next_weekly(after, weekday, None)),
+        Cadence::Weekly => Some(next_weekly(after, weekday)),
         Cadence::Monthly => {
             let this = first_business_day(monthly_anchor(after));
             Some(if this > d {
@@ -388,14 +432,7 @@ fn first_business_day(anchor: NaiveDate) -> NaiveDate {
     d
 }
 
-fn next_weekly(today: NaiveDate, weekday: Weekday, last_next_due: Option<NaiveDate>) -> NaiveDate {
-    // If state already says "next due Monday Y", honour it as long as it
-    // is in the future. Otherwise compute the upcoming target weekday.
-    if let Some(d) = last_next_due {
-        if d >= today {
-            return d;
-        }
-    }
+fn next_weekly(today: NaiveDate, weekday: Weekday) -> NaiveDate {
     let target = weekday.to_chrono().num_days_from_monday() as i64;
     let cur = today.weekday().num_days_from_monday() as i64;
     let mut delta = target - cur;

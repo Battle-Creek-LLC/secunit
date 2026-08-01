@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `finalize` now advances `state.next_due` to the next period's firing for
+  monthly, quarterly, and semi-annual controls (#65). It previously re-resolved
+  at "run date + 1", and the resolver's month-anchored arms only answer "when
+  is the current period due" — so the cache landed on the next business day
+  after the run and a control run yesterday read past-due today. The cache is
+  now the next nominal firing after the satisfied obligation, rolling past
+  `skip:`-removed windows; pins and inserts are not baked in — the read side
+  keeps applying them dynamically.
+- The resolver now honours a cached future `state.next_due` for every cadence
+  (previously only weekly consulted it), so `due`, `status`, and `report data`
+  agree with `state.json` instead of re-arming a period the sealed run already
+  satisfied.
+
 ## [0.7.0] — 2026-07-31
 
 ### Added

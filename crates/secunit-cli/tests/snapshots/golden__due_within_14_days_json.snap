@@ -4,13 +4,6 @@ expression: run_cli(&argv)
 ---
 [
   {
-    "cadence": "quarterly",
-    "control_id": "ca-quarterly-vuln-scan",
-    "next_due": "2026-05-01",
-    "overdue": false,
-    "owner": "cto"
-  },
-  {
     "cadence": "weekly",
     "control_id": "aa-weekly-audit-review",
     "next_due": "2026-05-04",

@@ -753,3 +753,56 @@ fn prepare_canonicalizes_operator_period_spelling() {
         "sealed period ids must be canonical or coverage can never match them"
     );
 }
+
+#[test]
+fn finalize_rolls_quarterly_next_due_to_next_period() {
+    // Issue #65: a quarterly control run mid-Q3 satisfies 2026-q3, so
+    // next_due must roll to the next firing — not the day after the run,
+    // which made a control run yesterday read past-due today. The
+    // fixture's schedule.yaml skips 2026-q4 for this control, so the
+    // next obligation is Q1-2027's first business day, exercising the
+    // skip-roll too. ca-quarterly-vuln-scan's singleton cloud scope
+    // resolves flat, so evidence lands in run_dir/raw.
+    let (_tmp, root) = staged_fixture();
+    let (reg, _) = loader::load(&root);
+    let today = NaiveDate::from_ymd_opt(2026, 7, 21).unwrap();
+    let opts = PrepareOpts {
+        today: Some(today),
+        ..Default::default()
+    };
+    let ctx = runner::prepare(&reg, "ca-quarterly-vuln-scan", &opts).expect("prepare");
+    fs::write(ctx.run_dir.join("raw/scan.json"), b"{}").unwrap();
+    fs::write(ctx.run_dir.join("findings.md"), b"# findings\nnone\n").unwrap();
+    let result = RunResult {
+        schema_version: SCHEMA_VERSION,
+        control_id: ctx.control_id.clone(),
+        run_id: ctx.run_id.clone(),
+        status: RunOutcome::Complete,
+        by_system: ctx
+            .resolved_scope
+            .iter()
+            .map(|s| SystemResult {
+                name: s.name.clone(),
+                status: SystemOutcome::Complete,
+                note: None,
+            })
+            .collect(),
+        draft_risks: Vec::new(),
+        draft_issues: Vec::new(),
+        external_links: Vec::new(),
+    };
+    fs::write(
+        ctx.run_dir.join("result.json"),
+        serde_json::to_vec_pretty(&result).unwrap(),
+    )
+    .unwrap();
+    let completed_at = today.and_hms_opt(12, 0, 0).unwrap().and_utc();
+    runner::finalize_at(&reg, &ctx.run_dir, completed_at).expect("finalize");
+
+    let raw = fs::read(root.join("state.json")).expect("state.json");
+    let state: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    let next = state
+        .pointer("/controls/ca-quarterly-vuln-scan/next_due")
+        .expect("next_due present in state.json");
+    assert_eq!(next.as_str(), Some("2027-01-01"));
+}
