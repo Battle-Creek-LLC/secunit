@@ -110,10 +110,74 @@ secunit capture deps pip-audit   --path <DIR> --out <PATH>
 secunit capture deps pnpm-audit  --path <DIR> --out <PATH>
 secunit capture deps cargo-audit --path <CARGO_LOCK> [--db-path <ADVISORY_DB>] --out <PATH>
 secunit capture deps osv-query   --ecosystem <NAME> --package <NAME> --version <STR> --out <PATH>
+secunit capture deps sbom        --path <DIR> [--ecosystem <rust|python|node>] --out <PATH>
 
 secunit capture http get <URL> [--header <K=V>...] [--auth-from-env <VAR>] --out <PATH>
 secunit capture snapshot file <SRC> --out <PATH>
 ```
+
+### Required external tools
+
+Every `capture deps` action shells out to a tool the operator installs.
+`secunit capture deps --help` prints this table, and `secunit doctor` reports
+which entries are on `PATH`. A missing binary fails the capture with its install
+command and exit 2 — never a partial artifact.
+
+| Binary | Needed by | Install |
+|---|---|---|
+| `pip-audit` | `deps pip-audit` | `pip install pip-audit` |
+| `pnpm` | `deps pnpm-audit` | `npm install -g pnpm` |
+| `cargo-cyclonedx` | `deps sbom --ecosystem rust` | `cargo install cargo-cyclonedx` |
+| `cyclonedx-py` | `deps sbom --ecosystem python` | `pipx install cyclonedx-bom` |
+| `cyclonedx-npm` | `deps sbom --ecosystem node` | `npm install -g @cyclonedx/cyclonedx-npm` |
+
+`deps cargo-audit` and `deps osv-query` need no external binary: the first runs
+the `rustsec` library in-process, the second queries OSV.dev over HTTPS.
+
+### SBOM (`capture deps sbom`)
+
+Generates a [CycloneDX](https://cyclonedx.org/) bill of materials — the ECMA-424
+International Standard — by shelling out to the CycloneDX project's own
+generator for the ecosystem. It is the only capture that writes **two** files:
+
+| File | Contents |
+|---|---|
+| `<out>` | the bare CycloneDX document, schema-valid and standalone, so an assessor's tooling reads it unchanged |
+| `<out>.envelope.json` | the canonical capture envelope: ecosystem, generator name and version, declared spec version, component count, and the BOM's sha256 |
+
+The BOM stays unwrapped because nesting it inside `result` would make it
+unreadable to every CycloneDX consumer; the envelope sits beside it and pins its
+hash instead.
+
+`--ecosystem` is inferred from the manifests present (`Cargo.toml`,
+`requirements.txt` / `poetry.lock`, `package.json`) and is **required** when a
+tree carries more than one — capturing the wrong ecosystem's SBOM is worse than
+capturing none.
+
+Spec version follows what each generator supports, and the artifact is validated
+against whatever version it declares:
+
+| Ecosystem | Generator | CycloneDX |
+|---|---|---|
+| `rust` | `cargo-cyclonedx` | 1.5 — its `--spec-version` accepts no higher |
+| `python` | `cyclonedx-py` | 1.6 |
+| `node` | `cyclonedx-npm` | 1.6 |
+
+Two captures of an unchanged tree are byte-identical: CycloneDX's `serialNumber`
+and `metadata.timestamp` regenerate on every run, so both are stripped and the
+component and dependency arrays are sorted by `purl` before the BOM is written.
+
+The Rust arm is the one `deps` capture that is not strictly read-only against
+the target tree. `cargo-cyclonedx` has no stdout mode and no output-directory
+flag — it writes a BOM next to every `Cargo.toml` — so the capturer writes under
+a process-unique filename, reads it, and deletes it, including on the error
+path. It refuses to start if such a file already exists rather than overwrite
+it. A crash between write and cleanup can leave a `secunit-sbom-<pid>.json`
+behind.
+
+For a cargo workspace, the BOM at the workspace root is used. A workspace with
+no root package yields one BOM per member and the capture fails rather than
+inventing a merged document — point `--path` at a single member.
 
 ## Audit
 

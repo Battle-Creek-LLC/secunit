@@ -5,3 +5,6 @@ Cargo.lock.bak
 
 # WISP export output (build artifact)
 /dist/
+
+# SBOM fixture project deps — the manifests are committed, the tree is not.
+testdata/fixtures/projects/node/node_modules/

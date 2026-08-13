@@ -14,3 +14,4 @@ pub mod cmd;
 pub mod osv_query;
 pub mod pip_audit;
 pub mod pnpm_audit;
+pub mod sbom;

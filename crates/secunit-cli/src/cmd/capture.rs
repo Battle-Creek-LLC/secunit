@@ -16,7 +16,13 @@ use secunit_capture::canonical::Envelope;
 
 #[derive(Debug, Subcommand)]
 pub enum CaptureCmd {
-    /// Source-side dependency-audit capturers.
+    /// Source-side dependency-audit and SBOM capturers.
+    ///
+    /// Every action here shells out to an external tool — see the
+    /// list under EXTERNAL TOOLS below. Each capturer probes for its
+    /// binary before running and names the install command if it is
+    /// missing.
+    #[command(after_help = external_tools_help())]
     Deps {
         #[command(subcommand)]
         sub: DepsCmd,
@@ -68,6 +74,66 @@ pub enum DepsCmd {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Generate a CycloneDX SBOM for a project.
+    ///
+    /// Writes two files: the bare CycloneDX document at `--out`, which
+    /// an assessor's tooling reads unchanged, and a canonical envelope
+    /// at `<out>.envelope.json` recording the generator, its version,
+    /// and the BOM's sha256.
+    ///
+    /// Requires the CycloneDX generator for the ecosystem:
+    /// `cargo-cyclonedx` (rust), `cyclonedx-py` (python), or
+    /// `cyclonedx-npm` (node).
+    Sbom {
+        /// Project root — the directory holding `Cargo.toml`,
+        /// `requirements.txt`, or `package.json`.
+        #[arg(long)]
+        path: PathBuf,
+        /// rust | python | node. Inferred from the manifests present
+        /// when omitted; required when a tree carries more than one.
+        #[arg(long)]
+        ecosystem: Option<String>,
+        /// Path for the bare CycloneDX BOM.
+        #[arg(long)]
+        out: PathBuf,
+    },
+}
+
+/// The `EXTERNAL TOOLS` block appended to `capture deps --help`.
+///
+/// Built from `REQUIRED_TOOLS` rather than hand-written, so the list an
+/// operator reads and the list the capturers probe cannot drift.
+#[cfg(feature = "deps")]
+fn external_tools_help() -> String {
+    use secunit_capture::deps::cmd::REQUIRED_TOOLS;
+
+    let mut s = String::from(
+        "EXTERNAL TOOLS:\n  \
+         Every `capture deps` action shells out. Install the tool for each action you run;\n  \
+         a missing binary fails the capture with its install command (exit 2), never a\n  \
+         partial artifact.\n\n",
+    );
+    let width = REQUIRED_TOOLS
+        .iter()
+        .map(|t| t.program.len())
+        .max()
+        .unwrap_or(0);
+    for t in REQUIRED_TOOLS {
+        s.push_str(&format!(
+            "  {:<width$}  {:<30}  {}\n",
+            t.program,
+            t.action,
+            t.install_hint,
+            width = width
+        ));
+    }
+    s.push_str("\n  `secunit doctor` reports which of these are on PATH.\n");
+    s
+}
+
+#[cfg(not(feature = "deps"))]
+fn external_tools_help() -> String {
+    String::from("EXTERNAL TOOLS:\n  This binary was built without the `deps` feature.\n")
 }
 
 #[derive(Debug, Subcommand)]
@@ -126,6 +192,17 @@ pub fn run(cmd: CaptureCmd) -> Result<ExitCode> {
 
 #[cfg(feature = "deps")]
 fn deps(cmd: DepsCmd) -> Result<ExitCode> {
+    // The SBOM action writes two files rather than one envelope, so it
+    // returns before the shared `write_envelope` tail.
+    if let DepsCmd::Sbom {
+        path,
+        ecosystem,
+        out,
+    } = cmd
+    {
+        return sbom(&path, ecosystem.as_deref(), &out);
+    }
+
     let env = match cmd {
         DepsCmd::PipAudit { path, out } => {
             let env = secunit_capture::deps::pip_audit::capture(&path).map_err(map_runtime)?;
@@ -158,9 +235,69 @@ fn deps(cmd: DepsCmd) -> Result<ExitCode> {
                 .map_err(map_runtime)?;
             (env, out)
         }
+        // Handled above — it writes a BOM plus a sidecar, not one envelope.
+        DepsCmd::Sbom { .. } => unreachable!("sbom returns before this match"),
     };
     write_envelope(&env.0, &env.1)?;
     Ok(ExitCode::SUCCESS)
+}
+
+/// Capture an SBOM: bare CycloneDX document at `out`, sidecar envelope
+/// at `<out>.envelope.json`.
+///
+/// The two-file split is deliberate. Every other capturer writes one
+/// canonical envelope, but a CycloneDX BOM has to stay a standalone,
+/// schema-valid document for an assessor's tooling to read it, so the
+/// envelope sits beside it and pins its hash instead of wrapping it.
+#[cfg(feature = "deps")]
+fn sbom(
+    path: &std::path::Path,
+    ecosystem: Option<&str>,
+    out: &std::path::Path,
+) -> Result<ExitCode> {
+    use secunit_capture::deps::sbom::{self, Ecosystem};
+
+    let eco = ecosystem
+        .map(|e| e.parse::<Ecosystem>())
+        .transpose()
+        .map_err(map_runtime)?;
+
+    let mut capture = sbom::capture(path, eco).map_err(map_runtime)?;
+
+    let bom_name = out
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| sbom::DEFAULT_BOM_FILENAME.to_string());
+    capture.set_bom_filename(&bom_name);
+
+    let envelope_path = sidecar_path(out);
+    // Validate the sidecar before either file lands, so a schema
+    // failure never leaves a BOM without its provenance record.
+    write_envelope(&capture.envelope, &envelope_path)?;
+    capture
+        .write_bom(out)
+        .with_context(|| format!("write BOM to {}", out.display()))?;
+
+    eprintln!(
+        "✓ wrote {} ({} components, CycloneDX {})",
+        out.display(),
+        capture.envelope.result["component_count"],
+        capture.envelope.result["spec_version"]
+            .as_str()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `foo/sbom.cdx.json` -> `foo/sbom.cdx.json.envelope.json`.
+///
+/// Appended rather than extension-replaced so the sidecar sorts next to
+/// its BOM and never collides with another capture's output.
+#[cfg(feature = "deps")]
+fn sidecar_path(out: &std::path::Path) -> std::path::PathBuf {
+    let mut s = out.as_os_str().to_os_string();
+    s.push(".envelope.json");
+    std::path::PathBuf::from(s)
 }
 
 #[cfg(not(feature = "deps"))]
