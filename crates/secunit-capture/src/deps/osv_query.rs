@@ -9,6 +9,8 @@ use crate::canonical::{
     canonicalize_value, sort_array_by_key, strip_keys, strip_keys_matching, Envelope,
 };
 
+use super::truncate;
+
 pub const CAPTURER: &str = "deps.osv-query";
 pub const VERSION: &str = "1";
 
@@ -96,14 +98,6 @@ fn canonicalize_osv(mut v: Value) -> Value {
         sort_array_by_key(vulns, "id");
     }
     canonicalize_value(v)
-}
-
-fn truncate(s: &str, n: usize) -> String {
-    if s.len() <= n {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..n])
-    }
 }
 
 #[cfg(test)]

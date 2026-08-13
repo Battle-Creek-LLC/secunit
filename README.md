@@ -70,6 +70,25 @@ missing capabilities before a run starts. See
 > default `cargo build` so headless CI and core development stay fast. Build
 > it explicitly with `cargo build -p secunit-gui` or `cargo tauri dev`.
 
+### Required external tools
+
+The `deps` capturers shell out rather than reimplementing each ecosystem's
+resolver. Install the binary for each action your controls run — the binary
+itself needs none of them to build or to run any other command.
+
+| Binary | Needed by | Install |
+|---|---|---|
+| `pip-audit` | `secunit capture deps pip-audit` | `pip install pip-audit` |
+| `pnpm` | `secunit capture deps pnpm-audit` | `npm install -g pnpm` |
+| `cargo-cyclonedx` | `secunit capture deps sbom --ecosystem rust` | `cargo install cargo-cyclonedx` |
+| `cyclonedx-py` | `secunit capture deps sbom --ecosystem python` | `pipx install cyclonedx-bom` |
+| `cyclonedx-npm` | `secunit capture deps sbom --ecosystem node` | `npm install -g @cyclonedx/cyclonedx-npm` |
+
+`secunit doctor` reports which of these are on `PATH`, and
+`secunit capture deps --help` prints the same table. A capture whose tool is
+missing fails with that install command and exit 2 — it never writes a partial
+artifact. `deps cargo-audit` and `deps osv-query` need nothing installed.
+
 ## Usage
 
 `secunit [OPTIONS] <COMMAND>`. Global options include `-C, --root <DIR>`
@@ -106,7 +125,14 @@ matrix in [`docs/cli.md`](docs/cli.md#capture)):
 secunit capture github dependabot-alerts --repo <org>/<repo> --out <path>
 secunit capture deps cargo-audit --path <dir> --out <path>
 secunit capture deps pip-audit --path <dir> --out <path>
+secunit capture deps sbom --path <dir> --out <run_dir>/raw/sbom.cdx.json
 ```
+
+`capture deps sbom` emits a [CycloneDX](https://cyclonedx.org/) bill of
+materials (ECMA-424) for a Rust, Python, or Node project. It writes two files:
+the bare CycloneDX document at `--out`, which an assessor's tooling reads
+unchanged, and `<out>.envelope.json` recording the generator, its version, and
+the BOM's sha256. Repeated captures of an unchanged tree are byte-identical.
 
 ### Skills
 

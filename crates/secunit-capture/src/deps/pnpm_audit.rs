@@ -8,7 +8,8 @@ use serde_json::{json, Value};
 
 use crate::canonical::{canonicalize_value, sort_array_by_key, strip_keys, Envelope};
 
-use super::cmd::{CmdRunner, RealRunner};
+use super::cmd::{ensure_installed, tool, CmdRunner, RealRunner};
+use super::truncate;
 
 pub const CAPTURER: &str = "deps.pnpm-audit";
 pub const VERSION: &str = "1";
@@ -19,9 +20,11 @@ pub fn capture(path: &Path) -> Result<Envelope> {
 }
 
 pub fn capture_with(path: &Path, runner: &dyn CmdRunner) -> Result<Envelope> {
+    ensure_installed(runner, tool("pnpm").expect("pnpm is a required tool"))?;
+
     let out = runner
         .run("pnpm", &["audit", "--json"], path)
-        .with_context(|| format!("pnpm not found or failed in {}", path.display()))?;
+        .with_context(|| format!("pnpm failed in {}", path.display()))?;
 
     let raw: Value = if out.stdout.trim().is_empty() {
         json!({})
@@ -71,14 +74,6 @@ fn canonicalize_pnpm_audit(mut v: Value) -> Value {
     }
 
     canonicalize_value(v)
-}
-
-fn truncate(s: &str, n: usize) -> String {
-    if s.len() <= n {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..n])
-    }
 }
 
 #[cfg(test)]

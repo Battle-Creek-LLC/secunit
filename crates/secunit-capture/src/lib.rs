@@ -11,6 +11,13 @@ pub mod canonical;
 pub mod schema;
 pub mod time;
 
+/// CycloneDX BOM normalization and schema validation. Gated with the
+/// SBOM capturer that produces the BOMs, since the vendored CycloneDX
+/// schemas are ~500KB of `include_str!` that a `--no-default-features`
+/// build has no reason to carry.
+#[cfg(feature = "deps")]
+pub mod cyclonedx;
+
 #[cfg(feature = "deps")]
 pub mod deps;
 

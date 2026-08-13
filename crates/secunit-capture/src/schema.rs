@@ -36,6 +36,7 @@ fn schema_for(capturer: &str) -> Option<&'static JSONSchema> {
         "deps.pnpm-audit" => compiled!("capture-deps-pnpm-audit.schema.json"),
         "deps.cargo-audit" => compiled!("capture-deps-cargo-audit.schema.json"),
         "deps.osv-query" => compiled!("capture-deps-osv-query.schema.json"),
+        "deps.sbom" => compiled!("capture-deps-sbom.schema.json"),
         "github.dependabot-alerts" => {
             compiled!("capture-github-dependabot-alerts.schema.json")
         }

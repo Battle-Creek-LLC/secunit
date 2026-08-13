@@ -178,6 +178,33 @@ pub fn run(ctx: &Ctx) -> Result<ExitCode> {
             );
         }
     }
+    // The `deps` capturers shell out. Report which of those binaries
+    // resolve on PATH so an operator finds out here rather than when a
+    // scheduled sweep fails mid-run. A missing tool is a warning, not a
+    // failure: most registries use only some of these actions.
+    #[cfg(feature = "deps")]
+    {
+        use secunit_capture::deps::cmd::{which_on_path, REQUIRED_TOOLS};
+
+        for t in REQUIRED_TOOLS {
+            match which_on_path(t.program) {
+                Some(p) => env.ok("external tool", format!("{} at {}", t.program, p.display())),
+                None => env.warn(
+                    "external tool",
+                    format!(
+                        "`{}` is not on PATH — `secunit capture {}` will fail",
+                        t.program, t.action
+                    ),
+                    format!(
+                        "install it with `{}`, or ignore this if no control runs \
+                         `capture {}`",
+                        t.install_hint, t.action
+                    ),
+                ),
+            }
+        }
+    }
+
     sections.push(env);
 
     // ---- Repo structure ----------------------------------------------------

@@ -18,7 +18,11 @@
         "in_scope_since": { "type": "string", "format": "date" },
         "retired_on": { "type": "string", "format": "date" },
         "aliases": { "type": "array", "items": { "type": "string" } },
-        "excludes": { "type": "array", "items": { "type": "string" } }
+        "excludes": { "type": "array", "items": { "type": "string" } },
+        "local_path": {
+          "type": "string",
+          "description": "Path to a local checkout of this system. Required for source-side captures (`capture deps …`, including `sbom`), which read the working tree rather than an API."
+        }
       },
       "additionalProperties": true
     }

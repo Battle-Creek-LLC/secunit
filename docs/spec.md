@@ -47,7 +47,7 @@ See `examples/controls/` for shapes.
 
 Most controls operate over a set of systems — repos, cloud accounts, SaaS providers, physical sites. `inventory.yaml` is the single source of truth for what's in scope. The `inventory-seed` skill (run alongside `bootstrap`) populates it from the org's GitHub, cloud accounts, and the WISP's own access dictionaries.
 
-Each entry carries a `name`, a `kind`, optional `tags`, and lifecycle dates (`in_scope_since`, `retired_on`). Controls reference inventory by **kind + tag filter**, never by name, so onboarding a new system is one inventory edit and every relevant control automatically picks it up.
+Each entry carries a `name`, a `kind`, optional `tags`, and lifecycle dates (`in_scope_since`, `retired_on`). Source repos additionally carry `local_path`, the checkout every source-side capture (`capture deps …`, including `sbom`) reads instead of an API. Controls reference inventory by **kind + tag filter**, never by name, so onboarding a new system is one inventory edit and every relevant control automatically picks it up.
 
 See `storage.md` for the full schema and `examples/inventory.yaml` for shape.
 

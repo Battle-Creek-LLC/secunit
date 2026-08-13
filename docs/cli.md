@@ -110,10 +110,128 @@ secunit capture deps pip-audit   --path <DIR> --out <PATH>
 secunit capture deps pnpm-audit  --path <DIR> --out <PATH>
 secunit capture deps cargo-audit --path <CARGO_LOCK> [--db-path <ADVISORY_DB>] --out <PATH>
 secunit capture deps osv-query   --ecosystem <NAME> --package <NAME> --version <STR> --out <PATH>
+secunit capture deps sbom        --path <DIR> [--ecosystem <rust|python|node>] --out <PATH>
 
 secunit capture http get <URL> [--header <K=V>...] [--auth-from-env <VAR>] --out <PATH>
 secunit capture snapshot file <SRC> --out <PATH>
 ```
+
+### Required external tools
+
+Every `capture deps` action shells out to a tool the operator installs.
+`secunit capture deps --help` prints this table, and `secunit doctor` reports
+which entries are on `PATH`. A missing binary fails the capture with its install
+command and exit 2 — never a partial artifact.
+
+| Binary | Needed by | Install |
+|---|---|---|
+| `pip-audit` | `deps pip-audit` | `pip install pip-audit` |
+| `pnpm` | `deps pnpm-audit` | `npm install -g pnpm` |
+| `cargo-cyclonedx` | `deps sbom --ecosystem rust` | `cargo install cargo-cyclonedx` |
+| `cyclonedx-py` | `deps sbom --ecosystem python` | `pipx install cyclonedx-bom` |
+| `cyclonedx-npm` | `deps sbom --ecosystem node` | `npm install -g @cyclonedx/cyclonedx-npm` |
+
+`deps cargo-audit` and `deps osv-query` need no external binary: the first runs
+the `rustsec` library in-process, the second queries OSV.dev over HTTPS.
+
+### SBOM (`capture deps sbom`)
+
+Generates a [CycloneDX](https://cyclonedx.org/) bill of materials — the ECMA-424
+International Standard — by shelling out to the CycloneDX project's own
+generator for the ecosystem. It is the only capture that writes **two** files:
+
+| File | Contents |
+|---|---|
+| `<out>` | the bare CycloneDX document, schema-valid and standalone, so an assessor's tooling reads it unchanged |
+| `<out>.envelope.json` | the canonical capture envelope: ecosystem, generator name and version, declared spec version, component count, and the BOM's sha256 |
+
+The BOM stays unwrapped because nesting it inside `result` would make it
+unreadable to every CycloneDX consumer; the envelope sits beside it and pins its
+hash instead.
+
+`--ecosystem` is inferred from the manifests present (`Cargo.toml`,
+`requirements.txt` / `poetry.lock` / `uv.lock` / `pyproject.toml`,
+`package.json`) and is **required** when a tree carries more than one —
+capturing the wrong ecosystem's SBOM is worse than capturing none.
+
+### Which Python projects are supported
+
+`cyclonedx-py` dispatches on input format, so the capturer picks its subcommand
+from what the project provides, in this order:
+
+| Project provides | Subcommand | `result.describes` |
+|---|---|---|
+| `poetry.lock` | `poetry` | `poetry.lock` |
+| `requirements.txt` | `requirements` | `requirements.txt` |
+| `Pipfile.lock` | `pipenv` | `Pipfile.lock` |
+| `.venv/` or `venv/` | `environment` | `.venv` |
+
+**uv, PDM, and hatch projects are supported through their virtualenv.**
+Upstream does not read `pyproject.toml` or `uv.lock` directly — the manifest and
+lockfile "are not explicitly supported" while the virtual environments "are
+fully supported" — so a PEP-621 project is captured from its own `.venv`. Run
+`uv sync` (or `pdm install`, `hatch env create`) once, and the capture works
+from then on.
+
+A declared manifest wins over an installed venv: it describes what the project
+*asks for* and needs no install step. `result.describes` records which was used,
+because resolved-from-a-lockfile and read-from-an-install are different
+evidentiary claims — the second includes whatever is actually installed, the
+first only what is declared.
+
+Pointing at an in-project `.venv` is not the ambient-interpreter hazard
+`capture deps pip-audit` refuses: the path is explicit and belongs to the
+project, so the BOM describes that tree rather than whichever interpreter
+happens to be on `$PATH`. A PEP-621 project with no venv and no lockfile fails
+with the command to run rather than a "manifest unsupported" error.
+
+Spec version follows what each generator supports, and the artifact is validated
+against whatever version it declares:
+
+| Ecosystem | Generator | CycloneDX |
+|---|---|---|
+| `rust` | `cargo-cyclonedx` | 1.5 — its `--spec-version` accepts no higher |
+| `python` | `cyclonedx-py` | 1.6 |
+| `node` | `cyclonedx-npm` | 1.6 |
+
+Two captures of an unchanged tree are byte-identical: CycloneDX's `serialNumber`
+and `metadata.timestamp` regenerate on every run, so both are stripped and the
+component and dependency arrays are sorted by `purl` before the BOM is written.
+
+Each generator reads a different thing, so the checkout has to be in the right
+state:
+
+| Ecosystem | Reads | Prepare the checkout with |
+|---|---|---|
+| `rust` | `Cargo.toml` + `Cargo.lock` | `cargo generate-lockfile` if no lockfile is committed |
+| `python` | `requirements.txt`, `poetry.lock`, or `Pipfile.lock` | nothing — the manifest is parsed, not installed |
+| `python` (uv / PDM / hatch) | the project's own `.venv` or `venv` | `uv sync`, `pdm install`, or `hatch env create` |
+| `node` | the **installed** `node_modules` tree, via `npm ls` | `npm install` (or `npm ci`) first |
+
+The Node arm is the one that needs an install step: `cyclonedx-npm` resolves
+against `node_modules`, not `package-lock.json`, and fails with npm's
+`ELSPROBLEMS` if packages are missing. A sweep over repos that are cloned but
+not installed should record `needs-operator` for those systems rather than treat
+the failure as a finding.
+
+The Rust arm is the one `deps` capture that is not strictly read-only against
+the target tree. `cargo-cyclonedx` has no stdout mode and no output-directory
+flag — it writes a BOM next to every `Cargo.toml` — so the capturer writes under
+a process-unique filename, reads it, and deletes it, including on the error
+path. It refuses to start if such a file already exists rather than overwrite
+it. A crash between write and cleanup can leave a `secunit-sbom-<pid>.json`
+behind.
+
+For a cargo workspace, the BOM at the workspace root is used. A **virtual
+manifest** (`[workspace]` with no `[package]`, which is secunit's own shape)
+yields one BOM per member and no root BOM, so the capture fails rather than
+invent a merged document — point `--path` at a single member.
+
+A generator that exits non-zero fails the capture and writes nothing, even when
+it produced a parseable BOM. `cyclonedx-npm` against a partially-installed
+`node_modules` emits a schema-valid document that is missing a subtree;
+recording it would understate `component_count` and make the next sweep diff it
+as "dependencies removed".
 
 ## Audit
 

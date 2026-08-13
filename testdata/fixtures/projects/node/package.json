@@ -1,0 +1,11 @@
+{
+  "name": "sbom-fixture-node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone fixture package used by the `deps sbom` capturer tests.",
+  "license": "MIT",
+  "dependencies": {
+    "bytes": "3.1.2",
+    "ms": "2.1.3"
+  }
+}

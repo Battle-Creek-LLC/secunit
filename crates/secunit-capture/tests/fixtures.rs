@@ -109,6 +109,116 @@ mod deps_fixtures {
         assert_byte_identical_and_schema_valid(&a, &b);
     }
 
+    /// SBOM fixtures are the *real* output of the CycloneDX generators
+    /// run against the committed example projects under
+    /// `testdata/fixtures/projects/`, recorded once so the test suite
+    /// stays hermetic — no network, no installed generator.
+    fn sbom_runner(program: &str, args: &[&str], stdout: String) -> CannedRunner {
+        let r = CannedRunner::new();
+        r.register(
+            program,
+            args,
+            CmdOutput {
+                stdout,
+                stderr: String::new(),
+                exit_code: 0,
+            },
+        );
+        r
+    }
+
+    fn project_dir(marker: &str) -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join(marker), "{}\n").unwrap();
+        d
+    }
+
+    #[test]
+    fn sbom_python_fixture_roundtrips() {
+        use secunit_capture::deps::sbom::{capture_with, Ecosystem};
+
+        let _g = set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let stdout = fs::read_to_string(fixture_root().join("deps/sbom/python.json")).unwrap();
+        let args = [
+            "requirements",
+            "requirements.txt",
+            "--spec-version",
+            "1.6",
+            "--output-format",
+            "JSON",
+            "--output-reproducible",
+            "--output-file",
+            "-",
+        ];
+        let d = project_dir("requirements.txt");
+        let a = capture_with(
+            d.path(),
+            Some(Ecosystem::Python),
+            &sbom_runner("cyclonedx-py", &args, stdout.clone()),
+        )
+        .unwrap();
+        let b = capture_with(
+            d.path(),
+            Some(Ecosystem::Python),
+            &sbom_runner("cyclonedx-py", &args, stdout),
+        )
+        .unwrap();
+
+        assert_eq!(a.bom_json, b.bom_json, "BOM bytes must be stable");
+        assert_byte_identical_and_schema_valid(&a.envelope, &b.envelope);
+    }
+
+    #[test]
+    fn sbom_node_fixture_roundtrips() {
+        use secunit_capture::deps::sbom::{capture_with, Ecosystem};
+
+        let _g = set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let stdout = fs::read_to_string(fixture_root().join("deps/sbom/node.json")).unwrap();
+        let args = [
+            "--spec-version",
+            "1.6",
+            "--output-format",
+            "JSON",
+            "--output-reproducible",
+            "--output-file",
+            "-",
+        ];
+        let d = project_dir("package.json");
+        let a = capture_with(
+            d.path(),
+            Some(Ecosystem::Node),
+            &sbom_runner("cyclonedx-npm", &args, stdout.clone()),
+        )
+        .unwrap();
+        let b = capture_with(
+            d.path(),
+            Some(Ecosystem::Node),
+            &sbom_runner("cyclonedx-npm", &args, stdout),
+        )
+        .unwrap();
+
+        assert_eq!(a.bom_json, b.bom_json);
+        assert_byte_identical_and_schema_valid(&a.envelope, &b.envelope);
+    }
+
+    /// Every recorded generator fixture must satisfy the CycloneDX
+    /// schema for the version it declares — the check that would catch
+    /// a generator upgrade emitting a version this build cannot read.
+    #[test]
+    fn every_sbom_fixture_validates_against_its_declared_spec_version() {
+        for name in ["rust.json", "python.json", "python-uv.json", "node.json"] {
+            let mut bom = read_json(&fixture_root().join("deps/sbom").join(name));
+            secunit_capture::cyclonedx::normalize(&mut bom);
+            let version = secunit_capture::cyclonedx::spec_version(&bom)
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            let errs = secunit_capture::cyclonedx::validate(&bom).unwrap();
+            assert!(
+                errs.is_empty(),
+                "{name} (CycloneDX {version}) failed the schema: {errs:?}"
+            );
+        }
+    }
+
     /// cargo-audit's library entry point requires a real advisory db
     /// clone, so we exercise the canonicalization seam directly:
     /// load a recorded `rustsec::Report`-shaped fixture, canonicalize

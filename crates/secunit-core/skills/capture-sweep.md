@@ -17,7 +17,8 @@ in-scope system, diffs against the prior run, and writes findings. It performs
 - `control` — parsed control YAML.
 - `resolved_scope` — inventory entries to iterate; **empty for org-wide controls**.
 - `control.skill_args`:
-  - `target` — `repo` (pass `--repo <entry.url>`) or `account` (pass `--account <entry.name>`). Tells the skill which flag identifies the system for `secunit capture`.
+  - `target` — `repo` (pass `--repo <entry.url>`), `account` (pass `--account <entry.name>`), or `path` (pass `--path <entry.local_path>`). Tells the skill which flag identifies the system for `secunit capture`. Source-side actions — every `capture deps …`, including `sbom` — take `path` and need a local checkout; API-side actions take `repo` or `account`.
+  - A capture may set its own `target` to override the sweep-wide one, so a control can mix `deps sbom` (`path`) with `github dependabot-alerts` (`repo`) in one pass.
   - `captures[]` — `{ tool, action, args[], out }` → `secunit capture <tool> <action> <system-flag> <args> --out <dir>/raw/<out>`.
   - `commands[]` — `{ cmd, out, description }` → run `cmd`, redirect stdout to `<dir>/raw/<out>`. For non-`secunit` evidence (e.g. `repocat audit --json`).
 - `control.remediation_thresholds` / `_config.thresholds` — SLA days per severity; used to flag overdue findings and to decide what becomes a draft risk (`_config.thresholds.draft_risk_at`).
@@ -37,6 +38,8 @@ For each `system` in `resolved_scope`:
 2. For each `capture` in `skill_args.captures`, run:
    - `target: repo` → `secunit capture <tool> <action> --repo <owner/repo from system.url> <args…> --out <sub_dir>/raw/<out>`
    - `target: account` → `secunit capture <tool> <action> --account <system.name> <args…> --out <sub_dir>/raw/<out>`
+   - `target: path` → `secunit capture <tool> <action> --path <system.local_path> <args…> --out <sub_dir>/raw/<out>`. If the system has no `local_path` or the directory is absent, treat it as an un-cloned repo: `needs-operator` per the failure-handling section, and continue.
+   - **`deps sbom` writes two files**, not one: the bare CycloneDX BOM at `--out`, and a sidecar envelope at `<out>.envelope.json` carrying the generator name, its version, and the BOM's sha256. Diff and record both — the BOM is what an assessor reads, the sidecar is what proves which tool produced it. Pass `--ecosystem <rust|python|node>` in `args` for any repo whose tree carries more than one manifest; omit it to let the capturer infer.
    - **`requires_tag`**: if a capture declares `requires_tag: <tag>`, skip it for any system whose `tags` don't include `<tag>` (e.g. `codeql-alerts` with `requires_tag: has-sast` runs only on SAST-capable repos, never on Rust). Skipping is silent — not a failure.
    - **`github audit-log` needs an absolute `--since`** (ISO-8601). Compute it: the prior run's finalized timestamp, or `today − 7 days` (or the control's period) on the first run. Append it to the capture's `args`.
 3. For each `command` in `skill_args.commands`, run it; write stdout to `<sub_dir>/raw/<out>`
@@ -144,9 +147,15 @@ from `severity`). `body_path` links to the `### Risk` anchor in `findings.md`.
 ## Operator-only / failure handling
 
 If a capture cannot complete (missing token, account not configured, repo not
-cloned), write `<dir>/raw/<out>.pending.txt` with the exact `secunit capture …`
-command to run, set that system's status to `needs-operator`, and continue. Never
-block the whole run on one system.
+cloned, **required external tool not installed**), write
+`<dir>/raw/<out>.pending.txt` with the exact `secunit capture …` command to run,
+set that system's status to `needs-operator`, and continue. Never block the whole
+run on one system.
+
+Every `capture deps …` action shells out to an external binary and fails with
+that binary's install command when it is missing — copy that remediation into
+`.pending.txt` verbatim so the operator does not have to re-derive it. `secunit
+doctor` lists which of these tools are on PATH.
 
 ## Anti-patterns
 

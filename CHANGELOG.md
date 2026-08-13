@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `secunit capture deps sbom --path <DIR> [--ecosystem <rust|python|node>] --out
+  <PATH>` generates a [CycloneDX](https://cyclonedx.org/) SBOM — the ECMA-424
+  International Standard — as hash-chained run evidence. It writes two files: the
+  bare CycloneDX document at `--out`, standalone and schema-valid so an
+  assessor's tooling reads it unchanged, and a sidecar envelope at
+  `<out>.envelope.json` carrying the generator name and version, declared spec
+  version, component count, and the BOM's sha256.
+
+  **New external tool required per ecosystem.** The capturer shells out to the
+  CycloneDX project's own generator rather than reimplementing three resolvers.
+  Install the one for each ecosystem you capture:
+
+  | Ecosystem | Binary | Install | CycloneDX |
+  |---|---|---|---|
+  | `rust` | `cargo-cyclonedx` | `cargo install cargo-cyclonedx` | 1.5 |
+  | `python` | `cyclonedx-py` | `pipx install cyclonedx-bom` | 1.6 |
+  | `node` | `cyclonedx-npm` | `npm install -g @cyclonedx/cyclonedx-npm` | 1.6 |
+
+  Rust caps at CycloneDX 1.5 because `cargo cyclonedx --spec-version` accepts no
+  higher; each artifact is validated against the version it declares, with the
+  1.5 and 1.6 schemas vendored so validation works offline.
+
+  Python covers Poetry, pip, Pipenv, **and PEP-621 projects (uv, PDM, hatch)**.
+  `cyclonedx-py` reads no bare `pyproject.toml` or `uv.lock`, but reads a
+  virtualenv fully, so a PEP-621 project is captured from its own `.venv` once
+  `uv sync` (or `pdm install` / `hatch env create`) has run. A declared manifest
+  wins over an installed venv, and `result.describes` records which was used —
+  resolved-from-a-lockfile and read-from-an-install are different evidentiary
+  claims.
+
+  Two captures of an unchanged tree are byte-identical: CycloneDX's
+  `serialNumber` and `metadata.timestamp` regenerate every run and are stripped,
+  and components and dependencies are sorted by `purl`.
+
+  The Rust arm briefly writes into the audited tree — `cargo-cyclonedx` has no
+  stdout mode and no output-directory flag — under a process-unique filename
+  that is deleted afterwards, including on the error path. It refuses to run
+  rather than overwrite a file already at that name.
+
+- `secunit doctor` now reports which external `deps` binaries resolve on `PATH`,
+  and `secunit capture deps --help` prints the same table with each tool's
+  install command.
+
+### Changed
+
+- `capture deps pip-audit` and `capture deps pnpm-audit` now probe for their
+  binary before invoking it, so a missing tool fails with its install command
+  instead of `No such file or directory (os error 2)`.
+- `capture deps sbom` fails when its generator exits non-zero, even if a
+  parseable BOM was produced. SBOM generators have no findings-mean-non-zero
+  convention, so a non-zero exit means the BOM may be missing components —
+  recording it would understate `component_count` and make the next sweep read
+  it as dependencies removed.
+- The bundled `capture-sweep` skill gained a `target: path` mapping for
+  source-side captures, and documents `deps sbom`'s two-file output. A capture
+  whose external tool is missing becomes `needs-operator` for that system rather
+  than failing the run.
+
+### Fixed
+
+- Every `capture deps` capturer could panic instead of reporting an error when
+  quoting subprocess output: the shared `truncate` helper sliced by byte index
+  and panicked when the limit landed inside a UTF-8 sequence. cargo diagnostics
+  and npm error output routinely contain multi-byte characters, so a failing
+  `pip-audit`, `pnpm audit`, `osv-query`, or SBOM generator could surface a
+  backtrace rather than the exit-2 error a sweep turns into `.pending.txt`. The
+  four copies are now one boundary-safe helper.
+
 ## [0.7.1] — 2026-08-01
 
 ### Fixed

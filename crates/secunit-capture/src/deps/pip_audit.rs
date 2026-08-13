@@ -26,7 +26,8 @@ use serde_json::{json, Value};
 
 use crate::canonical::{canonicalize_value, sort_array_by_key, strip_keys, Envelope};
 
-use super::cmd::{CmdRunner, RealRunner};
+use super::cmd::{ensure_installed, tool, CmdRunner, RealRunner};
+use super::truncate;
 
 pub const CAPTURER: &str = "deps.pip-audit";
 pub const VERSION: &str = "1";
@@ -75,6 +76,11 @@ pub fn capture(path: &Path) -> Result<Envelope> {
 
 /// Same as [`capture`] but with an injectable subprocess runner.
 pub fn capture_with(path: &Path, runner: &dyn CmdRunner) -> Result<Envelope> {
+    ensure_installed(
+        runner,
+        tool("pip-audit").expect("pip-audit is a required tool"),
+    )?;
+
     let (target, _abs_path) = detect_target(path).ok_or_else(|| {
         anyhow!(
             "no requirements.txt or pyproject.toml found at {} — pip-audit needs an explicit \
@@ -165,14 +171,6 @@ fn canonicalize_pip_audit(mut v: Value) -> Value {
         sort_array_by_key(deps, "name");
     }
     canonicalize_value(v)
-}
-
-fn truncate(s: &str, n: usize) -> String {
-    if s.len() <= n {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..n])
-    }
 }
 
 #[cfg(test)]

@@ -16,6 +16,7 @@ chrono.workspace = true
 tracing.workspace = true
 secunit-core.workspace = true
 jsonschema.workspace = true
+walkdir.workspace = true
 
 # `deps` feature
 tokio = { version = "1", features = ["rt", "macros", "process"], optional = true }
