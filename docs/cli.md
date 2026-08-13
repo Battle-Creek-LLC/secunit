@@ -167,6 +167,21 @@ Two captures of an unchanged tree are byte-identical: CycloneDX's `serialNumber`
 and `metadata.timestamp` regenerate on every run, so both are stripped and the
 component and dependency arrays are sorted by `purl` before the BOM is written.
 
+Each generator reads a different thing, so the checkout has to be in the right
+state:
+
+| Ecosystem | Reads | Prepare the checkout with |
+|---|---|---|
+| `rust` | `Cargo.toml` + `Cargo.lock` | `cargo generate-lockfile` if no lockfile is committed |
+| `python` | `requirements.txt`, or `poetry.lock` | nothing — the manifest is parsed, not installed |
+| `node` | the **installed** `node_modules` tree, via `npm ls` | `npm install` (or `npm ci`) first |
+
+The Node arm is the one that needs an install step: `cyclonedx-npm` resolves
+against `node_modules`, not `package-lock.json`, and fails with npm's
+`ELSPROBLEMS` if packages are missing. A sweep over repos that are cloned but
+not installed should record `needs-operator` for those systems rather than treat
+the failure as a finding.
+
 The Rust arm is the one `deps` capture that is not strictly read-only against
 the target tree. `cargo-cyclonedx` has no stdout mode and no output-directory
 flag — it writes a BOM next to every `Cargo.toml` — so the capturer writes under
