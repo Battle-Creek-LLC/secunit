@@ -96,17 +96,19 @@ impl Ecosystem {
 
     /// Files whose presence implies this ecosystem, most specific first.
     ///
-    /// Python lists `pyproject.toml` even though `cyclonedx-py` has no
-    /// subcommand for a bare one. Detection here must agree with
-    /// [`crate::deps::pip_audit`], which accepts it — otherwise a sweep
-    /// over a PEP-621 repo gets a clean `pip-audit` capture and a
-    /// "manifest unsupported" failure from `sbom` for the same tree.
-    /// The dispatch below turns it into an error that names the real
-    /// constraint instead.
+    /// Python includes `pyproject.toml` and `uv.lock` so detection
+    /// agrees with [`crate::deps::pip_audit`]: a sweep must not get a
+    /// clean `pip-audit` capture and a "manifest unsupported" failure
+    /// from `sbom` for the same tree.
     fn markers(self) -> &'static [&'static str] {
         match self {
             Ecosystem::Rust => &["Cargo.toml"],
-            Ecosystem::Python => &["requirements.txt", "poetry.lock", "pyproject.toml"],
+            Ecosystem::Python => &[
+                "requirements.txt",
+                "poetry.lock",
+                "uv.lock",
+                "pyproject.toml",
+            ],
             Ecosystem::Node => &["package.json"],
         }
     }
@@ -196,7 +198,7 @@ pub fn capture_with(
         tool(eco.generator()).expect("every generator is a required tool"),
     )?;
 
-    let raw = match eco {
+    let (raw, describes) = match eco {
         Ecosystem::Rust => run_cargo_cyclonedx(path, runner)?,
         Ecosystem::Python => run_cyclonedx_py(path, runner)?,
         Ecosystem::Node => run_cyclonedx_npm(path, runner)?,
@@ -249,6 +251,7 @@ pub fn capture_with(
             "bom_format": bom.get("bomFormat").and_then(|f| f.as_str()).unwrap_or("CycloneDX"),
             "bom_sha256": bom_sha256,
             "component_count": component_count,
+            "describes": describes,
             "ecosystem": eco.as_str(),
             "generators": generators,
             "spec_version": cyclonedx::spec_version(&bom)?,
@@ -301,37 +304,95 @@ fn all_markers() -> Vec<&'static str> {
 // python
 // -----------------------------------------------------------------------------
 
-/// `cyclonedx-py` dispatches on input format, so the capturer picks the
-/// subcommand from the manifest present rather than letting the tool
-/// fall back to the ambient interpreter's site-packages.
-fn run_cyclonedx_py(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
-    let (subcommand, manifest) = if path.join("poetry.lock").is_file() {
-        ("poetry", ".")
-    } else if path.join("requirements.txt").is_file() {
-        ("requirements", "requirements.txt")
-    } else if path.join("pyproject.toml").is_file() {
-        // Distinguish "secunit doesn't support this" from "the
-        // generator has no path for it". cyclonedx-py 7.x offers
-        // `requirements`, `poetry`, `pipenv`, and `environment` — none
-        // reads a bare PEP-621 `pyproject.toml`, and `environment`
-        // would describe whichever interpreter happens to be active
-        // rather than the project.
-        return Err(anyhow!(
-            "{} has only pyproject.toml, and cyclonedx-py has no subcommand that reads \
-             a bare PEP-621 pyproject (it supports requirements, poetry, and pipenv). \
-             Export a lockfile first — `uv export --format requirements-txt > \
-             requirements.txt`, `pdm export`, or `poetry lock` — then re-run. \
-             `capture deps pip-audit` accepts pyproject.toml directly and is unaffected.",
-            path.display()
-        ));
-    } else {
-        return Err(anyhow!(
-            "no requirements.txt, poetry.lock, or pyproject.toml under {} — cyclonedx-py \
-             needs an explicit manifest; an SBOM of the ambient Python interpreter would \
-             describe something other than the project",
-            path.display()
-        ));
-    };
+/// In-project virtualenv directory names, in the order they are tried.
+///
+/// `.venv` is what `uv`, `pdm`, and `hatch` create by default.
+const VENV_DIRS: &[&str] = &[".venv", "venv"];
+
+/// The `cyclonedx-py` subcommand and target chosen for a project.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PySource {
+    subcommand: &'static str,
+    /// Passed relative to `path` (the runner's cwd) so the recorded
+    /// args stay portable across machines.
+    target: &'static str,
+    /// What the BOM actually describes — recorded in the envelope,
+    /// because "resolved from a lockfile" and "read from an installed
+    /// virtualenv" are different evidentiary claims.
+    describes: &'static str,
+}
+
+/// Pick the `cyclonedx-py` subcommand from what the project provides.
+///
+/// Declared manifests win over an installed virtualenv: they need no
+/// install step and describe what the project *asks* for. A PEP-621
+/// project (uv, pdm, hatch) has no manifest cyclonedx-py can read —
+/// upstream states the manifest and lockfile "are not explicitly
+/// supported" while the virtual environments "are fully supported" — so
+/// its own `.venv` is the supported path.
+///
+/// Pointing at an in-project `.venv` is *not* the ambient-interpreter
+/// hazard [`crate::deps::pip_audit`] refuses: the path is explicit and
+/// belongs to the project, so the BOM describes this tree and not
+/// whichever interpreter happens to be on `$PATH`.
+fn detect_python_source(path: &Path) -> Option<PySource> {
+    if path.join("poetry.lock").is_file() {
+        return Some(PySource {
+            subcommand: "poetry",
+            target: ".",
+            describes: "poetry.lock",
+        });
+    }
+    if path.join("requirements.txt").is_file() {
+        return Some(PySource {
+            subcommand: "requirements",
+            target: "requirements.txt",
+            describes: "requirements.txt",
+        });
+    }
+    if path.join("Pipfile.lock").is_file() {
+        return Some(PySource {
+            subcommand: "pipenv",
+            target: ".",
+            describes: "Pipfile.lock",
+        });
+    }
+    VENV_DIRS
+        .iter()
+        .find(|d| path.join(d).is_dir())
+        .map(|d| PySource {
+            subcommand: "environment",
+            target: d,
+            describes: d,
+        })
+}
+
+fn run_cyclonedx_py(path: &Path, runner: &dyn CmdRunner) -> Result<(String, &'static str)> {
+    let source = detect_python_source(path).ok_or_else(|| {
+        if path.join("pyproject.toml").is_file() || path.join("uv.lock").is_file() {
+            // A PEP-621 project that has not been installed. cyclonedx-py
+            // reads neither pyproject.toml nor uv.lock directly, so say
+            // what to run rather than claiming the tree is unsupported.
+            anyhow!(
+                "{} is a PEP-621 project with no lockfile cyclonedx-py can read and no \
+                 virtualenv to read instead. Create the project's venv — `uv sync`, \
+                 `pdm install`, or `hatch env create` — and re-run; the SBOM is then \
+                 built from `.venv`. Alternatively export a manifest: `uv export \
+                 --format requirements-txt > requirements.txt`.",
+                path.display()
+            )
+        } else {
+            anyhow!(
+                "no requirements.txt, poetry.lock, Pipfile.lock, or in-project virtualenv \
+                 ({}) under {} — cyclonedx-py needs an explicit target; an SBOM of the \
+                 ambient Python interpreter would describe something other than the project",
+                VENV_DIRS.join(" / "),
+                path.display()
+            )
+        }
+    })?;
+
+    let (subcommand, manifest) = (source.subcommand, source.target);
 
     let out = runner.run(
         "cyclonedx-py",
@@ -351,14 +412,14 @@ fn run_cyclonedx_py(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
         path,
     )?;
 
-    require_json_stdout("cyclonedx-py", out)
+    Ok((require_json_stdout("cyclonedx-py", out)?, source.describes))
 }
 
 // -----------------------------------------------------------------------------
 // node
 // -----------------------------------------------------------------------------
 
-fn run_cyclonedx_npm(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
+fn run_cyclonedx_npm(path: &Path, runner: &dyn CmdRunner) -> Result<(String, &'static str)> {
     if !path.join("package.json").is_file() {
         return Err(anyhow!(
             "no package.json under {} — cyclonedx-npm describes an npm project",
@@ -380,7 +441,7 @@ fn run_cyclonedx_npm(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
         path,
     )?;
 
-    require_json_stdout("cyclonedx-npm", out)
+    Ok((require_json_stdout("cyclonedx-npm", out)?, "node_modules"))
 }
 
 // -----------------------------------------------------------------------------
@@ -414,7 +475,7 @@ fn cargo_output_stem() -> String {
     format!("secunit-sbom-{}", std::process::id())
 }
 
-fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
+fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<(String, &'static str)> {
     if !path.join("Cargo.toml").is_file() {
         return Err(anyhow!(
             "no Cargo.toml under {} — cargo-cyclonedx describes a cargo workspace",
@@ -505,7 +566,9 @@ fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
         ));
     };
 
-    std::fs::read_to_string(&chosen).with_context(|| format!("read {}", chosen.display()))
+    let bom =
+        std::fs::read_to_string(&chosen).with_context(|| format!("read {}", chosen.display()))?;
+    Ok((bom, "Cargo.lock"))
 }
 
 /// Every `filename` under `root`, skipping `target/`, `node_modules/`,
@@ -998,6 +1061,103 @@ mod tests {
             !deep.join(&filename).exists(),
             "cleanup must reach depth 5 and beyond"
         );
+    }
+
+    /// A uv / PEP-621 project: no requirements.txt, no poetry.lock, and
+    /// a `.venv` the capturer reads instead.
+    fn uv_runner(stdout: String) -> CannedRunner {
+        let r = CannedRunner::new();
+        r.register(
+            "cyclonedx-py",
+            &[
+                "environment",
+                ".venv",
+                "--spec-version",
+                "1.6",
+                "--output-format",
+                "JSON",
+                "--output-reproducible",
+                "--output-file",
+                "-",
+            ],
+            CmdOutput {
+                stdout,
+                stderr: String::new(),
+                exit_code: 0,
+            },
+        );
+        r
+    }
+
+    fn uv_project_dir() -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("pyproject.toml"), "[project]\nname='x'\n").unwrap();
+        std::fs::write(d.path().join("uv.lock"), "version = 1\n").unwrap();
+        std::fs::create_dir(d.path().join(".venv")).unwrap();
+        d
+    }
+
+    #[test]
+    fn a_uv_project_is_captured_from_its_own_venv() {
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let d = uv_project_dir();
+        let cap = capture_with(
+            d.path(),
+            Some(Ecosystem::Python),
+            &uv_runner(fixture("python-uv.json")),
+        )
+        .unwrap();
+
+        assert_eq!(cap.envelope.result["ecosystem"], "python");
+        assert_eq!(cap.envelope.result["spec_version"], "1.6");
+        assert_eq!(cap.envelope.result["component_count"], 2);
+        assert_eq!(
+            cap.envelope.result["describes"], ".venv",
+            "the envelope must record that this came from an install, not a lockfile"
+        );
+    }
+
+    #[test]
+    fn uv_captures_are_byte_identical_across_runs() {
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let d = uv_project_dir();
+        let a = capture_with(
+            d.path(),
+            Some(Ecosystem::Python),
+            &uv_runner(fixture("python-uv.json")),
+        )
+        .unwrap();
+        let b = capture_with(
+            d.path(),
+            Some(Ecosystem::Python),
+            &uv_runner(fixture("python-uv.json")),
+        )
+        .unwrap();
+        assert_eq!(a.bom_json, b.bom_json);
+    }
+
+    #[test]
+    fn a_declared_manifest_wins_over_an_installed_venv() {
+        // requirements.txt describes what the project asks for and needs
+        // no install step, so it must be preferred even when a venv is
+        // sitting right there.
+        let d = uv_project_dir();
+        std::fs::write(d.path().join("requirements.txt"), "certifi==2023.7.22\n").unwrap();
+        let src = detect_python_source(d.path()).unwrap();
+        assert_eq!(src.subcommand, "requirements");
+        assert_eq!(src.describes, "requirements.txt");
+    }
+
+    #[test]
+    fn a_bare_venv_directory_is_found_under_either_conventional_name() {
+        for name in [".venv", "venv"] {
+            let d = tempfile::tempdir().unwrap();
+            std::fs::write(d.path().join("pyproject.toml"), "[project]\n").unwrap();
+            std::fs::create_dir(d.path().join(name)).unwrap();
+            let src = detect_python_source(d.path()).expect("venv should be found");
+            assert_eq!(src.subcommand, "environment");
+            assert_eq!(src.target, name);
+        }
     }
 
     #[test]

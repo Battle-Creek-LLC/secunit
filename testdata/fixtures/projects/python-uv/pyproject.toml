@@ -1,0 +1,15 @@
+# Standalone PEP-621 / uv fixture used by the `deps sbom` capturer tests.
+# No [tool.poetry] and no requirements.txt — the shape cyclonedx-py cannot
+# read from the manifest alone, only through the project's virtualenv.
+[project]
+name = "sbom-fixture-python-uv"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "certifi==2023.7.22",
+    "idna==3.4",
+]
+
+# Dependency-only fixture: nothing here is built or installed as a package.
+[tool.uv]
+package = false

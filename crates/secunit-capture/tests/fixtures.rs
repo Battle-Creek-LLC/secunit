@@ -206,7 +206,7 @@ mod deps_fixtures {
     /// a generator upgrade emitting a version this build cannot read.
     #[test]
     fn every_sbom_fixture_validates_against_its_declared_spec_version() {
-        for name in ["rust.json", "python.json", "node.json"] {
+        for name in ["rust.json", "python.json", "python-uv.json", "node.json"] {
             let mut bom = read_json(&fixture_root().join("deps/sbom").join(name));
             secunit_capture::cyclonedx::normalize(&mut bom);
             let version = secunit_capture::cyclonedx::spec_version(&bom)

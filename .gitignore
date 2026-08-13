@@ -10,3 +10,4 @@ Cargo.lock.bak
 # Running a generator inside these dirs (to re-record a fixture) creates both.
 testdata/fixtures/projects/node/node_modules/
 testdata/fixtures/projects/rust/target/
+testdata/fixtures/projects/python-uv/.venv/

@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   higher; each artifact is validated against the version it declares, with the
   1.5 and 1.6 schemas vendored so validation works offline.
 
+  Python covers Poetry, pip, Pipenv, **and PEP-621 projects (uv, PDM, hatch)**.
+  `cyclonedx-py` reads no bare `pyproject.toml` or `uv.lock`, but reads a
+  virtualenv fully, so a PEP-621 project is captured from its own `.venv` once
+  `uv sync` (or `pdm install` / `hatch env create`) has run. A declared manifest
+  wins over an installed venv, and `result.describes` records which was used —
+  resolved-from-a-lockfile and read-from-an-install are different evidentiary
+  claims.
+
   Two captures of an unchanged tree are byte-identical: CycloneDX's
   `serialNumber` and `metadata.timestamp` regenerate every run and are stripped,
   and components and dependencies are sorted by `purl`.

@@ -150,9 +150,40 @@ unreadable to every CycloneDX consumer; the envelope sits beside it and pins its
 hash instead.
 
 `--ecosystem` is inferred from the manifests present (`Cargo.toml`,
-`requirements.txt` / `poetry.lock`, `package.json`) and is **required** when a
-tree carries more than one — capturing the wrong ecosystem's SBOM is worse than
-capturing none.
+`requirements.txt` / `poetry.lock` / `uv.lock` / `pyproject.toml`,
+`package.json`) and is **required** when a tree carries more than one —
+capturing the wrong ecosystem's SBOM is worse than capturing none.
+
+### Which Python projects are supported
+
+`cyclonedx-py` dispatches on input format, so the capturer picks its subcommand
+from what the project provides, in this order:
+
+| Project provides | Subcommand | `result.describes` |
+|---|---|---|
+| `poetry.lock` | `poetry` | `poetry.lock` |
+| `requirements.txt` | `requirements` | `requirements.txt` |
+| `Pipfile.lock` | `pipenv` | `Pipfile.lock` |
+| `.venv/` or `venv/` | `environment` | `.venv` |
+
+**uv, PDM, and hatch projects are supported through their virtualenv.**
+Upstream does not read `pyproject.toml` or `uv.lock` directly — the manifest and
+lockfile "are not explicitly supported" while the virtual environments "are
+fully supported" — so a PEP-621 project is captured from its own `.venv`. Run
+`uv sync` (or `pdm install`, `hatch env create`) once, and the capture works
+from then on.
+
+A declared manifest wins over an installed venv: it describes what the project
+*asks for* and needs no install step. `result.describes` records which was used,
+because resolved-from-a-lockfile and read-from-an-install are different
+evidentiary claims — the second includes whatever is actually installed, the
+first only what is declared.
+
+Pointing at an in-project `.venv` is not the ambient-interpreter hazard
+`capture deps pip-audit` refuses: the path is explicit and belongs to the
+project, so the BOM describes that tree rather than whichever interpreter
+happens to be on `$PATH`. A PEP-621 project with no venv and no lockfile fails
+with the command to run rather than a "manifest unsupported" error.
 
 Spec version follows what each generator supports, and the artifact is validated
 against whatever version it declares:
@@ -173,8 +204,8 @@ state:
 | Ecosystem | Reads | Prepare the checkout with |
 |---|---|---|
 | `rust` | `Cargo.toml` + `Cargo.lock` | `cargo generate-lockfile` if no lockfile is committed |
-| `python` | `requirements.txt`, or `poetry.lock` | nothing — the manifest is parsed, not installed |
-| `python` (PEP-621 only) | — | `cyclonedx-py` reads no bare `pyproject.toml`; export a lockfile first (`uv export --format requirements-txt`, `pdm export`, `poetry lock`) |
+| `python` | `requirements.txt`, `poetry.lock`, or `Pipfile.lock` | nothing — the manifest is parsed, not installed |
+| `python` (uv / PDM / hatch) | the project's own `.venv` or `venv` | `uv sync`, `pdm install`, or `hatch env create` |
 | `node` | the **installed** `node_modules` tree, via `npm ls` | `npm install` (or `npm ci`) first |
 
 The Node arm is the one that needs an install step: `cyclonedx-npm` resolves
