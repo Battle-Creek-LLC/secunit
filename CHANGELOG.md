@@ -48,6 +48,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that is deleted afterwards, including on the error path. It refuses to run
   rather than overwrite a file already at that name.
 
+- `secunit capture deps sbom --path <DIR> --discover --out-dir <DIR>` discovers
+  the subprojects of a repo that has no manifest at its root — `api/` python,
+  `client/` node — and captures each one. Previously such a repo produced no
+  SBOM at all, and the operator had to know the layout, run one capture per
+  project, and name every output by hand.
+
+  It writes one artifact per project (`<out-dir>/<relative path>.cdx.json` plus
+  its `.envelope.json` sidecar) and an index at `<out-dir>/index.json` listing
+  each project's path, ecosystem, status, and its BOM's sha256, so a control has
+  one file to diff instead of N artifacts to enumerate. There is no merged BOM:
+  a CycloneDX document carries a single `metadata.component`, so folding a
+  Python and a Node dependency graph into one would invent a deployable that
+  does not exist.
+
+  Descent stops at each project root, so an npm workspace root is captured
+  **once** — `cyclonedx-npm` already aggregates every member into the root's BOM
+  — rather than once per member. `node_modules/`, `target/`, `venv/`, every
+  dot-directory (`.claude/worktrees/` above all, since those are git worktrees
+  of the same repo), and symlinked directories are never entered.
+
+  A project whose generator is missing, or whose `node_modules` was never
+  installed, is recorded as `needs-operator` in the index with the command that
+  re-runs it, and the rest of the repo is still captured — the same treatment
+  `capture-sweep` gives a system it could not reach. `--discover` is mutually
+  exclusive with `--out` and with `--ecosystem`, which discovery infers per
+  project.
+
 - `secunit doctor` now reports which external `deps` binaries resolve on `PATH`,
   and `secunit capture deps --help` prints the same table with each tool's
   install command.

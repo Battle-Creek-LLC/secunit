@@ -111,6 +111,7 @@ secunit capture deps pnpm-audit  --path <DIR> --out <PATH>
 secunit capture deps cargo-audit --path <CARGO_LOCK> [--db-path <ADVISORY_DB>] --out <PATH>
 secunit capture deps osv-query   --ecosystem <NAME> --package <NAME> --version <STR> --out <PATH>
 secunit capture deps sbom        --path <DIR> [--ecosystem <rust|python|node>] --out <PATH>
+secunit capture deps sbom        --path <DIR> --discover --out-dir <DIR>
 
 secunit capture http get <URL> [--header <K=V>...] [--auth-from-env <VAR>] --out <PATH>
 secunit capture snapshot file <SRC> --out <PATH>
@@ -232,6 +233,68 @@ it produced a parseable BOM. `cyclonedx-npm` against a partially-installed
 `node_modules` emits a schema-valid document that is missing a subtree;
 recording it would understate `component_count` and make the next sweep diff it
 as "dependencies removed".
+
+### Repos with no manifest at the root (`--discover`)
+
+`--path` reads only the directory it is given. A repo whose projects live one or
+more levels down — `api/` python, `client/` node, nothing at the root — produces
+no SBOM at all, and the operator has to know the layout, run one capture per
+project, and name each output by hand.
+
+```
+secunit capture deps sbom --path . --discover --out-dir evidence/sbom
+```
+
+walks the tree and writes **one artifact per project** — `<out-dir>/<relative
+path>.cdx.json` plus its `.envelope.json` sidecar — with an index at
+`<out-dir>/index.json` listing every project's path, ecosystem, status, and its
+BOM's sha256, so a control diffs one file instead of enumerating N.
+
+`--discover` and `--out` are mutually exclusive, as are `--discover` and
+`--ecosystem`: discovery infers the ecosystem per project.
+
+There is no merged BOM, and there will not be one. A CycloneDX document carries
+a single `metadata.component`, so folding a Python and a Node dependency graph
+into one would invent a deployable that does not exist. One BOM per deployable
+is also the model `inventory.yaml` and the `capture-sweep` skill already assume.
+
+**Descent stops at each project root.** An npm workspace root is captured
+*once*: `cyclonedx-npm` already aggregates every member and their transitive
+deps into the root's BOM, so walking on into `packages/*` would emit the same
+components again under a second artifact. The same holds for a cargo workspace
+with a root `[package]`.
+
+**What the walk never enters:**
+
+| Skipped | Why |
+|---|---|
+| `node_modules/`, `venv/` | installed trees — every vendored package has its own manifest |
+| `target/` | cargo's build directory, which vendors manifests the same way |
+| any dot-directory | `.claude/worktrees/` holds git worktrees of the same repo, whose projects would be captured a second time under a different path; `.venv` and `.tox` fall out of the same rule |
+| symlinked directories | a link back into the tree would loop the walk; a link out of it would capture something the repo does not own |
+
+The root itself is exempt from the dot rule — a checkout under `~/.local/src` or
+a temp dir must still be walkable.
+
+A directory carrying manifests for more than one toolchain becomes one project
+per ecosystem, and only then does the artifact name carry the ecosystem
+(`service.node.cdx.json`, `service.python.cdx.json`) — two BOMs of one directory
+cannot share a filename. A project at the discovery root is written as
+`sbom.cdx.json`.
+
+**One project's failure costs only that project.** A missing generator or a
+`node_modules` that was never installed is recorded in the index as
+`needs-operator`, with the generator's error and the exact `secunit capture deps
+sbom …` command that captures it once the operator has acted — the same
+treatment `capture-sweep` gives a system it could not capture. The run exits 0
+as long as the index was written: a repo where one subproject is uninstalled
+still yields real evidence for the rest, and the index already says what is
+missing. Discovery fails (exit 2) only when the tree holds no supported manifest
+at all.
+
+Two runs over an unchanged tree are byte-identical, index included: projects are
+sorted by path, and relative paths are recorded `/`-separated so the index does
+not depend on which OS captured it.
 
 ## Audit
 
