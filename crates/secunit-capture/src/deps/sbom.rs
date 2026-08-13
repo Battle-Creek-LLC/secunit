@@ -100,7 +100,10 @@ impl Ecosystem {
     /// agrees with [`crate::deps::pip_audit`]: a sweep must not get a
     /// clean `pip-audit` capture and a "manifest unsupported" failure
     /// from `sbom` for the same tree.
-    fn markers(self) -> &'static [&'static str] {
+    ///
+    /// Visible to [`crate::deps::sbom_discovery`], which walks for the
+    /// same markers — a second list there would drift.
+    pub(super) fn markers(self) -> &'static [&'static str] {
         match self {
             Ecosystem::Rust => &["Cargo.toml"],
             Ecosystem::Python => &[
@@ -293,7 +296,7 @@ pub fn detect_ecosystem(path: &Path) -> Result<Ecosystem> {
     }
 }
 
-fn all_markers() -> Vec<&'static str> {
+pub(super) fn all_markers() -> Vec<&'static str> {
     Ecosystem::ALL
         .iter()
         .flat_map(|e| e.markers().iter().copied())

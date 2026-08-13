@@ -16,6 +16,7 @@ pub mod osv_query;
 pub mod pip_audit;
 pub mod pnpm_audit;
 pub mod sbom;
+pub mod sbom_discovery;
 
 /// Shorten `s` to at most `n` bytes for quoting in an error message.
 ///

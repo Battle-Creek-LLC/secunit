@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Battle-Creek-LLC/secunit/schemas/capture-deps-sbom-discovery.schema.json",
+  "title": "CaptureDepsSbomDiscovery",
+  "description": "Index for a `capture deps sbom --discover` run. One entry per project found under --path, each naming its artifact and pinning that artifact's sha256, so a control diffs one file instead of enumerating N. A project the generator could not describe is recorded as needs-operator with the command that re-runs it, rather than failing the whole walk.",
+  "type": "object",
+  "required": [
+    "capturer",
+    "version",
+    "captured_at",
+    "args",
+    "result"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "capturer": {
+      "const": "deps.sbom-discovery"
+    },
+    "version": {
+      "type": "string"
+    },
+    "captured_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "args": {
+      "type": "object",
+      "required": [
+        "path",
+        "out_dir"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Root the walk started from."
+        },
+        "out_dir": {
+          "type": "string",
+          "description": "Directory the artifacts and this index were written to."
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": [
+        "captured_count",
+        "needs_operator_count",
+        "project_count",
+        "projects"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "captured_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "needs_operator_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "project_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "projects": {
+          "type": "array",
+          "description": "Every discovered project, sorted by path then ecosystem so the index is byte-stable across runs and machines.",
+          "items": {
+            "type": "object",
+            "required": [
+              "bom_file",
+              "ecosystem",
+              "path",
+              "status"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Project directory relative to the discovery root, `/`-separated; `.` for the root itself."
+              },
+              "ecosystem": {
+                "enum": [
+                  "rust",
+                  "python",
+                  "node"
+                ]
+              },
+              "bom_file": {
+                "type": "string",
+                "description": "This project's BOM, relative to the out-dir. Carries the ecosystem in its name only when one directory yielded more than one BOM."
+              },
+              "status": {
+                "enum": [
+                  "captured",
+                  "needs-operator"
+                ]
+              },
+              "bom_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "SHA-256 of the BOM file's bytes as written, copied from its sidecar envelope so the two cannot disagree."
+              },
+              "component_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "spec_version": {
+                "enum": [
+                  "1.5",
+                  "1.6"
+                ]
+              },
+              "error": {
+                "type": "string",
+                "description": "Why this project could not be captured, including the generator's own remediation."
+              },
+              "remediation": {
+                "type": "string",
+                "description": "The exact `secunit capture deps sbom` command that captures this one project once the operator has acted."
+              }
+            },
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "captured"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "bom_sha256",
+                "component_count",
+                "spec_version"
+              ]
+            },
+            "else": {
+              "required": [
+                "error",
+                "remediation"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

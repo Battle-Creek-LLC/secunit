@@ -81,21 +81,41 @@ pub enum DepsCmd {
     /// at `<out>.envelope.json` recording the generator, its version,
     /// and the BOM's sha256.
     ///
+    /// With `--discover`, walks `--path` for subprojects instead and
+    /// writes one such pair per project under `--out-dir`, plus an
+    /// index at `<out-dir>/index.json`.
+    ///
     /// Requires the CycloneDX generator for the ecosystem:
     /// `cargo-cyclonedx` (rust), `cyclonedx-py` (python), or
     /// `cyclonedx-npm` (node).
     Sbom {
         /// Project root — the directory holding `Cargo.toml`,
-        /// `requirements.txt`, or `package.json`.
+        /// `requirements.txt`, or `package.json`. With `--discover`,
+        /// the tree to walk for such directories.
         #[arg(long)]
         path: PathBuf,
         /// rust | python | node. Inferred from the manifests present
         /// when omitted; required when a tree carries more than one.
-        #[arg(long)]
+        /// Not accepted with `--discover`, which infers per project.
+        #[arg(long, conflicts_with = "discover")]
         ecosystem: Option<String>,
         /// Path for the bare CycloneDX BOM.
-        #[arg(long)]
-        out: PathBuf,
+        #[arg(
+            long,
+            required_unless_present = "discover",
+            conflicts_with = "discover"
+        )]
+        out: Option<PathBuf>,
+        /// Walk `--path` for subprojects and capture each one.
+        ///
+        /// For a repo with no manifest at its root. Descent stops at
+        /// each project root, so a workspace is captured once rather
+        /// than once per member.
+        #[arg(long, requires = "out_dir")]
+        discover: bool,
+        /// Directory for the discovered artifacts and their index.
+        #[arg(long, requires = "discover", conflicts_with = "out")]
+        out_dir: Option<PathBuf>,
     },
 }
 
@@ -192,15 +212,24 @@ pub fn run(cmd: CaptureCmd) -> Result<ExitCode> {
 
 #[cfg(feature = "deps")]
 fn deps(cmd: DepsCmd) -> Result<ExitCode> {
-    // The SBOM action writes two files rather than one envelope, so it
-    // returns before the shared `write_envelope` tail.
+    // The SBOM action writes two files rather than one envelope — and
+    // 2N+1 under --discover — so it returns before the shared
+    // `write_envelope` tail.
     if let DepsCmd::Sbom {
         path,
         ecosystem,
         out,
+        discover,
+        out_dir,
     } = cmd
     {
-        return sbom(&path, ecosystem.as_deref(), &out);
+        return if discover {
+            let out_dir = out_dir.expect("clap: --discover requires --out-dir");
+            sbom_discover(&path, &out_dir)
+        } else {
+            let out = out.expect("clap: --out is required without --discover");
+            sbom(&path, ecosystem.as_deref(), &out)
+        };
     }
 
     let env = match cmd {
@@ -292,6 +321,61 @@ fn sbom(
         capture.envelope.result["spec_version"]
             .as_str()
             .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Discover every project under `path` and capture each: a BOM plus its
+/// sidecar per project, and one index at `<out_dir>/index.json`.
+///
+/// Exits 0 whenever the index was written, even if some projects are
+/// `needs-operator`. A repo where one subproject was never `npm
+/// install`ed still yields real evidence for the others, and the index
+/// records what is missing — failing the run would throw that away and
+/// tell an operator nothing the index does not already say.
+#[cfg(feature = "deps")]
+fn sbom_discover(path: &std::path::Path, out_dir: &std::path::Path) -> Result<ExitCode> {
+    use secunit_capture::deps::sbom_discovery::{self, Outcome};
+
+    let run = sbom_discovery::capture_tree(path, out_dir).map_err(map_runtime)?;
+
+    // Validate everything before anything lands, so a schema failure
+    // leaves no half-populated out-dir.
+    validate_envelope(&run.index)?;
+    for p in &run.projects {
+        if let Outcome::Captured(cap) = &p.outcome {
+            validate_envelope(&cap.envelope)?;
+        }
+    }
+
+    for p in &run.projects {
+        match &p.outcome {
+            Outcome::Captured(cap) => {
+                let bom_path = out_dir.join(&p.bom_file);
+                cap.write_bom(&bom_path)
+                    .with_context(|| format!("write BOM to {}", bom_path.display()))?;
+                write_envelope(&cap.envelope, &sidecar_path(&bom_path))?;
+            }
+            Outcome::NeedsOperator { error, remediation } => {
+                eprintln!(
+                    "! {} ({}): needs-operator — {error}\n  re-run: {remediation}",
+                    p.rel_path,
+                    p.ecosystem.as_str()
+                );
+            }
+        }
+    }
+
+    // The index goes last: it pins every artifact's sha256, so writing
+    // it first would leave a manifest of files that do not exist yet.
+    write_envelope(&run.index, &out_dir.join(sbom_discovery::INDEX_FILENAME))?;
+
+    eprintln!(
+        "✓ discovered {} project(s) under {}: {} captured, {} needs-operator",
+        run.projects.len(),
+        path.display(),
+        run.captured_count(),
+        run.needs_operator_count()
     );
     Ok(ExitCode::SUCCESS)
 }
