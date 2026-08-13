@@ -1,0 +1,12 @@
+[package]
+name = "sbom-fixture-app-b"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# A path dependency on a sibling member: the shape that makes lib-a's root
+# component appear in app-b's BOM too.
+sbom-fixture-lib-a = { path = "../lib-a" }
+itoa = "1.0.11"
+ryu = "1.0.18"

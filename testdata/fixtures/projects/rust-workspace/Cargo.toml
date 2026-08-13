@@ -1,0 +1,7 @@
+# Virtual-manifest workspace fixture for the `deps sbom` capturer tests:
+# `[workspace]` with no `[package]`, so cargo-cyclonedx writes one BOM per
+# member and none at the root. Its own workspace root, so a repo-level
+# `cargo build` never tries to compile it.
+[workspace]
+resolver = "2"
+members = ["crates/lib-a", "crates/app-b"]

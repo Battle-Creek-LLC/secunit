@@ -48,6 +48,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that is deleted afterwards, including on the error path. It refuses to run
   rather than overwrite a file already at that name.
 
+  **Virtual-manifest cargo workspaces get one merged BOM** (#71).
+  `cargo-cyclonedx` writes a BOM beside every member manifest and has no
+  whole-workspace mode, so a root that is `[workspace]` with no `[package]` —
+  secunit's own shape — gets none of its own. Rather than fail, or emit N
+  artifacts no control knows how to aggregate, the members are merged into a
+  single document: a synthesized root component named after the workspace
+  directory, each member's root component beneath it, the union of their
+  components deduplicated by `purl`, and their `dependencies` merged by `ref`.
+
+  That document is assembled by secunit rather than produced by a generator, so
+  it identifies itself as such: `secunit` joins `cargo-cyclonedx` in
+  `metadata.tools` and so in the envelope's `generators`, `metadata.properties`
+  carries a `secunit:sbom:merged-from` entry per member manifest, and
+  `result.describes` reads `Cargo.lock (N workspace member BOMs merged by
+  secunit)`. A workspace with a root package is unaffected — its root BOM is
+  still used exactly as the generator wrote it.
+
 - `secunit doctor` now reports which external `deps` binaries resolve on `PATH`,
   and `secunit capture deps --help` prints the same table with each tool's
   install command.
