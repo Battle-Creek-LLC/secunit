@@ -190,9 +190,9 @@ pub mod testing {
     pub struct CannedRunner {
         responses: Mutex<HashMap<String, CmdOutput>>,
         missing: Mutex<HashSet<String>>,
-        /// `key -> (filename, contents)` written into the runner's cwd
-        /// when that command runs.
-        side_effects: Mutex<HashMap<String, (String, String)>>,
+        /// `key -> [(path, contents)]` written relative to the runner's
+        /// cwd when that command runs.
+        side_effects: Mutex<HashMap<String, Vec<(String, String)>>>,
     }
 
     impl Default for CannedRunner {
@@ -225,11 +225,22 @@ pub mod testing {
             filename: &str,
             contents: &str,
         ) {
+            self.register_writing_many(program, args, &[(filename, contents)]);
+        }
+
+        /// Same, for the workspace case: one invocation drops a BOM
+        /// beside *every* member manifest. Paths are relative to the
+        /// runner's cwd and their parent directories must already exist,
+        /// as a member's directory does.
+        pub fn register_writing_many(&self, program: &str, args: &[&str], files: &[(&str, &str)]) {
             let key = format!("{program} {}", args.join(" "));
-            self.side_effects
-                .lock()
-                .unwrap()
-                .insert(key.clone(), (filename.to_string(), contents.to_string()));
+            self.side_effects.lock().unwrap().insert(
+                key.clone(),
+                files
+                    .iter()
+                    .map(|(p, c)| (p.to_string(), c.to_string()))
+                    .collect(),
+            );
             self.responses.lock().unwrap().insert(
                 key,
                 CmdOutput {
@@ -260,9 +271,11 @@ pub mod testing {
     impl CmdRunner for CannedRunner {
         fn run(&self, program: &str, args: &[&str], cwd: &Path) -> Result<CmdOutput> {
             let key = format!("{program} {}", args.join(" "));
-            if let Some((filename, contents)) = self.side_effects.lock().unwrap().get(&key) {
-                std::fs::write(cwd.join(filename), contents)
-                    .with_context(|| format!("CannedRunner: write {filename} into cwd"))?;
+            if let Some(files) = self.side_effects.lock().unwrap().get(&key) {
+                for (path, contents) in files {
+                    std::fs::write(cwd.join(path), contents)
+                        .with_context(|| format!("CannedRunner: write {path} into cwd"))?;
+                }
             }
             self.responses
                 .lock()

@@ -28,6 +28,15 @@
 //! is not strictly read-only against the target tree; a crash between
 //! write and cleanup leaves a `secunit-sbom-<pid>.json` behind.
 //!
+//! ## Virtual-manifest workspaces are merged, and say so
+//!
+//! A cargo workspace whose root is `[workspace]` with no `[package]`
+//! gets no root BOM, because there is no root package to write one
+//! beside. [`merge_member_boms`] assembles the members into a single
+//! document instead — see its docs for what is carried through and what
+//! is synthesized. The result is the one place secunit produces BOM
+//! content of its own, so it names itself in `metadata.tools`.
+//!
 //! ## Output
 //!
 //! [`capture_with`] returns the bare, schema-valid BOM *and* a
@@ -36,6 +45,7 @@
 //! envelope to `<out>.envelope.json` carrying the generator provenance
 //! and the BOM's sha256.
 
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -367,7 +377,7 @@ fn detect_python_source(path: &Path) -> Option<PySource> {
         })
 }
 
-fn run_cyclonedx_py(path: &Path, runner: &dyn CmdRunner) -> Result<(String, &'static str)> {
+fn run_cyclonedx_py(path: &Path, runner: &dyn CmdRunner) -> Result<(String, String)> {
     let source = detect_python_source(path).ok_or_else(|| {
         if path.join("pyproject.toml").is_file() || path.join("uv.lock").is_file() {
             // A PEP-621 project that has not been installed. cyclonedx-py
@@ -412,14 +422,17 @@ fn run_cyclonedx_py(path: &Path, runner: &dyn CmdRunner) -> Result<(String, &'st
         path,
     )?;
 
-    Ok((require_json_stdout("cyclonedx-py", out)?, source.describes))
+    Ok((
+        require_json_stdout("cyclonedx-py", out)?,
+        source.describes.to_string(),
+    ))
 }
 
 // -----------------------------------------------------------------------------
 // node
 // -----------------------------------------------------------------------------
 
-fn run_cyclonedx_npm(path: &Path, runner: &dyn CmdRunner) -> Result<(String, &'static str)> {
+fn run_cyclonedx_npm(path: &Path, runner: &dyn CmdRunner) -> Result<(String, String)> {
     if !path.join("package.json").is_file() {
         return Err(anyhow!(
             "no package.json under {} — cyclonedx-npm describes an npm project",
@@ -441,7 +454,10 @@ fn run_cyclonedx_npm(path: &Path, runner: &dyn CmdRunner) -> Result<(String, &'s
         path,
     )?;
 
-    Ok((require_json_stdout("cyclonedx-npm", out)?, "node_modules"))
+    Ok((
+        require_json_stdout("cyclonedx-npm", out)?,
+        "node_modules".to_string(),
+    ))
 }
 
 // -----------------------------------------------------------------------------
@@ -475,7 +491,7 @@ fn cargo_output_stem() -> String {
     format!("secunit-sbom-{}", std::process::id())
 }
 
-fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<(String, &'static str)> {
+fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<(String, String)> {
     if !path.join("Cargo.toml").is_file() {
         return Err(anyhow!(
             "no Cargo.toml under {} — cargo-cyclonedx describes a cargo workspace",
@@ -544,31 +560,313 @@ fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<(String, &
         ));
     }
 
-    // A workspace yields one BOM per member. Prefer the root's; merging
-    // several BOMs would invent a document no generator produced.
+    // A workspace yields one BOM per member. The root package's is the
+    // whole workspace already, so it is used verbatim — generator output
+    // is preferred to anything assembled whenever it exists.
     let root = path.join(&filename);
-    let chosen = if root.is_file() {
-        root
-    } else if emitted.len() == 1 {
-        emitted[0].clone()
-    } else {
-        return Err(anyhow!(
-            "cargo-cyclonedx wrote {} BOMs for the workspace at {} and none at its \
-             root ({}) — the root manifest is virtual (`[workspace]` with no \
-             `[package]`); point --path at a single workspace member",
-            emitted.len(),
-            path.display(),
-            emitted
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-    };
+    if root.is_file() {
+        let bom =
+            std::fs::read_to_string(&root).with_context(|| format!("read {}", root.display()))?;
+        return Ok((bom, "Cargo.lock".to_string()));
+    }
 
-    let bom =
-        std::fs::read_to_string(&chosen).with_context(|| format!("read {}", chosen.display()))?;
-    Ok((bom, "Cargo.lock"))
+    // No root BOM means a virtual manifest. Merging is keyed on that
+    // absence rather than on `emitted.len() > 1`, so a one-member
+    // workspace produces the same shape of artifact as a four-member
+    // one and adding a second member does not silently change what the
+    // BOM describes.
+    let merged = merge_member_boms(path, &emitted)?;
+    let describes = format!(
+        "Cargo.lock ({} workspace member BOMs merged by secunit)",
+        emitted.len()
+    );
+    let bom = serde_json::to_string(&merged).context("serialize the merged workspace BOM")?;
+    Ok((bom, describes))
+}
+
+/// Property recording one member manifest that went into a merged
+/// workspace BOM, one entry per member.
+const MERGED_FROM_PROPERTY: &str = "secunit:sbom:merged-from";
+
+/// Merge a virtual-manifest workspace's per-member BOMs into one
+/// document under a synthesized root component.
+///
+/// `cargo-cyclonedx` writes a BOM beside every member manifest and has
+/// no whole-workspace mode, so a root that is `[workspace]` with no
+/// `[package]` gets none of its own. Refusing there leaves the commonest
+/// shape of Rust monorepo — secunit's own — with no SBOM at all, and N
+/// per-member documents are not the one-artifact-per-system shape every
+/// other capture holds.
+///
+/// What is carried through verbatim: each member's root component (as a
+/// subcomponent of the synthesized root), the union of their components
+/// deduplicated by `purl`, and the union of their `dependencies` merged
+/// by `ref`. What is synthesized: the root component, named after the
+/// workspace directory because a virtual manifest carries no package
+/// name to take one from, and its `dependsOn` edge to each member.
+///
+/// The result is assembled rather than recorded, so it says so twice:
+/// secunit joins `cargo-cyclonedx` in `metadata.tools` — which carries
+/// it into the envelope's `generators` too — and `metadata.properties`
+/// names every member manifest that went in. An assessor holding the
+/// document can tell it from raw generator output without diffing it
+/// against a fresh run.
+fn merge_member_boms(root: &Path, members: &[PathBuf]) -> Result<Value> {
+    let mut docs = Vec::with_capacity(members.len());
+    for member in members {
+        let raw = std::fs::read_to_string(member)
+            .with_context(|| format!("read {}", member.display()))?;
+        let doc: Value = serde_json::from_str(&raw).with_context(|| {
+            format!(
+                "parse cargo-cyclonedx output {} as JSON: {}",
+                member.display(),
+                truncate(&raw, 200)
+            )
+        })?;
+        docs.push(doc);
+    }
+    let first = docs
+        .first()
+        .ok_or_else(|| anyhow!("no member BOMs to merge under {}", root.display()))?;
+
+    let mut member_roots = Vec::with_capacity(docs.len());
+    for (member, doc) in members.iter().zip(&docs) {
+        let component = doc.pointer("/metadata/component").ok_or_else(|| {
+            anyhow!(
+                "{} declares no metadata.component, so the workspace member it \
+                 describes cannot be identified",
+                member.display()
+            )
+        })?;
+        member_roots.push(component.clone());
+    }
+    let member_refs: HashSet<String> = member_roots
+        .iter()
+        .filter_map(|c| Some(c.get("bom-ref")?.as_str()?.to_string()))
+        .collect();
+
+    let mut components: Vec<Value> = Vec::new();
+    let mut by_identity: HashMap<String, usize> = HashMap::new();
+    let mut seen_refs: HashSet<String> = HashSet::new();
+    for doc in &docs {
+        for component in array_at(doc, "components") {
+            let bom_ref = component
+                .get("bom-ref")
+                .and_then(|r| r.as_str())
+                .unwrap_or_default();
+
+            // A member's root component hangs under the synthesized root,
+            // so the copy its dependent members carry must not also
+            // appear at the top level: one `bom-ref`, one component, or
+            // the document contradicts itself about what that ref names.
+            if member_refs.contains(bom_ref) {
+                continue;
+            }
+
+            let identity = component_identity(component);
+            if let Some(&existing) = by_identity.get(&identity) {
+                // Cargo resolves features per member, so the same crate
+                // can arrive `excluded` from one and `required` from
+                // another. The strongest scope wins: a merged BOM that
+                // called a required dependency excluded would hide it
+                // from every consumer that filters on scope.
+                if scope_rank(component) < scope_rank(&components[existing]) {
+                    components[existing] = component.clone();
+                }
+                continue;
+            }
+
+            // Two purls can share a `bom-ref`: cargo-cyclonedx writes a
+            // path dependency's `download_url` relative to whichever
+            // member names it, so the same crate reached from two depths
+            // differs by purl alone. Keeping both would duplicate the ref
+            // that every `dependencies` entry resolves through.
+            if !bom_ref.is_empty() && !seen_refs.insert(bom_ref.to_string()) {
+                continue;
+            }
+            by_identity.insert(identity, components.len());
+            components.push(component.clone());
+        }
+    }
+
+    let mut edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for doc in &docs {
+        for dependency in array_at(doc, "dependencies") {
+            let Some(dep_ref) = dependency.get("ref").and_then(|r| r.as_str()) else {
+                continue;
+            };
+            let depends_on = edges.entry(dep_ref.to_string()).or_default();
+            for on in dependency
+                .get("dependsOn")
+                .and_then(|o| o.as_array())
+                .map(|a| a.as_slice())
+                .unwrap_or_default()
+            {
+                if let Some(on) = on.as_str() {
+                    depends_on.insert(on.to_string());
+                }
+            }
+        }
+    }
+
+    let name = workspace_name(root)?;
+    let workspace_ref = format!("secunit:workspace:{name}");
+    edges
+        .entry(workspace_ref.clone())
+        .or_default()
+        .extend(member_refs);
+
+    let dependencies: Vec<Value> = edges
+        .into_iter()
+        .map(|(dep_ref, depends_on)| {
+            let mut entry = json!({ "ref": dep_ref });
+            // Omitted rather than emitted empty, matching how the
+            // generator writes a leaf.
+            if !depends_on.is_empty() {
+                entry["dependsOn"] =
+                    Value::Array(depends_on.into_iter().map(Value::String).collect());
+            }
+            entry
+        })
+        .collect();
+
+    let mut tools = union_of(&docs, "/metadata/tools");
+    tools.push(json!({
+        "vendor": "Battle Creek LLC",
+        "name": "secunit",
+        "version": env!("CARGO_PKG_VERSION"),
+    }));
+
+    let mut properties = union_of(&docs, "/metadata/properties");
+    properties.extend(members.iter().map(|member| {
+        json!({ "name": MERGED_FROM_PROPERTY, "value": member_manifest_label(root, member) })
+    }));
+
+    let mut merged = serde_json::Map::new();
+    // Taken from a member rather than hardcoded: whatever the generator
+    // declared is what the merged document is validated against.
+    for key in ["bomFormat", "specVersion"] {
+        if let Some(value) = first.get(key) {
+            merged.insert(key.to_string(), value.clone());
+        }
+    }
+    merged.insert("version".to_string(), json!(1));
+    merged.insert(
+        "metadata".to_string(),
+        json!({
+            "tools": tools,
+            "component": {
+                "type": "application",
+                "bom-ref": workspace_ref,
+                "name": name,
+                "components": member_roots,
+            },
+            "properties": properties,
+        }),
+    );
+    merged.insert("components".to_string(), Value::Array(components));
+    merged.insert("dependencies".to_string(), Value::Array(dependencies));
+    Ok(Value::Object(merged))
+}
+
+fn array_at<'a>(doc: &'a Value, key: &str) -> &'a [Value] {
+    doc.get(key)
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or_default()
+}
+
+/// The distinct entries of `pointer`'s array across every member, in
+/// first-seen order.
+///
+/// Members of one workspace come from a single generator invocation, so
+/// in practice these agree; taking the union rather than the first
+/// member's copy means a member that carries something extra does not
+/// lose it.
+fn union_of(docs: &[Value], pointer: &str) -> Vec<Value> {
+    let mut out: Vec<Value> = Vec::new();
+    for doc in docs {
+        for entry in doc
+            .pointer(pointer)
+            .and_then(|v| v.as_array())
+            .map(|a| a.as_slice())
+            .unwrap_or_default()
+        {
+            if !out.contains(entry) {
+                out.push(entry.clone());
+            }
+        }
+    }
+    out
+}
+
+/// Dedup key for the merged component union. `purl` is the identity two
+/// members agree on; `bom-ref` is the fallback for components carrying
+/// none.
+fn component_identity(component: &Value) -> String {
+    for field in ["purl", "bom-ref"] {
+        if let Some(value) = component.get(field).and_then(|v| v.as_str()) {
+            return format!("{field}={value}");
+        }
+    }
+    format!(
+        "name={}@{}",
+        component.get("name").and_then(|n| n.as_str()).unwrap_or(""),
+        component
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+    )
+}
+
+/// Strength ordering for `scope`, strongest first. CycloneDX defaults an
+/// absent `scope` to `required`, so a missing field is not weaker than a
+/// present one; an unrecognized value ranks last so a known scope always
+/// wins over it.
+fn scope_rank(component: &Value) -> u8 {
+    match component.get("scope").and_then(|s| s.as_str()) {
+        None | Some("required") => 0,
+        Some("optional") => 1,
+        Some("excluded") => 2,
+        Some(_) => 3,
+    }
+}
+
+/// The workspace root's directory name, which is what the synthesized
+/// component is named after.
+///
+/// Canonicalized so `--path .` names the directory rather than a dot.
+fn workspace_name(root: &Path) -> Result<String> {
+    let absolute =
+        std::fs::canonicalize(root).with_context(|| format!("resolve {}", root.display()))?;
+    absolute
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .ok_or_else(|| {
+            anyhow!(
+                "cannot name the workspace at {}: it resolves to a filesystem root, \
+                 which has no directory name to synthesize a component from",
+                root.display()
+            )
+        })
+}
+
+/// The manifest `member_bom` sits beside, relative to the workspace root
+/// and forward-slashed, so the record of what was merged reads the same
+/// on every machine that checks the tree out.
+fn member_manifest_label(root: &Path, member_bom: &Path) -> String {
+    let dir = member_bom.parent().unwrap_or(member_bom);
+    let relative = dir.strip_prefix(root).unwrap_or(dir);
+    let mut label: String = relative
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/");
+    if !label.is_empty() {
+        label.push('/');
+    }
+    label.push_str("Cargo.toml");
+    label
 }
 
 /// Every `filename` under `root`, skipping `target/`, `node_modules/`,
@@ -1061,6 +1359,262 @@ mod tests {
             !deep.join(&filename).exists(),
             "cleanup must reach depth 5 and beyond"
         );
+    }
+
+    /// A virtual-manifest workspace: `[workspace]` with no `[package]`,
+    /// two members, and a BOM written beside each member manifest but
+    /// none at the root — what `cargo cyclonedx` really does here.
+    fn virtual_workspace_runner() -> (tempfile::TempDir, CannedRunner, String) {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("Cargo.toml"), "[workspace]\n").unwrap();
+        for member in ["crates/app-b", "crates/lib-a"] {
+            std::fs::create_dir_all(d.path().join(member)).unwrap();
+            std::fs::write(d.path().join(member).join("Cargo.toml"), "[package]\n").unwrap();
+        }
+
+        let stem = cargo_output_stem();
+        let app_b = format!("crates/app-b/{stem}.json");
+        let lib_a = format!("crates/lib-a/{stem}.json");
+        let r = CannedRunner::new();
+        r.register_writing_many(
+            "cargo",
+            &[
+                "cyclonedx",
+                "--format",
+                "json",
+                "--spec-version",
+                "1.5",
+                "--all",
+                "--override-filename",
+                &stem,
+            ],
+            &[
+                (&app_b, &fixture("rust-workspace-app-b.json")),
+                (&lib_a, &fixture("rust-workspace-lib-a.json")),
+            ],
+        );
+        (d, r, stem)
+    }
+
+    fn merged_workspace_bom() -> (Value, Envelope) {
+        let (d, runner, _) = virtual_workspace_runner();
+        let cap = capture_with(d.path(), Some(Ecosystem::Rust), &runner)
+            .expect("a virtual manifest must merge, not fail");
+        (
+            serde_json::from_str(&cap.bom_json).unwrap(),
+            cap.envelope.clone(),
+        )
+    }
+
+    #[test]
+    fn a_virtual_manifest_workspace_merges_into_one_valid_bom() {
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let (bom, envelope) = merged_workspace_bom();
+
+        assert!(
+            cyclonedx::validate(&bom).unwrap().is_empty(),
+            "the merged document must pass the vendored CycloneDX 1.5 schema"
+        );
+        assert_eq!(envelope.result["spec_version"], "1.5");
+
+        // itoa is a dependency of both members and must appear once.
+        let purls: Vec<&str> = bom["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["purl"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            purls,
+            ["pkg:cargo/itoa@1.0.18", "pkg:cargo/ryu@1.0.23"],
+            "components are the union of both members, deduplicated by purl"
+        );
+        assert_eq!(envelope.result["component_count"], 2);
+    }
+
+    #[test]
+    fn the_merged_bom_names_secunit_as_a_producer() {
+        // The document is assembled, not recorded. An assessor must be
+        // able to tell it from raw generator output without re-running
+        // the generator.
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let (bom, envelope) = merged_workspace_bom();
+
+        let tools = cyclonedx::generators(&bom);
+        assert!(
+            tools.iter().any(|(n, _)| n == "cargo-cyclonedx"),
+            "the generator must still be named: {tools:?}"
+        );
+        assert!(
+            tools.iter().any(|(n, _)| n == "secunit"),
+            "secunit must be named alongside it: {tools:?}"
+        );
+
+        let generators = envelope.result["generators"].as_array().unwrap();
+        assert!(
+            generators.iter().any(|g| g["name"] == "secunit"),
+            "and must reach the envelope: {generators:?}"
+        );
+        assert!(
+            envelope.result["describes"]
+                .as_str()
+                .unwrap()
+                .contains("merged"),
+            "describes must not read like a plain lockfile capture: {}",
+            envelope.result["describes"]
+        );
+
+        let merged_from: Vec<&str> = bom["metadata"]["properties"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| p["name"] == MERGED_FROM_PROPERTY)
+            .map(|p| p["value"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            merged_from,
+            ["crates/app-b/Cargo.toml", "crates/lib-a/Cargo.toml"],
+            "the merged document names every member that went into it"
+        );
+    }
+
+    #[test]
+    fn each_member_becomes_a_subcomponent_of_the_synthesized_root() {
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let (bom, _) = merged_workspace_bom();
+
+        let root = &bom["metadata"]["component"];
+        assert_eq!(root["type"], "application");
+        let members: Vec<&str> = root["components"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(members, ["sbom-fixture-app-b", "sbom-fixture-lib-a"]);
+
+        // The synthesized root is the one node the whole graph hangs
+        // off, or a consumer walking `dependencies` sees two unrelated
+        // trees rather than one workspace.
+        let root_ref = root["bom-ref"].as_str().unwrap();
+        let edge = bom["dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["ref"] == root_ref)
+            .expect("the synthesized root must have a dependencies entry");
+        assert_eq!(edge["dependsOn"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn the_merged_bom_gives_each_bom_ref_exactly_one_component() {
+        // app-b depends on lib-a by path, so lib-a's root component
+        // appears in app-b's BOM *and* is its own BOM's root. Emitting
+        // both would leave one `bom-ref` naming two components, and
+        // every dependency edge through it ambiguous.
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let (bom, _) = merged_workspace_bom();
+
+        let mut refs: Vec<String> = Vec::new();
+        collect_refs(&bom["metadata"]["component"], &mut refs);
+        for c in bom["components"].as_array().unwrap() {
+            collect_refs(c, &mut refs);
+        }
+        let mut unique = refs.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(refs.len(), unique.len(), "duplicate bom-ref in {refs:?}");
+
+        // Every edge still resolves to a component the document carries.
+        for dep in bom["dependencies"].as_array().unwrap() {
+            let mut cited = vec![&dep["ref"]];
+            if let Some(on) = dep.get("dependsOn").and_then(|d| d.as_array()) {
+                cited.extend(on.iter());
+            }
+            for r in cited {
+                let r = r.as_str().unwrap();
+                assert!(refs.iter().any(|k| k == r), "dangling dependency ref {r}");
+            }
+        }
+    }
+
+    fn collect_refs(component: &Value, out: &mut Vec<String>) {
+        if let Some(r) = component.get("bom-ref").and_then(|r| r.as_str()) {
+            out.push(r.to_string());
+        }
+        for nested in component
+            .get("components")
+            .and_then(|c| c.as_array())
+            .map(|a| a.as_slice())
+            .unwrap_or_default()
+        {
+            collect_refs(nested, out);
+        }
+    }
+
+    #[test]
+    fn merged_workspace_captures_are_byte_identical_across_runs() {
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let (d, runner, _) = virtual_workspace_runner();
+        let a = capture_with(d.path(), Some(Ecosystem::Rust), &runner).unwrap();
+        let b = capture_with(d.path(), Some(Ecosystem::Rust), &runner).unwrap();
+        assert_eq!(a.bom_json, b.bom_json, "merged BOM bytes must be stable");
+        assert_eq!(
+            a.envelope.result["bom_sha256"],
+            b.envelope.result["bom_sha256"]
+        );
+    }
+
+    #[test]
+    fn merging_deletes_every_member_bom_it_wrote() {
+        // The merge reads N files instead of one, so the cleanup
+        // guarantee has N chances to leak.
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let (d, runner, stem) = virtual_workspace_runner();
+        capture_with(d.path(), Some(Ecosystem::Rust), &runner).unwrap();
+
+        assert!(
+            find_emitted(d.path(), &format!("{stem}.json"))
+                .unwrap()
+                .is_empty(),
+            "the audited tree must be left as it was found"
+        );
+    }
+
+    #[test]
+    fn the_strongest_scope_wins_when_members_disagree() {
+        // Cargo resolves features per member, so the same crate can be
+        // `excluded` in one member's BOM and `required` in another's.
+        // Recording it as excluded would hide it from every consumer
+        // that filters on scope.
+        let d = tempfile::tempdir().unwrap();
+        let members = ["a.json", "b.json"];
+        for (name, scope) in members.iter().zip(["excluded", "required"]) {
+            std::fs::write(
+                d.path().join(name),
+                serde_json::to_string(&json!({
+                    "bomFormat": "CycloneDX",
+                    "specVersion": "1.5",
+                    "metadata": {"component": {
+                        "type": "library", "bom-ref": name, "name": name
+                    }},
+                    "components": [{
+                        "type": "library",
+                        "bom-ref": "registry#dep@1.0.0",
+                        "name": "dep",
+                        "version": "1.0.0",
+                        "purl": "pkg:cargo/dep@1.0.0",
+                        "scope": scope
+                    }]
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        }
+
+        let paths: Vec<PathBuf> = members.iter().map(|m| d.path().join(m)).collect();
+        let merged = merge_member_boms(d.path(), &paths).unwrap();
+        assert_eq!(merged["components"][0]["scope"], "required");
     }
 
     /// A uv / PEP-621 project: no requirements.txt, no poetry.lock, and

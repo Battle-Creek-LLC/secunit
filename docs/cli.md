@@ -222,10 +222,35 @@ path. It refuses to start if such a file already exists rather than overwrite
 it. A crash between write and cleanup can leave a `secunit-sbom-<pid>.json`
 behind.
 
-For a cargo workspace, the BOM at the workspace root is used. A **virtual
-manifest** (`[workspace]` with no `[package]`, which is secunit's own shape)
-yields one BOM per member and no root BOM, so the capture fails rather than
-invent a merged document — point `--path` at a single member.
+For a cargo workspace with a root package, that root BOM is used verbatim. A
+**virtual manifest** (`[workspace]` with no `[package]`, which is secunit's own
+shape) has no root package and so gets no root BOM: `cargo-cyclonedx` writes one
+beside each member and has no whole-workspace mode. The capturer merges them
+into a single document rather than emit N artifacts or fail:
+
+| Part of the merged BOM | Where it comes from |
+|---|---|
+| `metadata.component` | synthesized — type `application`, named after the workspace directory, `bom-ref` `secunit:workspace:<dir>` |
+| `metadata.component.components` | each member's own root component, verbatim |
+| `components` | the union of every member's, deduplicated by `purl` |
+| `dependencies` | merged by `ref`, unioning each `dependsOn`, plus one edge from the synthesized root to each member |
+| `metadata.tools` | `cargo-cyclonedx` **and** `secunit` |
+| `metadata.properties` | one `secunit:sbom:merged-from` entry per member manifest |
+
+The merged document is assembled by secunit, not produced by any generator, so
+it says so: `secunit` appears in `metadata.tools` (and therefore in the
+envelope's `generators`), `metadata.properties` names every member manifest that
+went into it, and `result.describes` reads `Cargo.lock (N workspace member BOMs
+merged by secunit)` rather than a bare lockfile name. Nothing else is invented —
+components and dependency edges are carried through as the generator wrote them.
+
+Two details worth knowing when reading one. A member's root component appears
+only once, under the synthesized root, even though sibling members that depend
+on it by path also carry a copy — one `bom-ref` names one component. And when
+two members disagree about a shared crate's `scope`, the strongest wins
+(`required` over `optional` over `excluded`), because cargo resolves features
+per member and a merged BOM that called a required dependency excluded would
+hide it from every consumer that filters on scope.
 
 A generator that exits non-zero fails the capture and writes nothing, even when
 it produced a parseable BOM. `cyclonedx-npm` against a partially-installed

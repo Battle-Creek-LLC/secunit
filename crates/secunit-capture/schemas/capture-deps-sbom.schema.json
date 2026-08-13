@@ -78,7 +78,7 @@
         },
         "describes": {
           "type": "string",
-          "description": "What the BOM was built from — a lockfile/manifest name (`requirements.txt`, `poetry.lock`, `Cargo.lock`) or an installed tree (`.venv`, `node_modules`). Resolved-from-a-lockfile and read-from-an-install are different evidentiary claims."
+          "description": "What the BOM was built from — a lockfile/manifest name (`requirements.txt`, `poetry.lock`, `Cargo.lock`) or an installed tree (`.venv`, `node_modules`). Resolved-from-a-lockfile and read-from-an-install are different evidentiary claims. A virtual-manifest cargo workspace, whose per-member BOMs secunit merges into one document, reads `Cargo.lock (N workspace member BOMs merged by secunit)`."
         },
         "ecosystem": {
           "enum": [

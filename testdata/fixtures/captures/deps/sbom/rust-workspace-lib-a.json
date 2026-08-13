@@ -1,0 +1,83 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "serialNumber": "urn:uuid:6e65fe92-2f1a-421a-9f0d-d5a454e37763",
+  "metadata": {
+    "timestamp": "2026-08-13T23:41:37.415672303Z",
+    "tools": [
+      {
+        "vendor": "CycloneDX",
+        "name": "cargo-cyclonedx",
+        "version": "0.5.9"
+      }
+    ],
+    "component": {
+      "type": "library",
+      "bom-ref": "path+file:///Users/jstockdi/projects/bcl/secunit-wt-71/testdata/fixtures/projects/rust-workspace/crates/lib-a#sbom-fixture-lib-a@0.1.0",
+      "name": "sbom-fixture-lib-a",
+      "version": "0.1.0",
+      "scope": "required",
+      "purl": "pkg:cargo/sbom-fixture-lib-a@0.1.0?download_url=file://.",
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "path+file:///Users/jstockdi/projects/bcl/secunit-wt-71/testdata/fixtures/projects/rust-workspace/crates/lib-a#sbom-fixture-lib-a@0.1.0 bin-target-0",
+          "name": "sbom_fixture_lib_a",
+          "version": "0.1.0",
+          "purl": "pkg:cargo/sbom-fixture-lib-a@0.1.0?download_url=file://.#src/lib.rs"
+        }
+      ]
+    },
+    "properties": [
+      {
+        "name": "cdx:rustc:sbom:target:triple",
+        "value": "aarch64-unknown-linux-gnu"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+      "author": "David Tolnay <dtolnay@gmail.com>",
+      "name": "itoa",
+      "version": "1.0.18",
+      "description": "Fast integer primitive to string conversion",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "purl": "pkg:cargo/itoa@1.0.18",
+      "externalReferences": [
+        {
+          "type": "documentation",
+          "url": "https://docs.rs/itoa"
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/dtolnay/itoa"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "path+file:///Users/jstockdi/projects/bcl/secunit-wt-71/testdata/fixtures/projects/rust-workspace/crates/lib-a#sbom-fixture-lib-a@0.1.0",
+      "dependsOn": [
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18"
+      ]
+    },
+    {
+      "ref": "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18"
+    }
+  ]
+}
