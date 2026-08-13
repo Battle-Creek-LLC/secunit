@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use crate::canonical::{canonicalize_value, sort_array_by_key, strip_keys, Envelope};
 
 use super::cmd::{ensure_installed, tool, CmdRunner, RealRunner};
+use super::truncate;
 
 pub const CAPTURER: &str = "deps.pnpm-audit";
 pub const VERSION: &str = "1";
@@ -73,14 +74,6 @@ fn canonicalize_pnpm_audit(mut v: Value) -> Value {
     }
 
     canonicalize_value(v)
-}
-
-fn truncate(s: &str, n: usize) -> String {
-    if s.len() <= n {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..n])
-    }
 }
 
 #[cfg(test)]

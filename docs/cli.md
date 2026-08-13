@@ -174,6 +174,7 @@ state:
 |---|---|---|
 | `rust` | `Cargo.toml` + `Cargo.lock` | `cargo generate-lockfile` if no lockfile is committed |
 | `python` | `requirements.txt`, or `poetry.lock` | nothing — the manifest is parsed, not installed |
+| `python` (PEP-621 only) | — | `cyclonedx-py` reads no bare `pyproject.toml`; export a lockfile first (`uv export --format requirements-txt`, `pdm export`, `poetry lock`) |
 | `node` | the **installed** `node_modules` tree, via `npm ls` | `npm install` (or `npm ci`) first |
 
 The Node arm is the one that needs an install step: `cyclonedx-npm` resolves
@@ -190,9 +191,16 @@ path. It refuses to start if such a file already exists rather than overwrite
 it. A crash between write and cleanup can leave a `secunit-sbom-<pid>.json`
 behind.
 
-For a cargo workspace, the BOM at the workspace root is used. A workspace with
-no root package yields one BOM per member and the capture fails rather than
-inventing a merged document — point `--path` at a single member.
+For a cargo workspace, the BOM at the workspace root is used. A **virtual
+manifest** (`[workspace]` with no `[package]`, which is secunit's own shape)
+yields one BOM per member and no root BOM, so the capture fails rather than
+invent a merged document — point `--path` at a single member.
+
+A generator that exits non-zero fails the capture and writes nothing, even when
+it produced a parseable BOM. `cyclonedx-npm` against a partially-installed
+`node_modules` emits a schema-valid document that is missing a subtree;
+recording it would understate `component_count` and make the next sweep diff it
+as "dependencies removed".
 
 ## Audit
 

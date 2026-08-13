@@ -49,10 +49,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `capture deps pip-audit` and `capture deps pnpm-audit` now probe for their
   binary before invoking it, so a missing tool fails with its install command
   instead of `No such file or directory (os error 2)`.
+- `capture deps sbom` fails when its generator exits non-zero, even if a
+  parseable BOM was produced. SBOM generators have no findings-mean-non-zero
+  convention, so a non-zero exit means the BOM may be missing components —
+  recording it would understate `component_count` and make the next sweep read
+  it as dependencies removed.
 - The bundled `capture-sweep` skill gained a `target: path` mapping for
   source-side captures, and documents `deps sbom`'s two-file output. A capture
   whose external tool is missing becomes `needs-operator` for that system rather
   than failing the run.
+
+### Fixed
+
+- Every `capture deps` capturer could panic instead of reporting an error when
+  quoting subprocess output: the shared `truncate` helper sliced by byte index
+  and panicked when the limit landed inside a UTF-8 sequence. cargo diagnostics
+  and npm error output routinely contain multi-byte characters, so a failing
+  `pip-audit`, `pnpm audit`, `osv-query`, or SBOM generator could surface a
+  backtrace rather than the exit-2 error a sweep turns into `.pending.txt`. The
+  four copies are now one boundary-safe helper.
 
 ## [0.7.1] — 2026-08-01
 

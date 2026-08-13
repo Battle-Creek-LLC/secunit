@@ -48,6 +48,7 @@ use crate::canonical::Envelope;
 use crate::cyclonedx;
 
 use super::cmd::{ensure_installed, tool, CmdRunner, RealRunner};
+use super::truncate;
 
 pub const CAPTURER: &str = "deps.sbom";
 pub const VERSION: &str = "1";
@@ -94,10 +95,18 @@ impl Ecosystem {
     }
 
     /// Files whose presence implies this ecosystem, most specific first.
+    ///
+    /// Python lists `pyproject.toml` even though `cyclonedx-py` has no
+    /// subcommand for a bare one. Detection here must agree with
+    /// [`crate::deps::pip_audit`], which accepts it — otherwise a sweep
+    /// over a PEP-621 repo gets a clean `pip-audit` capture and a
+    /// "manifest unsupported" failure from `sbom` for the same tree.
+    /// The dispatch below turns it into an error that names the real
+    /// constraint instead.
     fn markers(self) -> &'static [&'static str] {
         match self {
             Ecosystem::Rust => &["Cargo.toml"],
-            Ecosystem::Python => &["requirements.txt", "poetry.lock"],
+            Ecosystem::Python => &["requirements.txt", "poetry.lock", "pyproject.toml"],
             Ecosystem::Node => &["package.json"],
         }
     }
@@ -300,10 +309,25 @@ fn run_cyclonedx_py(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
         ("poetry", ".")
     } else if path.join("requirements.txt").is_file() {
         ("requirements", "requirements.txt")
+    } else if path.join("pyproject.toml").is_file() {
+        // Distinguish "secunit doesn't support this" from "the
+        // generator has no path for it". cyclonedx-py 7.x offers
+        // `requirements`, `poetry`, `pipenv`, and `environment` — none
+        // reads a bare PEP-621 `pyproject.toml`, and `environment`
+        // would describe whichever interpreter happens to be active
+        // rather than the project.
+        return Err(anyhow!(
+            "{} has only pyproject.toml, and cyclonedx-py has no subcommand that reads \
+             a bare PEP-621 pyproject (it supports requirements, poetry, and pipenv). \
+             Export a lockfile first — `uv export --format requirements-txt > \
+             requirements.txt`, `pdm export`, or `poetry lock` — then re-run. \
+             `capture deps pip-audit` accepts pyproject.toml directly and is unaffected.",
+            path.display()
+        ));
     } else {
         return Err(anyhow!(
-            "no requirements.txt or poetry.lock under {} — cyclonedx-py needs an \
-             explicit manifest; an SBOM of the ambient Python interpreter would \
+            "no requirements.txt, poetry.lock, or pyproject.toml under {} — cyclonedx-py \
+             needs an explicit manifest; an SBOM of the ambient Python interpreter would \
              describe something other than the project",
             path.display()
         ));
@@ -363,16 +387,21 @@ fn run_cyclonedx_npm(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
 // rust
 // -----------------------------------------------------------------------------
 
-/// Files `cargo-cyclonedx` emitted, removed when this guard drops.
+/// Deletes every `filename` under `root` when it drops.
 ///
-/// The generator writes into the audited tree; this makes cleanup
-/// unconditional so an error between generation and read cannot leave
-/// artifacts behind in the operator's repo.
-struct EmittedFiles(Vec<PathBuf>);
+/// The guard re-walks at drop time rather than holding a file list
+/// captured earlier: it is armed before `cargo cyclonedx` runs, so at
+/// construction there is nothing to list, and re-walking also covers
+/// files written by a generator run that then failed. Cleanup therefore
+/// does not depend on any earlier walk having succeeded.
+struct EmittedFiles {
+    root: PathBuf,
+    filename: String,
+}
 
 impl Drop for EmittedFiles {
     fn drop(&mut self) {
-        for p in &self.0 {
+        for p in find_emitted(&self.root, &self.filename).unwrap_or_default() {
             let _ = std::fs::remove_file(p);
         }
     }
@@ -407,6 +436,14 @@ fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
         ));
     }
 
+    // Armed *before* the generator runs, so a failure anywhere below —
+    // including inside `runner.run` after it has written some members'
+    // BOMs, or in the post-run walk — still cleans the audited tree.
+    let _cleanup = EmittedFiles {
+        root: path.to_path_buf(),
+        filename: filename.clone(),
+    };
+
     let out = runner.run(
         "cargo",
         &[
@@ -415,7 +452,12 @@ fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
             "json",
             "--spec-version",
             Ecosystem::Rust.spec_version(),
-            // Include the full dependency graph, not just direct deps.
+            // `-a, --all` is cargo-cyclonedx's dependency-depth flag —
+            // the whole graph rather than only top-level deps. It is
+            // already the default; passed explicitly so a change of
+            // default cannot silently narrow the SBOM. It is *not*
+            // `--workspace`: emitting one BOM per member manifest is
+            // this tool's unconditional behaviour.
             "--all",
             "--override-filename",
             &stem,
@@ -423,13 +465,19 @@ fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
         path,
     )?;
 
-    // cargo-cyclonedx emits one BOM per Cargo.toml in the workspace.
-    let emitted = EmittedFiles(find_emitted(path, &filename)?);
+    // Unlike pip-audit and pnpm, an SBOM generator has no
+    // findings-mean-non-zero convention: non-zero always means the run
+    // went wrong, and a BOM written alongside it may be missing a
+    // subtree. Recording that as clean evidence would understate
+    // `component_count` and make the next sweep diff it as
+    // "dependencies removed".
+    require_success("cargo-cyclonedx", out.exit_code, &out.stderr)?;
 
-    if emitted.0.is_empty() {
+    let emitted = find_emitted(path, &filename)?;
+
+    if emitted.is_empty() {
         return Err(anyhow!(
-            "cargo-cyclonedx exited {} without writing {filename} under {}; stderr: {}",
-            out.exit_code,
+            "cargo-cyclonedx exited 0 without writing {filename} under {}; stderr: {}",
             path.display(),
             truncate(&out.stderr, 500)
         ));
@@ -440,16 +488,16 @@ fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
     let root = path.join(&filename);
     let chosen = if root.is_file() {
         root
-    } else if emitted.0.len() == 1 {
-        emitted.0[0].clone()
+    } else if emitted.len() == 1 {
+        emitted[0].clone()
     } else {
         return Err(anyhow!(
             "cargo-cyclonedx wrote {} BOMs for the workspace at {} and none at its \
-             root ({}) — point --path at a single workspace member",
-            emitted.0.len(),
+             root ({}) — the root manifest is virtual (`[workspace]` with no \
+             `[package]`); point --path at a single workspace member",
+            emitted.len(),
             path.display(),
             emitted
-                .0
                 .iter()
                 .map(|p| p.display().to_string())
                 .collect::<Vec<_>>()
@@ -460,24 +508,28 @@ fn run_cargo_cyclonedx(path: &Path, runner: &dyn CmdRunner) -> Result<String> {
     std::fs::read_to_string(&chosen).with_context(|| format!("read {}", chosen.display()))
 }
 
-/// Every `filename` under `root`, skipping `target/` and dotted dirs so
-/// a warm build tree does not slow the walk down.
+/// Every `filename` under `root`, skipping `target/`, `node_modules/`,
+/// and dotted dirs.
 ///
-/// The skip list deliberately exempts the root: `root` itself may sit
-/// under a dotted path (a checkout in `~/.local/src`, or a temp dir),
-/// and pruning it would silently walk nothing.
+/// Two deliberate choices:
+///
+/// - **No depth cap.** `cargo-cyclonedx` writes beside *every* member
+///   manifest, and a member can sit arbitrarily deep. A cap would hide
+///   those files from both the clobber check and the cleanup, so they
+///   would accumulate in the operator's repo unnoticed — the pruning
+///   below is what keeps the walk cheap.
+/// - **The root is exempt from pruning.** `root` itself may sit under a
+///   dotted path (a checkout in `~/.local/src`, or a temp dir), and
+///   pruning it would silently walk nothing.
 fn find_emitted(root: &Path, filename: &str) -> Result<Vec<PathBuf>> {
     let mut found = Vec::new();
-    let walker = walkdir::WalkDir::new(root)
-        .max_depth(4)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.depth() == 0 {
-                return true;
-            }
-            let name = e.file_name().to_string_lossy();
-            !(name == "target" || name == "node_modules" || name.starts_with('.'))
-        });
+    let walker = walkdir::WalkDir::new(root).into_iter().filter_entry(|e| {
+        if e.depth() == 0 {
+            return true;
+        }
+        let name = e.file_name().to_string_lossy();
+        !(name == "target" || name == "node_modules" || name.starts_with('.'))
+    });
     for entry in walker {
         let entry = entry.with_context(|| format!("walk {}", root.display()))?;
         if entry.file_type().is_file() && entry.file_name() == filename {
@@ -492,25 +544,35 @@ fn find_emitted(root: &Path, filename: &str) -> Result<Vec<PathBuf>> {
 // shared
 // -----------------------------------------------------------------------------
 
-/// Treat empty stdout as a failure regardless of exit code: unlike the
-/// audit capturers, "no output" is never a valid SBOM.
+/// Fail unless the generator exited 0.
+///
+/// `docs/cli.md` promises a capture never yields a partial artifact.
+/// An SBOM generator that exits non-zero may still have written a
+/// schema-valid BOM that is missing components, so the exit code is the
+/// only signal that separates complete evidence from plausible
+/// evidence.
+fn require_success(program: &str, exit_code: i32, stderr: &str) -> Result<()> {
+    if exit_code == 0 {
+        return Ok(());
+    }
+    Err(anyhow!(
+        "{program} exited {exit_code}; its BOM may be incomplete, so no artifact was \
+         written. stderr: {}",
+        truncate(stderr, 500)
+    ))
+}
+
+/// Require a successful exit *and* non-empty stdout: unlike the audit
+/// capturers, "no output" is never a valid SBOM.
 fn require_json_stdout(program: &str, out: super::cmd::CmdOutput) -> Result<String> {
+    require_success(program, out.exit_code, &out.stderr)?;
     if out.stdout.trim().is_empty() {
         return Err(anyhow!(
-            "{program} exited {} without emitting a BOM; stderr: {}",
-            out.exit_code,
+            "{program} exited 0 without emitting a BOM; stderr: {}",
             truncate(&out.stderr, 500)
         ));
     }
     Ok(out.stdout)
-}
-
-fn truncate(s: &str, n: usize) -> String {
-    if s.len() <= n {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..n])
-    }
 }
 
 #[cfg(test)]
@@ -828,6 +890,136 @@ mod tests {
             std::fs::read_to_string(&squatter).unwrap(),
             "do not overwrite me",
             "the pre-existing file must be untouched"
+        );
+    }
+
+    #[test]
+    fn a_non_zero_exit_fails_even_when_the_bom_parses() {
+        // cyclonedx-npm on a partially-installed node_modules warns,
+        // emits a BOM missing a subtree, and exits 1. The BOM is
+        // schema-valid, so only the exit code separates it from
+        // complete evidence — accepting it would understate
+        // component_count and diff as "dependencies removed" next sweep.
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let d = scratch_with(&["package.json"]);
+        let r = CannedRunner::new();
+        r.register(
+            "cyclonedx-npm",
+            &[
+                "--spec-version",
+                "1.6",
+                "--output-format",
+                "JSON",
+                "--output-reproducible",
+                "--output-file",
+                "-",
+            ],
+            CmdOutput {
+                stdout: fixture("node.json"),
+                stderr: "npm warn ELSPROBLEMS missing: ms@2.1.3".into(),
+                exit_code: 1,
+            },
+        );
+        let err = capture_with(d.path(), Some(Ecosystem::Node), &r)
+            .expect_err("non-zero exit must fail the capture");
+        let msg = format!("{err}");
+        assert!(msg.contains("exited 1"), "{msg}");
+        assert!(msg.contains("may be incomplete"), "{msg}");
+        assert!(msg.contains("ELSPROBLEMS"), "surfaces stderr: {msg}");
+    }
+
+    #[test]
+    fn a_non_zero_cargo_exit_fails_and_leaves_no_bom_behind() {
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let d = scratch_with(&["Cargo.toml"]);
+        let stem = cargo_output_stem();
+        let r = CannedRunner::new();
+        r.register_writing(
+            "cargo",
+            &[
+                "cyclonedx",
+                "--format",
+                "json",
+                "--spec-version",
+                "1.5",
+                "--all",
+                "--override-filename",
+                &stem,
+            ],
+            &format!("{stem}.json"),
+            &fixture("rust.json"),
+        );
+        r.set_exit_code(
+            "cargo",
+            &[
+                "cyclonedx",
+                "--format",
+                "json",
+                "--spec-version",
+                "1.5",
+                "--all",
+                "--override-filename",
+                &stem,
+            ],
+            101,
+        );
+
+        let err = capture_with(d.path(), Some(Ecosystem::Rust), &r)
+            .expect_err("non-zero exit must fail the capture");
+        assert!(format!("{err}").contains("exited 101"), "{err}");
+        assert!(
+            !d.path().join(format!("{stem}.json")).exists(),
+            "the BOM written before the failure must still be cleaned up"
+        );
+    }
+
+    #[test]
+    fn cleanup_reaches_a_workspace_member_deeper_than_four_levels() {
+        // cargo-cyclonedx writes beside every member manifest, and a
+        // member can sit arbitrarily deep. A depth-capped walk would
+        // leave this file in the operator's repo forever, invisible to
+        // both the cleanup and the next run's clobber check.
+        let _g = crate::time::set_fixed_time_for_tests("2026-05-01T00:00:00Z");
+        let d = scratch_with(&["Cargo.toml"]);
+        let deep = d.path().join("apps/a/services/b/c");
+        std::fs::create_dir_all(&deep).unwrap();
+
+        let stem = cargo_output_stem();
+        let filename = format!("{stem}.json");
+        {
+            let _guard = EmittedFiles {
+                root: d.path().to_path_buf(),
+                filename: filename.clone(),
+            };
+            std::fs::write(deep.join(&filename), "{}").unwrap();
+            assert!(deep.join(&filename).exists());
+        }
+        assert!(
+            !deep.join(&filename).exists(),
+            "cleanup must reach depth 5 and beyond"
+        );
+    }
+
+    #[test]
+    fn a_pep621_only_tree_names_the_generator_limit_not_a_missing_manifest() {
+        // Regression: `pip-audit` accepts a bare pyproject.toml, so a
+        // sweep running both actions must not get "unsupported
+        // manifest" from `sbom` for a tree the other action handles.
+        let d = scratch_with(&["pyproject.toml"]);
+        assert_eq!(
+            detect_ecosystem(d.path()).unwrap(),
+            Ecosystem::Python,
+            "detection must agree with pip_audit"
+        );
+
+        let err = capture_with(d.path(), Some(Ecosystem::Python), &CannedRunner::new())
+            .expect_err("cyclonedx-py has no bare-pyproject subcommand");
+        let msg = format!("{err}");
+        assert!(msg.contains("cyclonedx-py"), "names the tool: {msg}");
+        assert!(msg.contains("uv export"), "gives a way forward: {msg}");
+        assert!(
+            !msg.contains("no requirements.txt"),
+            "must not claim the manifest is unsupported: {msg}"
         );
     }
 

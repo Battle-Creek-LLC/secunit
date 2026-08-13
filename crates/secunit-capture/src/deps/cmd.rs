@@ -244,6 +244,17 @@ pub mod testing {
         pub fn mark_missing(&self, program: &str) {
             self.missing.lock().unwrap().insert(program.to_string());
         }
+
+        /// Override the exit code of an already-registered command —
+        /// for exercising a generator that writes output *and* fails.
+        pub fn set_exit_code(&self, program: &str, args: &[&str], exit_code: i32) {
+            let key = format!("{program} {}", args.join(" "));
+            let mut responses = self.responses.lock().unwrap();
+            let out = responses
+                .get_mut(&key)
+                .unwrap_or_else(|| panic!("CannedRunner: `{key}` is not registered"));
+            out.exit_code = exit_code;
+        }
     }
 
     impl CmdRunner for CannedRunner {

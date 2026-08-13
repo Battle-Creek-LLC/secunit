@@ -270,13 +270,20 @@ fn sbom(
         .unwrap_or_else(|| sbom::DEFAULT_BOM_FILENAME.to_string());
     capture.set_bom_filename(&bom_name);
 
-    let envelope_path = sidecar_path(out);
-    // Validate the sidecar before either file lands, so a schema
-    // failure never leaves a BOM without its provenance record.
-    write_envelope(&capture.envelope, &envelope_path)?;
+    // Validate before anything lands, so a schema failure leaves no
+    // files at all.
+    validate_envelope(&capture.envelope)?;
+
+    // Then write the BOM before its sidecar. The sidecar names the BOM
+    // and pins its sha256, so a sidecar with no BOM is a dangling
+    // provenance record that `hash_tree` would still fold into the run
+    // manifest as evidence. A BOM with no sidecar is the safer failure:
+    // it is a valid CycloneDX document on its own.
     capture
         .write_bom(out)
         .with_context(|| format!("write BOM to {}", out.display()))?;
+    let envelope_path = sidecar_path(out);
+    write_envelope(&capture.envelope, &envelope_path)?;
 
     eprintln!(
         "✓ wrote {} ({} components, CycloneDX {})",
@@ -369,8 +376,12 @@ fn github(_cmd: GithubCmd) -> Result<ExitCode> {
     Ok(ExitCode::from(2))
 }
 
+/// Schema-check an envelope without writing it.
+///
+/// Split out so the SBOM path can validate before *either* of its two
+/// files lands.
 #[cfg(any(feature = "deps", feature = "github"))]
-fn write_envelope(env: &Envelope, out: &std::path::Path) -> Result<()> {
+fn validate_envelope(env: &Envelope) -> Result<()> {
     let errors = secunit_capture::schema::validate(env).context("schema lookup")?;
     if !errors.is_empty() {
         eprintln!("schema validation failed for `{}`:", env.capturer);
@@ -383,6 +394,12 @@ fn write_envelope(env: &Envelope, out: &std::path::Path) -> Result<()> {
             errors.len()
         ));
     }
+    Ok(())
+}
+
+#[cfg(any(feature = "deps", feature = "github"))]
+fn write_envelope(env: &Envelope, out: &std::path::Path) -> Result<()> {
+    validate_envelope(env)?;
     env.write_to(out)
         .with_context(|| format!("write envelope to {}", out.display()))?;
     eprintln!("✓ wrote {}", out.display());

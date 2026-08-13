@@ -6,5 +6,7 @@ Cargo.lock.bak
 # WISP export output (build artifact)
 /dist/
 
-# SBOM fixture project deps — the manifests are committed, the tree is not.
+# SBOM fixture projects — the manifests are committed, the build trees are not.
+# Running a generator inside these dirs (to re-record a fixture) creates both.
 testdata/fixtures/projects/node/node_modules/
+testdata/fixtures/projects/rust/target/
